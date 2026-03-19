@@ -22,15 +22,6 @@ just build     # Build distribution packages
 Without Just: replace `just <cmd>` with the corresponding `uv run` commands
 in the `justfile`.
 
-## Code Standards
-
-- **Type hints required** on all public functions and methods
-- **mypy strict mode** is enabled — no `Any` types without justification
-- **Ruff** enforces a comprehensive rule set (see `pyproject.toml [tool.ruff.lint]`)
-- **Line length**: 88 characters
-- **Imports**: use `from __future__ import annotations` in every file
-- **Style**: Google-style docstrings
-
 ## Architecture
 
 ```
@@ -45,22 +36,11 @@ src/my_package/
 - Separate concerns: one module per logical unit
 - Update `docs/reference.md` and README examples whenever you change the public API
 
-## Testing
+## Commit Messages
 
-- Framework: **pytest**
-- Coverage threshold: **80%** (branch coverage enabled)
-- Test files mirror source structure: `tests/test_<module>.py`
-- Fixtures go in `tests/conftest.py`
-
-## Post-Code Change Workflow
-
-After making any code changes, ALWAYS run:
-
-- `just fmt` — Format and auto-fix
-- `just lint` — Lint + type check
-- `just test` — Run tests with coverage
-
-Or simply: `just check` (runs all three sequentially)
+Use [Conventional Commits](https://www.conventionalcommits.org/):
+`<type>(<optional-scope>): <short summary>`
+Types: `feat`, `fix`, `docs`, `refactor`, `test`, `ci`, `chore`, `perf`, `build`
 
 ## Review Checklist
 
