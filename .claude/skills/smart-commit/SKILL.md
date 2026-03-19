@@ -23,6 +23,12 @@ Working tree status:
 Recent commit style:
 !git log --oneline -5
 
+## Branch Guard
+
+**Never commit directly to `main`.** If the current branch is `main`, abort
+immediately and tell the user to create a feature branch first. The pre-commit
+hook also enforces this, but check early to avoid wasted work.
+
 ## Step 1: Analyze Changes
 
 Review staged and unstaged changes to understand what was modified.
