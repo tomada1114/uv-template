@@ -3,7 +3,12 @@
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
-        "command": "uv run ruff format . && uv run ruff check --fix . 2>/dev/null; true"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ruff format . && uv run ruff check --fix . 2>/dev/null; true"
+          }
+        ]
       }
     ]
   }
