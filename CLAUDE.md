@@ -36,12 +36,6 @@ src/my_package/
 - Separate concerns: one module per logical unit
 - Update `docs/reference.md` and README examples whenever you change the public API
 
-## Commit Messages
-
-Use [Conventional Commits](https://www.conventionalcommits.org/):
-`<type>(<optional-scope>): <short summary>`
-Types: `feat`, `fix`, `docs`, `refactor`, `test`, `ci`, `chore`, `perf`, `build`
-
 ## Review Checklist
 
 Before submitting a PR:
@@ -53,6 +47,7 @@ Before submitting a PR:
 
 ## Important Reminders
 
+- All code, docs, commits, and PRs must be written in English
 - Do what has been asked; nothing more, nothing less
 - NEVER create files unless absolutely necessary
 - ALWAYS prefer editing an existing file to creating a new one
