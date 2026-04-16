@@ -29,7 +29,7 @@ Issues = "https://github.com/your-username/my-package/issues"
 Changelog = "https://github.com/your-username/my-package/blob/main/CHANGELOG.md"
 
 [dependency-groups]
-dev = ["mypy>=1.10", "pre-commit>=3.7", "pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.11"]
+dev = ["mypy>=1.10", "pre-commit>=3.7", "pytest>=9.0.3", "pytest-cov>=5.0", "ruff>=0.11"]
 docs = ["mkdocs-material>=9.5", "mkdocstrings[python]>=0.25"]
 
 # --------------------------------------------------------------------------- #
