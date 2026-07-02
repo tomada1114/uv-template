@@ -50,7 +50,7 @@ uv run ruff format .
 uv run ruff check --fix .
 uv run ruff check .
 uv run mypy src scripts
-uv run pytest
+uv run pytest --cov=my_package --cov-branch --cov-report=term-missing:skip-covered --cov-fail-under=80
 uv build && uv run python scripts/smoke_test.py
 ```
 
@@ -85,6 +85,16 @@ Examples:
 
 Recommended types: `feat`, `fix`, `docs`, `refactor`, `test`, `ci`, `chore`,
 `perf`, `build`.
+
+### Changelog Policy
+
+`CHANGELOG.md` (in [Keep a Changelog](https://keepachangelog.com/) format) is
+the canonical, human-curated record of user-facing changes. Add an entry
+under `[Unreleased]` for any user-facing change in the same PR that makes it.
+
+GitHub's auto-generated release notes (via `.github/release.yml` categories)
+are supplementary — useful for a quick PR-by-PR diff, but `CHANGELOG.md` is
+what users should read to understand what changed in a release.
 
 ## Getting Help
 

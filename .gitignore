@@ -34,6 +34,9 @@ site/
 *.swo
 *~
 
+# Claude Code
+.claude/settings.local.json
+
 # Environment variables
 .env
 .env.*

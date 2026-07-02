@@ -15,3 +15,4 @@
 - [ ] Documentation updated (if applicable)
 - [ ] No breaking changes (or documented in description)
 - [ ] PR title follows Conventional Commits
+- [ ] CHANGELOG updated (if user-facing change)
