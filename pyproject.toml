@@ -9,15 +9,16 @@ description = "A short description of the project."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Your Name", email = "you@example.com" }]
 keywords = []
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Typing :: Typed",
 ]
 
@@ -33,6 +34,13 @@ dev = ["mypy>=1.10", "pre-commit>=3.7", "pytest>=8.0", "pytest-cov>=5.0", "ruff>
 docs = ["mkdocs-material>=9.7.6", "mkdocstrings[python]>=0.25"]
 
 # --------------------------------------------------------------------------- #
+#  uv
+# --------------------------------------------------------------------------- #
+
+[tool.uv]
+exclude-newer = "2026-06-18T00:00:00Z"
+
+# --------------------------------------------------------------------------- #
 #  Build
 # --------------------------------------------------------------------------- #
 
@@ -46,6 +54,7 @@ packages = ["src/my_package"]
 [tool.ruff]
 target-version = "py312"
 line-length = 88
+src = ["src", "tests", "scripts"]
 
 [tool.ruff.lint]
 select = [
@@ -74,13 +83,28 @@ select = [
     "PERF", # perflint
     "FURB", # refurb
     # --- Type checking ---
-    "TCH",  # flake8-type-checking
+    "TC",   # flake8-type-checking
     # --- Style ---
     "COM",  # flake8-commas
     "PTH",  # flake8-use-pathlib
     "SLF",  # flake8-self
     "T20",  # flake8-print
     "LOG",  # flake8-logging
+    # --- Documentation ---
+    "D",    # pydocstyle
+    # --- Testing ---
+    "PT",   # flake8-pytest-style
+    # --- Naming ---
+    "N",    # pep8-naming
+    # --- Error handling ---
+    "TRY",  # tryceratops
+    "EM",   # flake8-errmsg
+    # --- Datetime safety ---
+    "DTZ",  # flake8-datetimez
+    # --- Exception hygiene ---
+    "RSE",  # flake8-raise
+    # --- pygrep hooks ---
+    "PGH",  # pygrep-hooks
     # --- Ruff-specific ---
     "RUF",  # ruff-specific rules
 ]
@@ -90,12 +114,20 @@ ignore = [
     "ISC001", # implicit string concatenation — conflicts with formatter
 ]
 
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = [
     "S101",    # assert is fine in tests
     "ARG001",  # unused arguments (fixtures)
     "PLR2004", # magic numbers in tests
     "T20",     # print in tests
+    "D1",      # missing docstrings — test names are self-documenting
+]
+"scripts/**" = [
+    "D1",  # missing docstrings — scripts are not a public API
+    "T20", # print is the expected output channel for CLI scripts
 ]
 
 [tool.ruff.lint.isort]
@@ -135,10 +167,6 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     "-v",
-    "--cov=my_package",
-    "--cov-branch",
-    "--cov-report=term-missing:skip-covered",
-    "--cov-fail-under=80",
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
