@@ -61,7 +61,6 @@ for import_name in sorted(import_names):
 
 def _load_project_name(pyproject_path: Path) -> str:
     """Return the normalized distribution name from pyproject metadata."""
-
     pyproject = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
     project = pyproject.get("project")
     if not isinstance(project, dict):
@@ -78,7 +77,6 @@ def _load_project_name(pyproject_path: Path) -> str:
 
 def _resolve_wheel_path(arguments: list[str]) -> Path:
     """Return the wheel path passed on the command line or auto-detected from dist/."""
-
     if len(arguments) > ARGUMENTS_WITH_WHEEL:
         msg = "Pass at most one wheel path."
         raise SystemExit(msg)
@@ -100,7 +98,6 @@ def _resolve_wheel_path(arguments: list[str]) -> Path:
 
 def _venv_python(venv_dir: Path) -> Path:
     """Return the Python executable path for the temporary virtual environment."""
-
     if sys.platform == "win32":
         return venv_dir / "Scripts" / "python.exe"
     return venv_dir / "bin" / "python"
@@ -108,14 +105,12 @@ def _venv_python(venv_dir: Path) -> Path:
 
 def _run(command: list[str]) -> None:
     """Run a command and fail fast if it exits unsuccessfully."""
-
     # Commands are passed as fixed argument lists with shell=False.
     subprocess.run(command, check=True, cwd=REPO_ROOT)  # noqa: S603
 
 
 def main(arguments: list[str]) -> int:
     """Install the built wheel into a temp environment and verify imports."""
-
     project_name = _load_project_name(REPO_ROOT / "pyproject.toml")
     wheel_path = _resolve_wheel_path(arguments)
 

@@ -22,11 +22,11 @@ fmt:
 lint:
     uv run ruff check .
     uv run ruff format --check .
-    uv run mypy src scripts
+    uv run mypy src scripts tests
 
 # Run tests with coverage
 test:
-    uv run pytest
+    uv run pytest --cov=my_package --cov-branch --cov-report=term-missing:skip-covered --cov-fail-under=80
 
 # Run all checks: format, lint, test
 check: fmt lint test
