@@ -22,7 +22,7 @@ fmt:
 lint:
     uv run ruff check .
     uv run ruff format --check .
-    uv run mypy src scripts
+    uv run mypy src scripts tests
 
 # Run tests with coverage
 test:
