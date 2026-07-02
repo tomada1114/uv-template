@@ -23,6 +23,11 @@ repos:
       - id: typos
         args: ["--config", "typos.toml"]
 
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.26.1
+    hooks:
+      - id: zizmor
+
   - repo: local
     hooks:
       - id: no-commit-to-main
