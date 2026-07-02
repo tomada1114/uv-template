@@ -1,0 +1,36 @@
+name: Label PR
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - edited
+      - synchronize
+
+permissions:
+  pull-requests: write
+
+jobs:
+  label:
+    name: Label by Conventional Commit type
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Apply label from PR title type
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          type="${PR_TITLE%%:*}"
+          type="${type%%(*}"
+          case "$type" in
+            feat) label=enhancement ;;
+            fix) label=bug ;;
+            docs) label=documentation ;;
+            ci) label=ci ;;
+            *) echo "No label mapping for type: $type"; exit 0 ;;
+          esac
+          gh pr edit "$PR_NUMBER" --add-label "$label"
