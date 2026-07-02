@@ -67,13 +67,32 @@ is meaningfully tested.
 ## Using This Template
 
 1. Click **"Use this template"** on GitHub (or clone and remove `.git`)
-2. Replace all occurrences of `my-package` and `my_package` with your project name
-3. Update `pyproject.toml` metadata (author, description, URLs)
-4. Update `README.md`, `SECURITY.md`, and `CLAUDE.md`
-5. Replace the placeholder implementation and keep `src/my_package/__init__.py`,
-   `docs/reference.md`, and the usage examples in sync with your public API
+2. Run `scripts/bootstrap.py` to rename the package and replace placeholders:
 
-Search for `your-username` and `my-package` to find all placeholders:
+   ```bash
+   uv run python scripts/bootstrap.py my-cool-lib \
+     --author "Jane Doe" --email jane@example.com --github-user janedoe
+   uv lock
+   ```
+
+   This renames `src/my_package` to `src/my_cool_lib` and replaces
+   `my-package`, `my_package`, `your-username`, `Your Name`, and
+   `you@example.com` across all tracked files (`uv.lock` is skipped —
+   run `uv lock` afterward to regenerate it). `--author`, `--email`, and
+   `--github-user` are optional; any omitted placeholder is left as-is.
+3. Update `pyproject.toml` metadata (description, URLs) beyond what the
+   script covers
+4. Update `README.md`, `SECURITY.md`, and `CLAUDE.md`
+5. Replace the placeholder implementation and keep `src/<your_package>/__init__.py`,
+   `docs/reference.md`, and the usage examples in sync with your public API
+6. Create a `CODECOV_TOKEN` repository secret (from [codecov.io](https://codecov.io))
+   so the CI coverage upload step can authenticate
+7. Note: the [OpenSSF Scorecard](https://github.com/ossf/scorecard) workflow
+   (`.github/workflows/scorecard.yml`) only runs successfully on public
+   repositories; it will fail on private repos
+
+To find any placeholders the script left untouched (e.g. because an
+optional argument was omitted):
 
 ```bash
 rg -n "your-username|my-package|my_package|Your Name|you@example" .

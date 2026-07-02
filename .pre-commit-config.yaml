@@ -9,6 +9,8 @@ repos:
       - id: check-merge-conflict
       - id: check-added-large-files
         args: ["--maxkb=500"]
+      - id: no-commit-to-branch
+        args: ["--branch", "main"]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.7
@@ -23,19 +25,16 @@ repos:
       - id: typos
         args: ["--config", "typos.toml"]
 
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.26.1
+    hooks:
+      - id: zizmor
+
   - repo: local
     hooks:
-      - id: no-commit-to-main
-        name: prevent direct commits to main
-        entry: scripts/no-commit-to-main.sh
-        language: script
-        always_run: true
-        pass_filenames: false
-        stages: [pre-commit]
-
       - id: mypy
         name: mypy
-        entry: uv run mypy src
+        entry: uv run mypy src scripts tests
         language: system
         types: [python]
         pass_filenames: false
