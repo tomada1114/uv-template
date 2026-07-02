@@ -72,6 +72,8 @@ is meaningfully tested.
 4. Update `README.md`, `SECURITY.md`, and `CLAUDE.md`
 5. Replace the placeholder implementation and keep `src/my_package/__init__.py`,
    `docs/reference.md`, and the usage examples in sync with your public API
+6. Create a `CODECOV_TOKEN` repository secret (from [codecov.io](https://codecov.io))
+   so the CI coverage upload step can authenticate
 
 Search for `your-username` and `my-package` to find all placeholders:
 
