@@ -86,6 +86,16 @@ Examples:
 Recommended types: `feat`, `fix`, `docs`, `refactor`, `test`, `ci`, `chore`,
 `perf`, `build`.
 
+### Changelog Policy
+
+`CHANGELOG.md` (in [Keep a Changelog](https://keepachangelog.com/) format) is
+the canonical, human-curated record of user-facing changes. Add an entry
+under `[Unreleased]` for any user-facing change in the same PR that makes it.
+
+GitHub's auto-generated release notes (via `.github/release.yml` categories)
+are supplementary — useful for a quick PR-by-PR diff, but `CHANGELOG.md` is
+what users should read to understand what changed in a release.
+
 ## Getting Help
 
 If something is unclear, open an issue or start a discussion. We're happy to
