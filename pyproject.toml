@@ -90,6 +90,21 @@ select = [
     "SLF",  # flake8-self
     "T20",  # flake8-print
     "LOG",  # flake8-logging
+    # --- Documentation ---
+    "D",    # pydocstyle
+    # --- Testing ---
+    "PT",   # flake8-pytest-style
+    # --- Naming ---
+    "N",    # pep8-naming
+    # --- Error handling ---
+    "TRY",  # tryceratops
+    "EM",   # flake8-errmsg
+    # --- Datetime safety ---
+    "DTZ",  # flake8-datetimez
+    # --- Exception hygiene ---
+    "RSE",  # flake8-raise
+    # --- pygrep hooks ---
+    "PGH",  # pygrep-hooks
     # --- Ruff-specific ---
     "RUF",  # ruff-specific rules
 ]
@@ -99,12 +114,19 @@ ignore = [
     "ISC001", # implicit string concatenation — conflicts with formatter
 ]
 
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = [
     "S101",    # assert is fine in tests
     "ARG001",  # unused arguments (fixtures)
     "PLR2004", # magic numbers in tests
     "T20",     # print in tests
+    "D1",      # missing docstrings — test names are self-documenting
+]
+"scripts/**" = [
+    "D1", # missing docstrings — scripts are not a public API
 ]
 
 [tool.ruff.lint.isort]
