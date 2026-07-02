@@ -11,7 +11,6 @@ from .core import add
 
 def _find_local_project_version(module_path: Path | None = None) -> str | None:
     """Return the local project version when importing directly from the source tree."""
-
     search_path = Path(__file__ if module_path is None else module_path).resolve()
 
     for parent in search_path.parents:
@@ -39,7 +38,6 @@ def _find_local_project_version(module_path: Path | None = None) -> str | None:
 
 def _load_version() -> str:
     """Return the installed distribution version for this package."""
-
     candidate_names = list(packages_distributions().get(__name__, []))
     candidate_names.extend([__name__.replace("_", "-"), __name__])
 
