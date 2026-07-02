@@ -126,7 +126,8 @@ convention = "google"
     "D1",      # missing docstrings — test names are self-documenting
 ]
 "scripts/**" = [
-    "D1", # missing docstrings — scripts are not a public API
+    "D1",  # missing docstrings — scripts are not a public API
+    "T20", # print is the expected output channel for CLI scripts
 ]
 
 [tool.ruff.lint.isort]
