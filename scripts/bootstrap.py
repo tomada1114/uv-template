@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -17,7 +18,23 @@ OLD_AUTHOR_NAME = "Your Name"
 OLD_AUTHOR_EMAIL = "you@example.com"
 
 EXCLUDED_FILE_NAMES = {"uv.lock"}
-EXCLUDED_DIR_NAMES = {".git"}
+# Only used for the non-git fallback walk (e.g. after ``.git`` was removed):
+# generated/untracked directories that must never be rewritten.
+EXCLUDED_DIR_NAMES = {
+    ".git",
+    ".venv",
+    "venv",
+    "dist",
+    "build",
+    "site",
+    "__pycache__",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".pytest_cache",
+    "htmlcov",
+    ".tox",
+    "node_modules",
+}
 
 _MODULE_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -34,7 +51,34 @@ def _normalize_module_name(package_name: str) -> str:
     return module_name
 
 
-def _iter_project_files(repo_root: Path) -> list[Path]:
+def _git_tracked_files(repo_root: Path) -> list[Path] | None:
+    """Return absolute paths of git-tracked files under repo_root.
+
+    Returns:
+        The tracked files (excluding EXCLUDED_FILE_NAMES), or None when
+        repo_root is not a git repository or git is unavailable.
+    """
+    try:
+        result = subprocess.run(  # noqa: S603
+            ["git", "-C", str(repo_root), "ls-files", "-z"],  # noqa: S607
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+    files = []
+    for relative_path in result.stdout.split("\0"):
+        if not relative_path or Path(relative_path).name in EXCLUDED_FILE_NAMES:
+            continue
+        path = repo_root / relative_path
+        if path.is_file():
+            files.append(path)
+    return files
+
+
+def _walk_project_files(repo_root: Path) -> list[Path]:
     """Return every file under repo_root, skipping excluded dirs and files."""
     files = []
     for path in repo_root.rglob("*"):
@@ -46,6 +90,20 @@ def _iter_project_files(repo_root: Path) -> list[Path]:
             continue
         files.append(path)
     return files
+
+
+def _iter_project_files(repo_root: Path) -> list[Path]:
+    """Return the files to rewrite.
+
+    Prefers git-tracked files so generated/untracked trees (``.venv``,
+    caches, build output) are never read or rewritten. Falls back to a
+    filtered filesystem walk when repo_root is not a git repository, e.g.
+    after the template's ``.git`` directory has been removed.
+    """
+    tracked = _git_tracked_files(repo_root)
+    if tracked is not None:
+        return tracked
+    return _walk_project_files(repo_root)
 
 
 def _replace_placeholders_in_file(path: Path, replacements: dict[str, str]) -> bool:
