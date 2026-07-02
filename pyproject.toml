@@ -54,6 +54,7 @@ packages = ["src/my_package"]
 [tool.ruff]
 target-version = "py312"
 line-length = 88
+src = ["src", "tests", "scripts"]
 
 [tool.ruff.lint]
 select = [
@@ -82,7 +83,7 @@ select = [
     "PERF", # perflint
     "FURB", # refurb
     # --- Type checking ---
-    "TCH",  # flake8-type-checking
+    "TC",   # flake8-type-checking
     # --- Style ---
     "COM",  # flake8-commas
     "PTH",  # flake8-use-pathlib
