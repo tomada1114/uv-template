@@ -74,6 +74,9 @@ is meaningfully tested.
    `docs/reference.md`, and the usage examples in sync with your public API
 6. Create a `CODECOV_TOKEN` repository secret (from [codecov.io](https://codecov.io))
    so the CI coverage upload step can authenticate
+7. Note: the [OpenSSF Scorecard](https://github.com/ossf/scorecard) workflow
+   (`.github/workflows/scorecard.yml`) only runs successfully on public
+   repositories; it will fail on private repos
 
 Search for `your-username` and `my-package` to find all placeholders:
 
