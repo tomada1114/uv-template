@@ -52,11 +52,18 @@ Just has cleaner syntax (no mandatory tabs), better cross-platform support, and
 more readable recipe definitions. It is a task runner, not a build system —
 which is exactly what a Python project needs.
 
-### Why CLAUDE.md?
+### Why AGENTS.md and .claude/?
 
-AI-assisted development is the norm, not the exception. `CLAUDE.md` gives LLMs
-the context they need to generate code that matches your project's standards,
-architecture, and conventions — reducing review cycles.
+AI-assisted development is the norm, not the exception. `AGENTS.md` gives any
+coding agent (Claude Code, Codex, Cursor, Gemini CLI, ...) the context it
+needs to match your project's standards; `CLAUDE.md` imports it and adds
+Claude Code specifics. The committed `.claude/` directory goes further than
+prose: path-scoped rules load conventions only when relevant files are
+touched, hooks deterministically auto-format edited files, block edits to
+`uv.lock`/`.env*` and `--no-verify`/force-push commands, and run ruff + mypy
+before the agent ends a turn, while a reviewed permission allowlist covers
+local build/lint/test commands only — commit, push, and PR creation always
+stay behind human approval.
 
 ### Why 80% coverage minimum?
 
