@@ -26,6 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   security reports to GitHub Security Advisories
 - Dependabot cooldown and `tool.uv.exclude-newer` supply-chain cutoff,
   documented in `.claude/rules/pyproject.md`
+- `AGENTS.md` as the canonical, tool-agnostic agent guide (previously a
+  symlink to `CLAUDE.md`, which breaks on Windows checkouts)
+- `.claude/hooks/guard.py` PreToolUse guard blocking hand-edits to
+  `uv.lock`/`.env*`, `git commit --no-verify`, and plain force-pushes
+- `.claude/hooks/stop_check.py` Stop-hook gate running ruff + mypy before
+  an agent turn ends when Python files changed
+- Committed Claude Code permission allowlist covering local build, lint,
+  and test commands only — commit/push/PR creation stay behind approval
 
 ### Changed
 
@@ -47,10 +55,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   release, and pre-commit
 - Expanded ruff rule set (`D`, `PT`, `N`, `TRY`, `EM`, `DTZ`, `RSE`,
   `PGH`) to match `.claude/rules/python.md`; renamed `TCH` -> `TC`
+- The post-edit format hook now formats only the edited Python file and
+  surfaces failures to the agent, replacing the repo-wide ruff run that
+  suppressed all errors
+- `CLAUDE.md` is now a thin `@AGENTS.md` import plus Claude Code
+  specifics; `.claude/rules/python.md` no longer restates rules ruff
+  already enforces mechanically
 
 ### Fixed
 
 - Switched to PEP 639 license metadata (`license-files`, dropped the
   redundant OSI trove classifier)
+- `CONTRIBUTING.md`'s manual mypy command now includes `tests`, matching
+  justfile/CI/pre-commit
+- The `create-pr` skill re-checks the working tree after `just check` so
+  formatting changes cannot be left uncommitted behind a green checklist
 
 [Unreleased]: https://github.com/your-username/my-package/commits/main
