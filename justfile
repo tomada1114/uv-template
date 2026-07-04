@@ -13,10 +13,10 @@ install:
 # Alias for first-time project setup
 setup: install
 
-# Format code
+# Format code (lint fixes first so the formatter has the last word)
 fmt:
-    uv run ruff format .
     uv run ruff check --fix .
+    uv run ruff format .
 
 # Run linters and type checker
 lint:
