@@ -10,7 +10,7 @@ comprehensive type checking and linting.
 
 ```bash
 just install   # Install dependencies and git hooks when .git/ is present
-just fmt       # Format code (ruff format + ruff check --fix)
+just fmt       # Format code (ruff check --fix + ruff format)
 just lint      # Lint (ruff check) + type check (mypy)
 just test      # Run tests with coverage
 just smoke     # Build and verify the wheel in a temp virtual environment

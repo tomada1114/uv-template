@@ -62,6 +62,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `CLAUDE.md` is now a thin `@AGENTS.md` import plus Claude Code
   specifics; `.claude/rules/python.md` no longer restates rules ruff
   already enforces mechanically
+- `just fmt` now runs `ruff check --fix` before `ruff format` (ruff's
+  recommended order, matching the post-edit hook), so lint autofixes can
+  no longer leave formatting drift behind
 
 ### Fixed
 
