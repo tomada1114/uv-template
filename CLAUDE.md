@@ -9,10 +9,11 @@ above). This repo additionally ships Claude Code configuration:
   pyproject.toml) that load automatically when matching files are read
 - `.claude/hooks/format.py` — auto-formats every edited `*.py` file
   (PostToolUse), so do not re-run formatters after each edit
-- `.claude/hooks/guard.py` — blocks hand-edits to `uv.lock` and `.env*`,
-  `git commit --no-verify`, and plain force-pushes (PreToolUse)
-- `.claude/hooks/stop_check.py` — runs ruff + mypy before a turn ends when
-  Python files changed (Stop)
+- `.claude/hooks/guard.py` — blocks writes to `uv.lock`, `.env*`, and
+  `secrets/**` (via Edit/Write or shell commands), `git commit --no-verify`,
+  and plain force-pushes (PreToolUse)
+- `.claude/hooks/stop_check.py` — runs ruff (lint + format check) and mypy
+  before a turn ends when Python files changed (Stop)
 - `.claude/skills/` — `create-pr` and `smart-commit` workflow skills
 - `.claude/settings.json` — shared permission allowlist for local build,
   lint, and test commands; personal preferences (model, output style, extra

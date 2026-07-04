@@ -3,10 +3,16 @@
 # ///
 """Stop hook: lightweight quality gate before Claude ends its turn.
 
-Runs ruff + mypy (no tests — those stay in `just check` and CI) whenever the
-working tree contains modified Python files or pyproject.toml. Exit code 2
-blocks the stop and feeds the failures back to Claude so it fixes them before
-declaring the turn done.
+Runs the same ruff lint + format checks and mypy as `just lint` (no tests —
+those stay in `just check` and CI) whenever the working tree contains
+modified Python files or pyproject.toml. Exit code 2 blocks the stop and
+feeds the failures back to Claude so it fixes them before declaring the
+turn done.
+
+The hook's wall-clock budget is the `timeout` on the Stop hook entry in
+.claude/settings.json; a timed-out hook is skipped, not blocking. If this
+template grows into a project whose cold-cache whole-tree mypy run exceeds
+that budget, raise the timeout there.
 """
 
 from __future__ import annotations
@@ -18,6 +24,7 @@ import sys
 
 CHECKS = (
     ["uv", "run", "ruff", "check", "."],
+    ["uv", "run", "ruff", "format", "--check", "."],
     ["uv", "run", "mypy", "src", "scripts", "tests"],
 )
 

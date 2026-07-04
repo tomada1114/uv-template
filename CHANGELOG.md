@@ -28,10 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   documented in `.claude/rules/pyproject.md`
 - `AGENTS.md` as the canonical, tool-agnostic agent guide (previously a
   symlink to `CLAUDE.md`, which breaks on Windows checkouts)
-- `.claude/hooks/guard.py` PreToolUse guard blocking hand-edits to
-  `uv.lock`/`.env*`, `git commit --no-verify`, and plain force-pushes
-- `.claude/hooks/stop_check.py` Stop-hook gate running ruff + mypy before
-  an agent turn ends when Python files changed
+- `.claude/hooks/guard.py` PreToolUse guard blocking writes to
+  `uv.lock`/`.env*`/`secrets/**` (via Edit/Write or shell commands),
+  `git commit --no-verify`, and plain force-pushes
+- `.claude/hooks/stop_check.py` Stop-hook gate running ruff (lint + format
+  check) and mypy before an agent turn ends when Python files changed
 - Committed Claude Code permission allowlist covering local build, lint,
   and test commands only — commit/push/PR creation stay behind approval
 
