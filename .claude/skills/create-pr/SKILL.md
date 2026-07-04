@@ -48,6 +48,11 @@ just check
 `just check` runs `fmt -> lint -> test` sequentially.
 **If any step fails, abort PR creation** and report the failure.
 
+The `fmt` phase can modify tracked files. After `just check` succeeds, run
+`git status --short` again — if formatting produced changes, commit them
+(e.g. `style: apply formatting`) before proceeding, otherwise the pushed
+branch will not match the verified state.
+
 On success, the following checklist items are verified:
 - Tests pass (`just test`)
 - Type checks pass (`just lint`)

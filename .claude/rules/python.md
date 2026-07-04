@@ -13,8 +13,7 @@ paths:
 ## Error Handling
 
 - Define a package-level base exception; derive all specific errors from it
-- Always chain exceptions with `raise XError(...) from original` to preserve context
-- Never bare `except:`; catch the most specific exception possible
+- Catch the most specific exception possible
 - Use `logging.exception()` in catch blocks (auto-includes traceback), never `logger.error(str(e))`
 - Never swallow exceptions silently; if catching, handle meaningfully or re-raise
 - Never use exceptions for control flow
@@ -51,9 +50,8 @@ paths:
 
 ## Security
 
-- Never use `eval()`, `exec()`, or `pickle.loads()` on untrusted input
-- Use `secrets` module for tokens/keys, not `random`
 - Sanitize file paths to prevent directory traversal (`pathlib.Path.resolve()` then check prefix)
+- Ruff's bandit rules (`S`) cover eval/exec/pickle/random misuse — do not suppress them with `noqa` without a written justification
 
 ## Constants and Naming
 
