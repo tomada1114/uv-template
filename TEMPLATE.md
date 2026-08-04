@@ -11,17 +11,27 @@ it from the spawned repo, so nothing here ships to your library's users.
 
    ```bash
    uv run python scripts/bootstrap.py my-cool-lib \
-     --author "Jane Doe" --email jane@example.com --github-user janedoe
-   uv lock
+     --author "Jane Doe" --email jane@example.com --github-user janedoe \
+     --description "One line about what this library does."
    ```
 
    This renames `src/my_package` to `src/my_cool_lib` and replaces
-   `my-package`, `my_package`, `your-username`, `Your Name`, and
-   `you@example.com` across all tracked files (`uv.lock` is skipped —
-   run `uv lock` afterward to regenerate it). `--github-user` is required;
-   `--author` and `--email` are optional, and any omitted placeholder is left
-   as-is.
-3. Update `pyproject.toml` metadata (description, URLs) beyond what the
+   `my-package`, `my_package`, `uv-template`, `your-username`, `Your Name`,
+   and `you@example.com` across all tracked files. It also writes the current
+   year into `LICENSE`, moves `[tool.uv] exclude-newer` to two weeks before
+   today, resets `CHANGELOG.md` to an empty skeleton, and runs `uv lock` (a
+   lock file still naming the template would fail the first CI run — if the
+   lock step warns, run `uv lock` yourself before committing).
+
+   `--github-user` is required: it is baked into the project URLs, and
+   leaving it out ships a dead security-report link in
+   `.github/ISSUE_TEMPLATE/config.yml`. `--author`, `--email`, and
+   `--description` are optional; any omitted placeholder is left as-is.
+
+   Finally the script deletes its own scaffolding — this file,
+   `scripts/bootstrap.py`, and `tests/test_bootstrap.py`. Pass
+   `--keep-bootstrap` to keep them.
+3. Update `pyproject.toml` metadata (keywords, URLs) beyond what the
    script covers
 4. Update `README.md`, `SECURITY.md`, and `CLAUDE.md`
 5. Replace the placeholder implementation and keep `src/<your_package>/__init__.py`,
@@ -47,7 +57,7 @@ To find any placeholders the script left untouched (e.g. because an
 optional argument was omitted):
 
 ```bash
-rg -n "your-username|my-package|my_package|Your Name|you@example" .
+rg -n "your-username|my-package|my_package|uv-template|Your Name|you@example" .
 ```
 
 ### Working in the new repository

@@ -12,7 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial project structure
 - `scripts/bootstrap.py` deterministic template initializer: renames the
   package and replaces every placeholder (`my-package`, `my_package`,
-  `your-username`, `Your Name`, `you@example.com`) across tracked files
+  `uv-template`, `your-username`, `Your Name`, `you@example.com`, and the
+  description) across tracked files, then finishes the new project off —
+  current year in `LICENSE`, `exclude-newer` moved to today-14d,
+  `CHANGELOG.md` reset to an empty skeleton, `uv lock` run (warn-only), and
+  its own scaffolding deleted unless `--keep-bootstrap` is passed.
+  `--github-user` is now required, since omitting it shipped a dead
+  security-report URL in `.github/ISSUE_TEMPLATE/config.yml`
 - Python 3.14 support in the CI test matrix and trove classifiers
 - `zizmor` security lint for GitHub Actions workflows, wired into both CI
   and pre-commit
