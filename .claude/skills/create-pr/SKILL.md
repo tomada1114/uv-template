@@ -6,6 +6,7 @@ description: >
   summary/test plan/checklist, and verifies all checklist items pass before
   creating via gh CLI. Use PROACTIVELY when: PR creation, pull request,
   create PR, open PR, submit PR, PR update, review request.
+allowed-tools: Bash(cat:*), Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git rev-parse:*)
 ---
 
 # PR Creation Workflow
@@ -14,14 +15,9 @@ All PR titles, bodies, and commit messages MUST be written in English.
 
 ## Dynamic Context
 
-PR template:
-!cat .github/PULL_REQUEST_TEMPLATE.md
-
-Commits in this PR:
-!git log main..HEAD --oneline
-
-Changed files:
-!git diff --stat main..HEAD
+- PR template: !`cat .github/PULL_REQUEST_TEMPLATE.md`
+- Commits in this PR: !`git log main..HEAD --oneline`
+- Changed files: !`git diff --stat main..HEAD`
 
 ## Step 1: Pre-flight Checks
 

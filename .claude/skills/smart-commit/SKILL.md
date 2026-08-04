@@ -6,6 +6,7 @@ description: >
   exclusion, and uv.lock bundling automatically. Use PROACTIVELY when:
   commit, git commit, save changes, commit and push, stage changes,
   push my changes, commit this work, ship it.
+allowed-tools: Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git rev-parse:*)
 ---
 
 # Smart Commit Workflow
@@ -14,14 +15,9 @@ All commit messages must be written in English.
 
 ## Dynamic Context
 
-Current branch:
-!git rev-parse --abbrev-ref HEAD
-
-Working tree status:
-!git status --short
-
-Recent commit style:
-!git log --oneline -5
+- Current branch: !`git rev-parse --abbrev-ref HEAD`
+- Working tree status: !`git status --short`
+- Recent commit style: !`git log --oneline -5`
 
 ## Branch Guard
 
