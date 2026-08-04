@@ -12,7 +12,7 @@ paths:
 
 ## Error Handling
 
-- Define a package-level base exception; derive all specific errors from it
+- If the package raises more than one domain-specific error, define a package base exception and derive the others from it
 - Catch the most specific exception possible
 - Use `logging.exception()` in catch blocks (auto-includes traceback), never `logger.error(str(e))`
 - Never swallow exceptions silently; if catching, handle meaningfully or re-raise
@@ -29,14 +29,8 @@ paths:
 
 ## Performance
 
-- Use generator expressions and `itertools` for large sequences; avoid materializing unnecessary lists
-- Use `__slots__` on frequently instantiated classes (dataclass `slots=True`)
-- Use `functools.lru_cache` or `functools.cache` for expensive pure functions
-- Prefer `str.join()` over `+=` concatenation in loops
-- Use `collections.defaultdict`, `Counter`, `deque` instead of hand-rolled equivalents
-- Avoid repeated attribute lookups in tight loops; bind to local variable
-- Use `dict`/`set` for O(1) membership tests instead of lists
-- Lazy-import heavy optional dependencies inside functions to reduce import time
+Do not optimize preemptively. Profile first; optimize only measured hotspots, and note the
+measurement in the PR description.
 
 ## Pythonic Patterns
 

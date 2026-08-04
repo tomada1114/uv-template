@@ -16,11 +16,10 @@ Include:
 
 ## Response Timeline
 
-| Action | Timeline |
-|---|---|
-| Acknowledgment | Within 48 hours |
-| Initial assessment | Within 7 days |
-| Fix release | Best effort, typically within 30 days |
+This is a volunteer-maintained project, so every step below is best effort
+rather than a guarantee: acknowledgment as soon as the report is seen,
+assessment once acknowledged, and a fix release as soon as one is ready.
+Serious, actively exploitable issues are prioritized over everything else.
 
 ## Supported Versions
 

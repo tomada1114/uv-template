@@ -47,9 +47,12 @@ an individual is officially representing the community in public spaces.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the project maintainers via the repository's issue tracker or email.
+reported privately through
+[GitHub Security Advisories](https://github.com/your-username/my-package/security/advisories/new)
+or by email to <you@example.com>.
 
-All complaints will be reviewed and investigated promptly and fairly.
+All complaints will be reviewed and investigated fairly, and the reporter's
+privacy will be respected.
 
 ## Attribution
 
