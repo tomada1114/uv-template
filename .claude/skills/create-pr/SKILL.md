@@ -111,12 +111,9 @@ Fill each item based on verification results from Steps 2-3:
 
 | Item | Criteria |
 |------|----------|
-| Tests pass | `just test` passed |
-| Type checks pass | `just lint` passed |
-| Code is formatted | `just fmt` passed |
-| Documentation updated | Required only when public API changed. No change = checked |
-| No breaking changes | No breaking changes, or documented in Summary = checked |
-| PR title follows Conventional Commits | Guaranteed by Step 4 |
+| `just check` passes | Verified in Step 2 |
+| Docs updated | Required only when the public API changed. No change = checked |
+| Breaking changes called out | None, or described in the Summary = checked |
 
 **If any item is unchecked, abort PR creation** and report the issue.
 

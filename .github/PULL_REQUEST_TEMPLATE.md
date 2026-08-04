@@ -9,10 +9,6 @@
 
 ## Checklist
 
-- [ ] Tests pass (`just test`)
-- [ ] Type checks pass (`just lint`)
-- [ ] Code is formatted (`just fmt`)
-- [ ] Documentation updated (if applicable)
-- [ ] No breaking changes (or documented in description)
-- [ ] PR title follows Conventional Commits
-- [ ] CHANGELOG updated (if user-facing change)
+- [ ] `just check` passes
+- [ ] Docs updated, if the public API changed
+- [ ] Breaking changes called out in the Summary
