@@ -38,7 +38,7 @@ docs = ["mkdocs-material>=9.7.6", "mkdocstrings[python]>=1.0.4"]
 # --------------------------------------------------------------------------- #
 
 [tool.uv]
-exclude-newer = "2026-06-18T00:00:00Z"
+exclude-newer = "2026-07-21T00:00:00Z"
 
 # --------------------------------------------------------------------------- #
 #  Build
@@ -166,10 +166,6 @@ testpaths = ["tests"]
 addopts = [
     "--strict-markers",
     "--strict-config",
-    "-v",
-]
-markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
 ]
 
 # --------------------------------------------------------------------------- #
@@ -178,6 +174,9 @@ markers = [
 
 [tool.coverage.run]
 branch = true
+# Single-sources the measured package: `--cov` alone then needs no name, so
+# the justfile / CI / CONTRIBUTING commands survive the bootstrap rename.
+source = ["src"]
 
 [tool.coverage.report]
 exclude_lines = [
