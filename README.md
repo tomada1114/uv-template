@@ -23,7 +23,8 @@ result = add(1, 2)  # 3
 
 ## Development
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for full setup instructions.
+See [CONTRIBUTING.md](https://github.com/your-username/my-package/blob/main/CONTRIBUTING.md)
+for full setup instructions.
 
 ```bash
 uv sync --all-groups
@@ -42,7 +43,6 @@ confirm the distribution imports from the wheel, not from `src/`.
 
 ## Documentation
 
-- [Getting Started](https://your-username.github.io/my-package/getting-started/)
 - [API Reference](https://your-username.github.io/my-package/reference/)
 
 ## License
