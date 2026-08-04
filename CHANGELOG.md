@@ -22,9 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Python 3.14 support in the CI test matrix and trove classifiers
 - `zizmor` security lint for GitHub Actions workflows, wired into both CI
   and pre-commit
-- `actions/dependency-review-action` on pull requests
-- Weekly `pip-audit` dependency vulnerability scan
-- Weekly OpenSSF Scorecard analysis
 - PR auto-labeling by Conventional Commit type, so the release changelog
   categories actually populate
 - `TEMPLATE.md`, holding the template's own Design Philosophy and setup
@@ -49,8 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `git commit --no-verify`, and plain force-pushes
 - `.claude/hooks/stop_check.py` Stop-hook gate running ruff (lint + format
   check) and mypy before an agent turn ends when Python files changed
-- Committed Claude Code permission allowlist covering local build, lint,
-  and test commands only — commit/push/PR creation stay behind approval
+- Committed Claude Code permission allowlist for local development
+  commands — commit/push/PR creation stay behind approval
 - `.claude/skills/release-workflow/SKILL.md` covering the full release
   path: preflight, version pick, release PR, tag, and pipeline watch
 
