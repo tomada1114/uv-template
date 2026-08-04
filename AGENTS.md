@@ -10,6 +10,7 @@ comprehensive type checking and linting.
 
 ```bash
 just install   # Install dependencies and git hooks when .git/ is present
+just setup     # Alias for just install (first-time setup)
 just fmt       # Format code (ruff check --fix + ruff format)
 just lint      # Lint (ruff check) + type check (mypy)
 just test      # Run tests with coverage
@@ -17,6 +18,7 @@ just smoke     # Build and verify the wheel in a temp virtual environment
 just check     # Run all checks: fmt → lint → test
 just docs      # Serve docs locally
 just build     # Build distribution packages
+just clean     # Remove build artifacts and caches
 ```
 
 Without Just: replace `just <cmd>` with the corresponding `uv run` commands

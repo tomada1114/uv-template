@@ -56,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- The empty `tests/conftest.py` — nothing needed it
 - `docs/getting-started.md`, and the hand-maintained copy of the README in
   `docs/index.md`. The docs home page now includes `README.md` via
   `--8<--`, the same way `docs/contributing.md` includes `CONTRIBUTING.md`,
@@ -72,6 +73,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Coverage now names the measured code once, in `[tool.coverage.run]
+  source`, so the justfile / CI / CONTRIBUTING command is just `pytest
+  --cov ...` and survives the bootstrap rename untouched
+- `pytest` no longer runs with `-v` by default; the unused `slow` marker
+  is gone
+- The committed permission allowlist covers the remaining `just` recipes,
+  `uv add`, and read-only `git`/`gh` inspection commands, and every entry
+  is normalized to the `:*` form. Commit, push, and PR creation still
+  require approval
 - `.claude/rules/python.md`'s Performance section is now a two-line
   "profile first" rule; the previous micro-optimization list drove
   over-engineering in libraries far too small to need it. The base-exception
