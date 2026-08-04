@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Weekly OpenSSF Scorecard analysis
 - PR auto-labeling by Conventional Commit type, so the release changelog
   categories actually populate
+- A PR-time `mkdocs build --strict` job in CI, so documentation breakage
+  surfaces on the pull request instead of after the merge
+- `workflow_dispatch` on the release workflow, so a failed publish can be
+  retried without deleting and re-pushing the tag
 - `.devcontainer/devcontainer.json` for a ready-to-use dev environment
 - `.github/ISSUE_TEMPLATE/config.yml` disabling blank issues and linking
   security reports to GitHub Security Advisories
@@ -38,8 +42,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.claude/skills/release-workflow/SKILL.md` covering the full release
   path: preflight, version pick, release PR, tag, and pipeline watch
 
+### Removed
+
+- The Scorecard, `pip-audit`, and dependency-review workflows. With zero
+  runtime dependencies they audit only this repo's dev tooling, and both
+  Scorecard and dependency review need a public repo or GHAS, which a
+  freshly spawned private repo does not have
+- The Codecov upload step and README badge — coverage is already gated in
+  CI by `--cov-fail-under=80`, and the upload needs a per-repo
+  `CODECOV_TOKEN` that every spawned repo would have to provision
+- The redundant `test` job in the release workflow; the same commit
+  already passed CI on `main` before it was tagged
+
 ### Changed
 
+- zizmor findings are now exempted with inline `# zizmor: ignore[...]`
+  comments instead of line numbers in `.github/zizmor.yml` (removed), which
+  stopped matching whenever a workflow shifted by a line
+- The docs deploy no longer triggers on `pyproject.toml` / `uv.lock`, so a
+  dependency bump no longer redeploys the documentation
+- The PR title check no longer runs on `synchronize` — the title cannot
+  change on push
 - Moved coverage enforcement (`--cov-fail-under=80`) out of pytest
   `addopts` and into `just test` / CI, so a single test can be run in
   isolation without failing the coverage gate
