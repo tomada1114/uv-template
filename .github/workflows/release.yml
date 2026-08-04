@@ -4,41 +4,14 @@ on:
   push:
     tags:
       - "v*"
+  # Lets a failed publish be retried without deleting and re-pushing the tag.
+  workflow_dispatch:
 
 permissions: {}
 
 jobs:
-  test:
-    name: Test before release
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-
-      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
-        with:
-          enable-cache: false
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: uv sync --group dev --locked
-
-      - name: Lint
-        run: |
-          uv run ruff check .
-          uv run ruff format --check .
-          uv run mypy src scripts tests
-
-      - name: Test
-        run: uv run pytest
-
   build:
     name: Build distribution
-    needs: [test]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

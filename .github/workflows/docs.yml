@@ -7,9 +7,7 @@ on:
       - "CONTRIBUTING.md"
       - "docs/**"
       - "mkdocs.yml"
-      - "pyproject.toml"
       - "src/**"
-      - "uv.lock"
 
 permissions:
   contents: write
