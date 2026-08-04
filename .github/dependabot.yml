@@ -1,19 +1,14 @@
 version: 2
 updates:
-  - package-ecosystem: "pip"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    cooldown:
-      default-days: 7
-    commit-message:
-      prefix: "deps:"
-
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    # Required by the zizmor `dependabot-cooldown` audit: do not propose a
+    # release that has been out for less than a week.
     cooldown:
       default-days: 7
-    commit-message:
-      prefix: "ci:"
+    groups:
+      actions:
+        patterns: ["*"]
+    open-pull-requests-limit: 3

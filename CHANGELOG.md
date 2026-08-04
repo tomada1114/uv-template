@@ -28,8 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.devcontainer/devcontainer.json` for a ready-to-use dev environment
 - `.github/ISSUE_TEMPLATE/config.yml` disabling blank issues and linking
   security reports to GitHub Security Advisories
-- Dependabot cooldown and `tool.uv.exclude-newer` supply-chain cutoff,
-  documented in `.claude/rules/pyproject.md`
+- Dependabot cooldown and the `tool.uv.exclude-newer` supply-chain cutoff,
+  documented in `.claude/rules/pyproject.md` together with the manual
+  Python dependency update procedure
 - `AGENTS.md` as the canonical, tool-agnostic agent guide (previously a
   symlink to `CLAUDE.md`, which breaks on Windows checkouts)
 - `.claude/hooks/guard.py` PreToolUse guard blocking writes to
@@ -56,6 +57,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Dependabot now covers GitHub Actions only, monthly and grouped into a
+  single PR. The `pip` ecosystem cannot manage PEP 735
+  `[dependency-groups]` plus `uv.lock`, and `exclude-newer` blocked the
+  bumps it proposed; Python dependencies are updated manually instead
 - zizmor findings are now exempted with inline `# zizmor: ignore[...]`
   comments instead of line numbers in `.github/zizmor.yml` (removed), which
   stopped matching whenever a workflow shifted by a line
