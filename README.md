@@ -1,7 +1,6 @@
 # my-package
 
 [![CI](https://github.com/your-username/my-package/actions/workflows/ci.yml/badge.svg)](https://github.com/your-username/my-package/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/your-username/my-package/branch/main/graph/badge.svg)](https://codecov.io/gh/your-username/my-package)
 [![PyPI](https://img.shields.io/pypi/v/my-package)](https://pypi.org/project/my-package/)
 [![Python](https://img.shields.io/pypi/pyversions/my-package)](https://pypi.org/project/my-package/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -92,11 +91,6 @@ is meaningfully tested.
 4. Update `README.md`, `SECURITY.md`, and `CLAUDE.md`
 5. Replace the placeholder implementation and keep `src/<your_package>/__init__.py`,
    `docs/reference.md`, and the usage examples in sync with your public API
-6. Create a `CODECOV_TOKEN` repository secret (from [codecov.io](https://codecov.io))
-   so the CI coverage upload step can authenticate
-7. Note: the [OpenSSF Scorecard](https://github.com/ossf/scorecard) workflow
-   (`.github/workflows/scorecard.yml`) only runs successfully on public
-   repositories; it will fail on private repos
 
 To find any placeholders the script left untouched (e.g. because an
 optional argument was omitted):
