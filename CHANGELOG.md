@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Weekly OpenSSF Scorecard analysis
 - PR auto-labeling by Conventional Commit type, so the release changelog
   categories actually populate
+- `TEMPLATE.md`, holding the template's own Design Philosophy and setup
+  checklist so `README.md` ships as a plain library README. The checklist
+  gained two previously missing but required steps: registering PyPI
+  Trusted Publishing (environment `release`) and enabling GitHub Pages
+  from the `gh-pages` branch
 - A PR-time `mkdocs build --strict` job in CI, so documentation breakage
   surfaces on the pull request instead of after the merge
 - `workflow_dispatch` on the release workflow, so a failed publish can be
