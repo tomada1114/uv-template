@@ -21,12 +21,25 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
-CHECKS = (
-    ["uv", "run", "ruff", "check", "."],
-    ["uv", "run", "ruff", "format", "--check", "."],
-    ["uv", "run", "mypy", "src", "scripts", "tests"],
-)
+# Paths mypy checks when they exist. A repo spawned from this template may
+# drop any of them (e.g. scripts/); passing a missing path makes mypy exit
+# nonzero with "Cannot read file", which would block every turn end.
+MYPY_PATHS = ("src", "scripts", "tests")
+
+
+def _checks() -> list[list[str]]:
+    """Build the check commands, skipping mypy when it has nothing to read."""
+    checks = [
+        ["uv", "run", "ruff", "check", "."],
+        ["uv", "run", "ruff", "format", "--check", "."],
+    ]
+    paths = [path for path in MYPY_PATHS if Path(path).exists()]
+    if paths:
+        checks.append(["uv", "run", "mypy", *paths])
+    return checks
+
 
 # Drop the wrapper script's own venv so the nested `uv run` targets .venv.
 SUBPROCESS_ENV = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
@@ -63,7 +76,7 @@ def main() -> int:
     if not _python_files_changed():
         return 0
 
-    for args in CHECKS:
+    for args in _checks():
         result = subprocess.run(  # noqa: S603
             args, capture_output=True, text=True, check=False, env=SUBPROCESS_ENV
         )
