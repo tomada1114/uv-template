@@ -106,10 +106,10 @@ needs to match your project's standards; `CLAUDE.md` imports it and adds
 Claude Code specifics. The committed `.claude/` directory goes further than
 prose: path-scoped rules load conventions only when relevant files are
 touched, hooks deterministically auto-format edited files, block edits to
-`uv.lock`/`.env*` and `--no-verify`/force-push commands, and run ruff + mypy
-before the agent ends a turn, while a reviewed permission allowlist covers
-local build/lint/test commands only — commit, push, and PR creation always
-stay behind human approval.
+`uv.lock`/`.env*`/`secrets/**` as well as `--no-verify`, force-push, and
+`gh pr merge --admin` commands, and run ruff + mypy before the agent ends
+a turn, while a reviewed permission allowlist covers local development
+commands — commit, push, and PR creation always stay behind human approval.
 
 ### Why 80% coverage minimum?
 
