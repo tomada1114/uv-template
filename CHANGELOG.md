@@ -72,6 +72,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `.claude/rules/python.md`'s Performance section is now a two-line
+  "profile first" rule; the previous micro-optimization list drove
+  over-engineering in libraries far too small to need it. The base-exception
+  rule is conditional on the package raising more than one domain error
+- `.claude/rules/testing.md` is reduced to a short essentials block, in
+  place of a 6-category mandatory edge-case matrix that no small library
+  can satisfy honestly
+- `SECURITY.md` states best-effort response instead of a 48-hour /
+  7-day SLA that a volunteer maintainer cannot keep across many repos
+- `CODE_OF_CONDUCT.md` points reports at GitHub Security Advisories and the
+  maintainer email instead of "the issue tracker or email"
+- The PR template checklist is three items (`just check`, docs, breaking
+  changes) instead of seven, and the bug report form requires only
+  Description, Reproduction, and Version
 - Dependabot now covers GitHub Actions only, monthly and grouped into a
   single PR. The `pip` ecosystem cannot manage PEP 735
   `[dependency-groups]` plus `uv.lock`, and `exclude-newer` blocked the
