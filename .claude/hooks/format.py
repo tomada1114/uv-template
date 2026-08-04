@@ -32,7 +32,12 @@ def main() -> int:
         return 0
 
     file_path = Path(raw_path)
-    project_dir = Path(payload.get("cwd", ".")).resolve()
+    # CLAUDE_PROJECT_DIR is the repository root; the payload's `cwd` is
+    # wherever the session happens to be, so a subdirectory cwd would make
+    # this hook silently skip files elsewhere in the project.
+    project_dir = Path(
+        os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd", ".")
+    ).resolve()
     if not file_path.is_file() or not file_path.resolve().is_relative_to(project_dir):
         return 0
 

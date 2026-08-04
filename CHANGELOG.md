@@ -74,5 +74,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   justfile/CI/pre-commit
 - The `create-pr` skill re-checks the working tree after `just check` so
   formatting changes cannot be left uncommitted behind a green checklist
+- `.claude/hooks/stop_check.py` now filters its mypy paths by existence, so
+  a spawned repo without `scripts/` is no longer blocked from ever ending a
+  turn by mypy's "Cannot read file" error
+- `.claude/hooks/format.py` resolves the project root from
+  `CLAUDE_PROJECT_DIR` instead of the payload `cwd`, which silently skipped
+  formatting when the session ran in a subdirectory
+- `.claude/hooks/guard.py` now blocks `gh pr merge --admin`, previously
+  forbidden only in prose
 
 [Unreleased]: https://github.com/your-username/my-package/commits/main

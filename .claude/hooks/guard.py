@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # ///
-"""PreToolUse hook: block edits to protected files and dangerous git commands.
+"""PreToolUse hook: block edits to protected files and dangerous git/gh commands.
 
 Permission `deny` rules are advisory in some Claude Code versions
 (anthropics/claude-code#6699), and hooks also fire in bypassPermissions mode,
@@ -131,6 +131,17 @@ def _check_git(tokens: list[str]) -> str | None:
     return None
 
 
+def _check_gh(tokens: list[str]) -> str | None:
+    """Return a block reason when a gh command bypasses required checks."""
+    if "gh" not in tokens:
+        return None
+    rest = tokens[tokens.index("gh") + 1 :]
+    positionals = [token for token in rest if not token.startswith("-")]
+    if positionals[:2] == ["pr", "merge"] and "--admin" in rest:
+        return "gh pr merge --admin bypasses required checks — wait for CI and merge normally."
+    return None
+
+
 def _written_files(tokens: list[str]) -> list[str]:
     """Best-effort list of files a command segment writes to."""
     targets: list[str] = []
@@ -157,6 +168,8 @@ def _check_bash(command: str) -> str | None:
     """Return a block reason when the shell command bypasses the guards."""
     for tokens in _segments(command):
         if reason := _check_git(tokens):
+            return reason
+        if reason := _check_gh(tokens):
             return reason
         for target in _written_files(tokens):
             if reason := _check_write(target):
