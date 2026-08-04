@@ -58,6 +58,5 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Getting Started: getting-started.md
   - API Reference: reference.md
   - Contributing: contributing.md

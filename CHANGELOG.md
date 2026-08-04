@@ -50,6 +50,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- `docs/getting-started.md`, and the hand-maintained copy of the README in
+  `docs/index.md`. The docs home page now includes `README.md` via
+  `--8<--`, the same way `docs/contributing.md` includes `CONTRIBUTING.md`,
+  so a public API change no longer has to be mirrored into four files
 - The Scorecard, `pip-audit`, and dependency-review workflows. With zero
   runtime dependencies they audit only this repo's dev tooling, and both
   Scorecard and dependency review need a public repo or GHAS, which a
