@@ -64,8 +64,6 @@ gh pr diff <number>
 - Treat a **minor bump of a `0.x` package as a major** one — ruff and similar
   pre-1.0 tools ship breaking changes in minor releases. The script labels these
   `minor`; you still read the release notes.
-- Confirm the `Dependency Review` check passed on the PR — it is the advisory
-  gate for new/changed dependencies.
 - Anything that changes *what* runs in CI (new action, new script step) rather
   than *which version* runs deserves a closer read.
 
