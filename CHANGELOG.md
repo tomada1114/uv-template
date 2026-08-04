@@ -35,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   check) and mypy before an agent turn ends when Python files changed
 - Committed Claude Code permission allowlist covering local build, lint,
   and test commands only — commit/push/PR creation stay behind approval
+- `.claude/skills/release-workflow/SKILL.md` covering the full release
+  path: preflight, version pick, release PR, tag, and pipeline watch
 
 ### Changed
 
@@ -82,5 +84,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   formatting when the session ran in a subdirectory
 - `.claude/hooks/guard.py` now blocks `gh pr merge --admin`, previously
   forbidden only in prose
+- The `create-pr` and `smart-commit` skills use the backtick form
+  (`` !`cmd` ``) for dynamic context; the previous bare `!cmd` lines were
+  literal text, so both skills ran with no injected context at all
 
 [Unreleased]: https://github.com/your-username/my-package/commits/main
