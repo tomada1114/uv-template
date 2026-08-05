@@ -11,4 +11,5 @@
 
 - [ ] `just check` passes
 - [ ] Docs updated, if the public API changed
+- [ ] `CHANGELOG.md` updated, if this is a user-facing change
 - [ ] Breaking changes called out in the Summary
