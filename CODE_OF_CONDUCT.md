@@ -47,9 +47,7 @@ an individual is officially representing the community in public spaces.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported privately through
-[GitHub Security Advisories](https://github.com/your-username/my-package/security/advisories/new)
-or by email to <you@example.com>.
+reported privately by email to <you@example.com>.
 
 All complaints will be reviewed and investigated fairly, and the reporter's
 privacy will be respected.
