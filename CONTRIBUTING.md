@@ -99,9 +99,10 @@ what users should read to understand what changed in a release.
 ## Releasing
 
 Releases are cut by pushing a `v*` tag. `.github/workflows/release.yml` then
-checks the tag against `project.version`, builds the sdist and wheel,
-smoke-tests the wheel, attests its build provenance, publishes to PyPI and
-creates the GitHub Release. Nothing is uploaded by hand, and there is no PyPI
+runs ruff, mypy and pytest as a gate, checks the tag against
+`project.version`, builds the sdist and wheel, smoke-tests the wheel, attests
+its build provenance, publishes to PyPI and creates the GitHub Release. A
+failing gate stops the run before anything is built or published. Nothing is uploaded by hand, and there is no PyPI
 API token anywhere in this repository: the `publish` job authenticates to PyPI
 with an OIDC identity through
 [trusted publishing](https://docs.pypi.org/trusted-publishers/).
