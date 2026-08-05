@@ -10,8 +10,40 @@ on:
 permissions: {}
 
 jobs:
+  test:
+    name: Test before release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: false
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --group dev --locked
+
+      - name: Ruff check
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+      - name: mypy
+        run: uv run mypy src scripts tests
+
+      - name: Run tests
+        run: uv run pytest --cov --cov-report=term-missing:skip-covered --cov-fail-under=80
+
   build:
     name: Build distribution
+    needs: [test]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
