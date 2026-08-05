@@ -87,9 +87,9 @@ git push origin vX.Y.Z
 
 ## Step 6: Watch the Pipeline
 
-Pushing the tag triggers `.github/workflows/release.yml`, which builds the
-distribution, publishes it to PyPI via Trusted Publishing, and creates the
-GitHub Release.
+Pushing the tag triggers `.github/workflows/release.yml`, which runs the
+lint and test gate, builds the distribution, publishes it to PyPI via
+Trusted Publishing, and creates the GitHub Release.
 
 ```bash
 gh run watch
