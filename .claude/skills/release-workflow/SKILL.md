@@ -28,7 +28,7 @@ gh run list --branch main -L 1
 Refuse to start unless all of the following hold:
 
 - The current branch is `main` and the working tree is clean.
-- `just check` passes locally.
+- `just verify` passes locally.
 - The latest CI run on `main` is green (see dynamic context above).
 
 If any fails, fix it first — a release tag on a red commit publishes a broken
@@ -65,7 +65,7 @@ Then:
    section behind.
 3. Run `uv lock` — the project's own version is recorded in `uv.lock`, so a
    version bump without it fails CI's `uv sync --locked`.
-4. Run `just check`.
+4. Run `just verify`.
 
 Commit as `chore(release): vX.Y.Z` (include `uv.lock` in the same commit).
 

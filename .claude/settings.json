@@ -6,11 +6,14 @@
       "Bash(just lint:*)",
       "Bash(just test:*)",
       "Bash(just check:*)",
+      "Bash(just verify:*)",
       "Bash(just build:*)",
       "Bash(just smoke:*)",
       "Bash(just install:*)",
       "Bash(just setup:*)",
       "Bash(just docs:*)",
+      "Bash(just docs-check:*)",
+      "Bash(just worktree-clean:*)",
       "Bash(just clean:*)",
       "Bash(uv run pytest:*)",
       "Bash(uv run ruff:*)",
@@ -42,7 +45,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --script \"$(git rev-parse --show-toplevel)/.agents/hooks/guard.py\"",
+            "command": "uv run --script \"${CLAUDE_PROJECT_DIR}/.agents/hooks/guard.py\"",
             "timeout": 30
           }
         ]
@@ -54,7 +57,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --script \"$(git rev-parse --show-toplevel)/.agents/hooks/format.py\"",
+            "command": "uv run --script \"${CLAUDE_PROJECT_DIR}/.agents/hooks/format.py\"",
             "timeout": 60
           }
         ]
@@ -65,7 +68,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --script \"$(git rev-parse --show-toplevel)/.agents/hooks/stop_check.py\"",
+            "command": "uv run --script \"${CLAUDE_PROJECT_DIR}/.agents/hooks/stop_check.py\"",
             "timeout": 180
           }
         ]

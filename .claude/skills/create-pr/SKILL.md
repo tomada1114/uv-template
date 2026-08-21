@@ -2,7 +2,7 @@
 name: create-pr
 description: >
   Create or update pull requests following project conventions. Runs pre-checks
-  (just check), generates Conventional Commits title, fills PR template with
+  (just verify), generates Conventional Commits title, fills PR template with
   summary/test plan/checklist, and verifies all checklist items pass before
   creating via gh CLI. Use PROACTIVELY when: PR creation, pull request,
   create PR, open PR, submit PR, PR update, review request.
@@ -35,30 +35,37 @@ gh pr list --head "$(git rev-parse --abbrev-ref HEAD)" --json number,title,url
 ```
 
 - If uncommitted changes exist, **abort** and prompt to commit first
-  (running `just check` on uncommitted code can cause inconsistencies)
+  (running `just verify` on uncommitted code can cause inconsistencies)
 - If a PR already exists, switch to **update mode** (`gh pr edit`) instead of creating a new one
 - If on `main` branch, **abort** — PRs must come from feature branches
 
 ## Step 2: Quality Gate
 
-Run the full quality check suite. This is the prerequisite for PR creation.
+Apply formatting, then run the non-mutating verification gate that is the
+prerequisite for PR creation.
 
 ```bash
-just check
+just fmt
 ```
 
-`just check` runs `fmt -> lint -> test` sequentially.
-**If any step fails, abort PR creation** and report the failure.
+`fmt` can modify tracked files. If it produced changes, commit them (e.g.
+`style: apply formatting`) before proceeding — otherwise the pushed branch
+will not match the verified state.
 
-The `fmt` phase can modify tracked files. After `just check` succeeds, run
-`git status --short` again — if formatting produced changes, commit them
-(e.g. `style: apply formatting`) before proceeding, otherwise the pushed
-branch will not match the verified state.
+```bash
+just verify
+```
+
+`just verify` runs `lint -> docs-check -> smoke -> test` without mutating the
+tree, so it proves the *committed* tree is green.
+**If any step fails, abort PR creation** and report the failure.
 
 On success, the following checklist items are verified:
 - Tests pass (`just test`)
 - Type checks pass (`just lint`)
-- Code is formatted (`just fmt`)
+- Code is formatted (`just fmt`, already committed above)
+- Docs build strictly (`just docs-check`)
+- The wheel installs cleanly (`just smoke`)
 
 ## Step 3: Additional Verification
 
@@ -117,7 +124,7 @@ Fill each item based on verification results from Steps 2-3:
 
 | Item | Criteria |
 |------|----------|
-| `just check` passes | Verified in Step 2 |
+| `just verify` passes | Verified in Step 2 |
 | Docs updated | Required only when the public API changed. No change = checked |
 | Breaking changes called out | None, or described in the Summary = checked |
 
