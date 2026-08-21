@@ -19,7 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its own scaffolding deleted unless `--keep-bootstrap` is passed.
   `--github-user` is now required, since omitting it shipped a dead
   security-report URL in `.github/ISSUE_TEMPLATE/config.yml`
-- Python 3.14 support in the CI test matrix and trove classifiers
+- `just verify` — a non-mutating `lint -> docs-check -> smoke -> test` gate
+  for PRs and completion claims, distinct from `just check` (which mutates
+  the tree via `fmt` first and never proves the committed tree is green)
+- `just docs-check`, `just test-durations`, and `just worktree-clean`
+  recipes (the last removes `.claude/worktrees/*` whose branch already has
+  a merged PR)
+- A sharded CI test job (`pytest-split` + `pytest-xdist`, 4 shards) with a
+  `coverage` job that downloads and combines the shards' data and enforces
+  `--cov-fail-under=80` once, replacing the single-process test run
 - `zizmor` security lint for GitHub Actions workflows, wired into both CI
   and pre-commit
 - PR auto-labeling by Conventional Commit type, so the release changelog
@@ -131,6 +139,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `just fmt` now runs `ruff check --fix` before `ruff format` (ruff's
   recommended order, matching the post-edit hook), so lint autofixes can
   no longer leave formatting drift behind
+- Python baseline moved to 3.14 across the whole toolchain
+  (`requires-python`, ruff `target-version`, mypy `python_version`,
+  `.python-version`, the devcontainer image, and every CI workflow),
+  replacing the previous 3.12 floor and the 3.12/3.13/3.14 CI test matrix
+- `AGENTS.md` gained a `## Git Workflow` section (every change goes through
+  a branch and a PR, matching the `no-commit-to-branch` hook) and a short
+  `## Sources of Truth` table; the mocking guidance now allows asserting a
+  call count when the call itself is the contract (retry/rate-limit
+  behavior, a skipped step, proving no network call happened); the
+  300-line/40-line design rule is now a review trigger, not an absolute limit
+- The PR template's first checklist item is now `just verify` instead of
+  `just check`, matching the non-mutating gate; `create-pr` and
+  `release-workflow` were updated to match
 
 ### Fixed
 
@@ -151,5 +172,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `create-pr` and `smart-commit` skills use the backtick form
   (`` !`cmd` ``) for dynamic context; the previous bare `!cmd` lines were
   literal text, so both skills ran with no injected context at all
+- `.claude/settings.json` now resolves its hook scripts via
+  `${CLAUDE_PROJECT_DIR}` instead of `$(git rev-parse --show-toplevel)`,
+  which broke every Bash/Write call once a session's shell `cd`'d into a
+  second working-directory repository lacking `.agents/hooks/`
 
 [Unreleased]: https://github.com/your-username/my-package/commits/main
