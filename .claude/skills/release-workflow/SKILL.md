@@ -5,6 +5,8 @@ description: >
   release pipeline through to PyPI. Use PROACTIVELY when: release, cut a
   release, tag a version, bump version, publish to PyPI, ship a version.
 allowed-tools: Bash(git status:*), Bash(git log:*), Bash(gh run list:*)
+metadata:
+  platforms: claude-code, codex
 ---
 
 # Release Workflow
@@ -13,9 +15,13 @@ All commit messages, PR titles, and release notes MUST be written in English.
 
 ## Dynamic Context
 
-- Working tree status: !`git status --short`
-- Recent commits: !`git log --oneline -10`
-- Latest main CI run: !`gh run list --branch main -L 1`
+Before Step 1, run these commands and use their output as the dynamic context:
+
+```bash
+git status --short
+git log --oneline -10
+gh run list --branch main -L 1
+```
 
 ## Step 1: Preflight
 
@@ -45,7 +51,7 @@ jump to `1.0.0` without the user explicitly asking for it.
 ## Step 3: Prepare the Release Branch
 
 Never commit directly on `main` (`no-commit-to-branch` blocks it, and
-`--no-verify` is blocked by `.claude/hooks/guard.py`).
+`--no-verify` is blocked by `.agents/hooks/guard.py`).
 
 ```bash
 git checkout -b chore/release-vX.Y.Z

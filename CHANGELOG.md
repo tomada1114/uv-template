@@ -37,14 +37,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.github/ISSUE_TEMPLATE/config.yml` disabling blank issues and linking
   security reports to GitHub Security Advisories
 - Dependabot cooldown and the `tool.uv.exclude-newer` supply-chain cutoff,
-  documented in `.claude/rules/pyproject.md` together with the manual
-  Python dependency update procedure
+  documented in the `pyproject.toml` convention in `AGENTS.md` together with
+  the manual Python dependency update procedure
 - `AGENTS.md` as the canonical, tool-agnostic agent guide (previously a
   symlink to `CLAUDE.md`, which breaks on Windows checkouts)
-- `.claude/hooks/guard.py` PreToolUse guard blocking writes to
+- `.agents/hooks/guard.py` PreToolUse guard blocking writes to
   `uv.lock`/`.env*`/`secrets/**` (via Edit/Write or shell commands),
   `git commit --no-verify`, and plain force-pushes
-- `.claude/hooks/stop_check.py` Stop-hook gate running ruff (lint + format
+- `.agents/hooks/stop_check.py` Stop-hook gate running ruff (lint + format
   check) and mypy before an agent turn ends when Python files changed
 - Committed Claude Code permission allowlist for local development
   commands — commit/push/PR creation stay behind approval
@@ -79,11 +79,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `uv add`, and read-only `git`/`gh` inspection commands, and every entry
   is normalized to the `:*` form. Commit, push, and PR creation still
   require approval
-- `.claude/rules/python.md`'s Performance section is now a two-line
-  "profile first" rule; the previous micro-optimization list drove
+- The Python convention in `AGENTS.md` keeps the Performance section to a
+  two-line "profile first" rule; the previous micro-optimization list drove
   over-engineering in libraries far too small to need it. The base-exception
   rule is conditional on the package raising more than one domain error
-- `.claude/rules/testing.md` is reduced to a short essentials block, in
+- `tests/AGENTS.md` is reduced to a short essentials block, in
   place of a 6-category mandatory edge-case matrix that no small library
   can satisfy honestly
 - `SECURITY.md` states best-effort response instead of a 48-hour /
@@ -121,13 +121,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unified mypy targets (`src scripts tests`) across justfile, CI,
   release, and pre-commit
 - Expanded ruff rule set (`D`, `PT`, `N`, `TRY`, `EM`, `DTZ`, `RSE`,
-  `PGH`) to match `.claude/rules/python.md`; renamed `TCH` -> `TC`
+  `PGH`) to match the Python convention in `AGENTS.md`; renamed `TCH` -> `TC`
 - The post-edit format hook now formats only the edited Python file and
   surfaces failures to the agent, replacing the repo-wide ruff run that
   suppressed all errors
 - `CLAUDE.md` is now a thin `@AGENTS.md` import plus Claude Code
-  specifics; `.claude/rules/python.md` no longer restates rules ruff
-  already enforces mechanically
+  specifics; the Python convention in `AGENTS.md` no longer restates rules
+  ruff already enforces mechanically
 - `just fmt` now runs `ruff check --fix` before `ruff format` (ruff's
   recommended order, matching the post-edit hook), so lint autofixes can
   no longer leave formatting drift behind
@@ -140,13 +140,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   justfile/CI/pre-commit
 - The `create-pr` skill re-checks the working tree after `just check` so
   formatting changes cannot be left uncommitted behind a green checklist
-- `.claude/hooks/stop_check.py` now filters its mypy paths by existence, so
+- `.agents/hooks/stop_check.py` now filters its mypy paths by existence, so
   a spawned repo without `scripts/` is no longer blocked from ever ending a
   turn by mypy's "Cannot read file" error
-- `.claude/hooks/format.py` resolves the project root from
-  `CLAUDE_PROJECT_DIR` instead of the payload `cwd`, which silently skipped
-  formatting when the session ran in a subdirectory
-- `.claude/hooks/guard.py` now blocks `gh pr merge --admin`, previously
+- `.agents/hooks/format.py` resolves the project root from the hook script
+  location instead of the payload `cwd`, which silently skipped formatting
+  when the session ran in a subdirectory
+- `.agents/hooks/guard.py` now blocks `gh pr merge --admin`, previously
   forbidden only in prose
 - The `create-pr` and `smart-commit` skills use the backtick form
   (`` !`cmd` ``) for dynamic context; the previous bare `!cmd` lines were

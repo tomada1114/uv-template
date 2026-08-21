@@ -1,8 +1,3 @@
----
-paths:
-  - "tests/**/*.py"
----
-
 # Testing Rules
 
 ## Structure and Organization
@@ -63,7 +58,7 @@ paths:
 
 ## Coverage Philosophy
 
-- Coverage is a *floor*, not a *ceiling*; keep the configured threshold and never lower it
+- Coverage is a *floor*, not a ceiling; keep the configured threshold and never lower it
 - Branch coverage matters more than line coverage — test both sides of conditionals
 - Missing coverage should prompt "is this code reachable?" — if not, delete it
 - Don't write trivial tests to hit the number; cover edge cases and error paths instead

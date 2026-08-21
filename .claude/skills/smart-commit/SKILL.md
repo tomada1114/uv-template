@@ -7,6 +7,8 @@ description: >
   commit, git commit, save changes, commit and push, stage changes,
   push my changes, commit this work, ship it.
 allowed-tools: Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git rev-parse:*)
+metadata:
+  platforms: claude-code, codex
 ---
 
 # Smart Commit Workflow
@@ -15,9 +17,13 @@ All commit messages must be written in English.
 
 ## Dynamic Context
 
-- Current branch: !`git rev-parse --abbrev-ref HEAD`
-- Working tree status: !`git status --short`
-- Recent commit style: !`git log --oneline -5`
+Before Step 1, run these commands and use their output as the dynamic context:
+
+```bash
+git rev-parse --abbrev-ref HEAD
+git status --short
+git log --oneline -5
+```
 
 ## Branch Guard
 
@@ -65,7 +71,7 @@ happened through the commit history.
 
 - **Documentation** (`.md`, `docs/`): prefix `docs:`
 
-- **Configuration** (`.json`, `.yml`, `.claude/`): prefix `chore:`
+- **Agent configuration** (`.agents/`, `.claude/`, `.codex/`): prefix `chore:`
 
 - **Dependencies** (`pyproject.toml` dependency changes): prefix `chore:`
   - Always include `uv.lock` in the same commit
@@ -116,7 +122,7 @@ feat(core): add JSON export support
 fix: handle empty input without raising TypeError
 test: add parametrized tests for edge cases
 docs: update API reference for new export function
-chore: configure .claude/rules for path-scoped linting
+chore: align agent configuration
 ```
 
 Stage specific files by name — avoid `git add .` or `git add -A` which can
