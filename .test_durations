@@ -1,0 +1,18 @@
+{
+    "tests/test_bootstrap.py::test_bootstrap_deletes_its_own_scaffolding": 0.11305045802146196,
+    "tests/test_bootstrap.py::test_bootstrap_keeps_its_scaffolding_when_asked": 0.1564170839264989,
+    "tests/test_bootstrap.py::test_bootstrap_moves_exclude_newer_to_two_weeks_ago": 0.1260903759393841,
+    "tests/test_bootstrap.py::test_bootstrap_rejects_invalid_package_name": 0.06421820796094835,
+    "tests/test_bootstrap.py::test_bootstrap_renames_the_devcontainer": 0.11757491691969335,
+    "tests/test_bootstrap.py::test_bootstrap_replaces_all_placeholders": 0.15981404180638492,
+    "tests/test_bootstrap.py::test_bootstrap_requires_a_github_user": 0.08705829223617911,
+    "tests/test_bootstrap.py::test_bootstrap_resets_the_changelog": 0.1128753749653697,
+    "tests/test_bootstrap.py::test_bootstrap_writes_the_current_year_into_the_license": 0.11878879088908434,
+    "tests/test_bootstrap.py::test_bootstrap_writes_the_description_everywhere": 0.11594879091717303,
+    "tests/test_core.py::TestAdd::test_negative_numbers": 0.0003815409727394581,
+    "tests/test_core.py::TestAdd::test_positive_numbers": 0.00046241702511906624,
+    "tests/test_core.py::TestAdd::test_zero": 0.00040595815517008305,
+    "tests/test_core.py::TestPackageMetadata::test_public_exports": 0.0004176241345703602,
+    "tests/test_core.py::TestPackageMetadata::test_version_falls_back_when_package_not_installed": 0.001590874744579196,
+    "tests/test_core.py::TestPackageMetadata::test_version_matches_installed_metadata": 0.0017195837572216988
+}

@@ -73,7 +73,6 @@ jobs:
           --durations-path .test_durations
           -n auto
           --cov
-          --cov-branch
           --cov-report=
 
       - name: Upload shard coverage
