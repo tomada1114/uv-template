@@ -126,7 +126,7 @@ worktree-clean *ARGS:
         echo "removed: $wt [$br] (${size}MB)"
       fi
       removed=$((removed + 1)); freed=$((freed + size))
-    done < <(git worktree list --porcelain | awk '/^worktree /{print $2}')
+    done < <(git worktree list --porcelain | sed -n 's|^worktree ||p')
 
     if [ "$dry" -eq 0 ]; then git worktree prune; fi
     echo "worktree-clean: ${removed} removed, ${kept} kept, ~${freed}MB"
