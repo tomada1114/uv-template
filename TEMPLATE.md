@@ -33,7 +33,8 @@ it from the spawned repo, so nothing here ships to your library's users.
    `--keep-bootstrap` to keep them.
 3. Update `pyproject.toml` metadata (keywords, URLs) beyond what the
    script covers
-4. Update `README.md`, `SECURITY.md`, and `CLAUDE.md`
+4. Update `README.md`, `SECURITY.md`, and `AGENTS.md`; update `CLAUDE.md` only
+   when the new project has Claude-specific settings or workflow notes
 5. Replace the placeholder implementation and keep `src/<your_package>/__init__.py`,
    `docs/reference.md`, and the usage examples in sync with your public API
 6. **Register PyPI Trusted Publishing** for the new repository before the
@@ -63,10 +64,11 @@ rg -n "your-username|my-package|my_package|uv-template|Your Name|you@example" .
 ### Working in the new repository
 
 - **Never commit directly on `main`.** The pre-commit `no-commit-to-branch`
-  hook blocks it, and `.claude/hooks/guard.py` blocks `--no-verify`, so the
+  hook blocks it, and `.agents/hooks/guard.py` blocks `--no-verify`, so the
   way through is a feature branch and a PR — not a bypass flag.
 - Python dependencies are updated manually; see
-  `.claude/rules/pyproject.md` for the `exclude-newer` procedure.
+  the `pyproject.toml` convention in `AGENTS.md` for the `exclude-newer`
+  procedure.
 
 ## Design Philosophy
 
@@ -98,18 +100,20 @@ Just has cleaner syntax (no mandatory tabs), better cross-platform support, and
 more readable recipe definitions. It is a task runner, not a build system —
 which is exactly what a Python project needs.
 
-### Why AGENTS.md and .claude/?
+### Why AGENTS.md and the agent configuration?
 
 AI-assisted development is the norm, not the exception. `AGENTS.md` gives any
 coding agent (Claude Code, Codex, Cursor, Gemini CLI, ...) the context it
 needs to match your project's standards; `CLAUDE.md` imports it and adds
-Claude Code specifics. The committed `.claude/` directory goes further than
-prose: path-scoped rules load conventions only when relevant files are
-touched, hooks deterministically auto-format edited files, block edits to
-`uv.lock`/`.env*`/`secrets/**` as well as `--no-verify`, force-push, and
-`gh pr merge --admin` commands, and run ruff + mypy before the agent ends
-a turn, while a reviewed permission allowlist covers local development
-commands — commit, push, and PR creation always stay behind human approval.
+Claude Code specifics. The committed `.claude/` directory stores the canonical
+skills and host-specific settings; `.agents/hooks/` contains the shared hooks,
+`.agents/skills/` contains generated Codex symlinks, and `.codex/` contains
+Codex settings and hook wiring. The shared hooks deterministically auto-format
+edited files, block edits to `uv.lock`/`.env*`/`secrets/**` as well as
+`--no-verify`, force-push, and `gh pr merge --admin` commands, and run ruff +
+mypy before the agent ends a turn. A reviewed permission allowlist covers local
+development commands — commit, push, and PR creation always stay behind human
+approval.
 
 ### Why 80% coverage minimum?
 

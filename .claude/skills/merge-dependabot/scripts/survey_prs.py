@@ -4,7 +4,7 @@
 """Survey open Dependabot PRs and emit a triage table.
 
 Usage:
-    uv run --script .claude/skills/merge-dependabot/scripts/survey_prs.py [--json]
+    uv run --script "$(git rev-parse --show-toplevel)/.agents/skills/merge-dependabot/scripts/survey_prs.py" [--json]
 
 Requires the `gh` CLI, authenticated against the current repository.
 Read-only: this script never mutates PR or branch state.

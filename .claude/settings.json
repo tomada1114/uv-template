@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --script \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard.py\"",
+            "command": "uv run --script \"$(git rev-parse --show-toplevel)/.agents/hooks/guard.py\"",
             "timeout": 30
           }
         ]
@@ -54,7 +54,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --script \"${CLAUDE_PROJECT_DIR}/.claude/hooks/format.py\"",
+            "command": "uv run --script \"$(git rev-parse --show-toplevel)/.agents/hooks/format.py\"",
             "timeout": 60
           }
         ]
@@ -65,7 +65,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --script \"${CLAUDE_PROJECT_DIR}/.claude/hooks/stop_check.py\"",
+            "command": "uv run --script \"$(git rev-parse --show-toplevel)/.agents/hooks/stop_check.py\"",
             "timeout": 180
           }
         ]

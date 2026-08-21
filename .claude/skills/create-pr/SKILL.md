@@ -7,6 +7,8 @@ description: >
   creating via gh CLI. Use PROACTIVELY when: PR creation, pull request,
   create PR, open PR, submit PR, PR update, review request.
 allowed-tools: Bash(cat:*), Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git rev-parse:*)
+metadata:
+  platforms: claude-code, codex
 ---
 
 # PR Creation Workflow
@@ -15,9 +17,13 @@ All PR titles, bodies, and commit messages MUST be written in English.
 
 ## Dynamic Context
 
-- PR template: !`cat .github/PULL_REQUEST_TEMPLATE.md`
-- Commits in this PR: !`git log main..HEAD --oneline`
-- Changed files: !`git diff --stat main..HEAD`
+Before Step 1, run these commands and use their output as the dynamic context:
+
+```bash
+cat .github/PULL_REQUEST_TEMPLATE.md
+git log main..HEAD --oneline
+git diff --stat main..HEAD
+```
 
 ## Step 1: Pre-flight Checks
 
@@ -86,7 +92,7 @@ Generate a title in Conventional Commits format:
 **Examples:**
 - `feat: add JSON export support`
 - `fix(core): handle empty input gracefully`
-- `chore: add .claude/rules and post-edit hook`
+- `chore: align agent configuration`
 
 ## Step 5: Generate PR Body
 

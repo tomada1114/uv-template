@@ -7,6 +7,8 @@ description: >
   (regenerating uv.lock) and closes the superseded originals once CI is green.
   Use PROACTIVELY when: dependabot, dependency PRs, bump PRs, dependency update,
   merge dependabot, batch dependency PRs, 依存関係の更新, 依存PRのマージ.
+metadata:
+  platforms: claude-code, codex
 ---
 
 # Dependabot PR Integration
@@ -27,7 +29,7 @@ All branch names, commit messages, PR titles, and PR bodies MUST be in English.
 ## Step 1: Survey
 
 ```bash
-uv run --script .claude/skills/merge-dependabot/scripts/survey_prs.py
+uv run --script "$(git rev-parse --show-toplevel)/.agents/skills/merge-dependabot/scripts/survey_prs.py"
 ```
 
 The script is read-only. It lists every open bot PR with its ecosystem, semver
@@ -126,7 +128,7 @@ Resolve conflicts by taking **the higher version** of each dependency unless the
 release notes say otherwise.
 
 If `pyproject.toml` changed, regenerate the lockfile — never hand-edit
-`uv.lock` (the `guard.py` hook blocks that, correctly):
+`uv.lock` (the shared `.agents/hooks/guard.py` hook blocks that, correctly):
 
 ```bash
 uv lock

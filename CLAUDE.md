@@ -1,24 +1,19 @@
+<!-- agents-md-sync:begin -->
 @AGENTS.md
+<!-- agents-md-sync:end -->
 
 # Claude Code Specifics
 
 Shared, tool-agnostic project instructions live in `AGENTS.md` (imported
 above). This repo additionally ships Claude Code configuration:
 
-- `.claude/rules/` — path-scoped conventions (Python, tests, docs,
-  pyproject.toml) that load automatically when matching files are read
-- `.claude/hooks/format.py` — runs `ruff check --fix` and `ruff format` on
-  every edited `*.py` file (PostToolUse), so do not re-run formatters or
-  lint autofixes after each edit
-- `.claude/hooks/guard.py` — blocks writes to `uv.lock`, `.env*`, and
-  `secrets/**` (via Edit/Write or shell commands), `git commit --no-verify`,
-  plain force-pushes, and `gh pr merge --admin` (PreToolUse)
-- `.claude/hooks/stop_check.py` — runs ruff (lint + format check) and mypy
-  before a turn ends when `*.py` files or `pyproject.toml` changed (Stop)
-- `.claude/skills/` — `create-pr`, `smart-commit`, `merge-dependabot`, and
-  `release-workflow` workflow skills
-- `.claude/settings.json` — shared permission allowlist for the local
-  `just` recipes, `uv` commands, and read-only `git`/`gh` inspection,
-  every entry in the `:*` form; commit, push, and PR creation still
-  require approval. Personal preferences (model, output style, extra
-  permissions) belong in `.claude/settings.local.json`, never here
+- `.claude/settings.json` — the host-specific permission allowlist and wiring
+  for the shared hooks. It allows the local `just` recipes, `uv` commands,
+  and read-only `git`/`gh` inspection in the `:*` form; commit, push, and PR
+  creation still require approval. Personal settings belong in
+  `.claude/settings.local.json`, never here
+- `.claude/skills/` — the canonical source for `create-pr`, `smart-commit`,
+  `merge-dependabot`, and `release-workflow`
+- `.agents/skills/` — generated symlinks for the same skills; edit the
+  corresponding `.claude/skills/` directory instead of the symlink
+- `.agents/hooks/` — shared hook implementations described in `AGENTS.md`
