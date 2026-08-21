@@ -9,21 +9,29 @@ comprehensive type checking and linting.
 ## Quick Reference
 
 ```bash
-just install   # Install dependencies and git hooks when .git/ is present
-just setup     # Alias for just install (first-time setup)
-just fmt       # Format code (ruff check --fix + ruff format)
-just lint      # Lint (ruff check) + type check (mypy)
-just test      # Run tests with coverage
-just smoke     # Build and verify the wheel in a temp virtual environment
-just check     # Run all checks: fmt → lint → test
-just docs      # Serve docs locally
-just build     # Build distribution packages
-just clean     # Remove build artifacts and caches
+just install         # Install dependencies and git hooks when .git/ is present
+just setup           # Alias for just install (first-time setup)
+just fmt             # Format code (ruff check --fix + ruff format)
+just lint            # Lint (ruff check) + type check (mypy)
+just test            # Run tests in parallel with coverage
+just test-durations  # Regenerate the pytest-split duration file used by CI shards
+just smoke           # Build and verify the wheel in a temp virtual environment
+just check           # Mutating dev check: fmt → lint → test
+just verify          # Non-mutating PR/completion gate: lint → docs-check → smoke → test
+just docs            # Serve docs locally
+just docs-check      # Build docs and fail on warnings
+just build           # Build distribution packages
+just worktree-clean  # Remove agent worktrees under .claude/worktrees with a merged PR
+just clean           # Remove build artifacts and caches
 ```
 
 Without Just: replace `just <cmd>` with the corresponding `uv run` commands
 in the `justfile`. Run a single test with
 `uv run pytest tests/test_<module>.py::test_<name>`.
+
+`just check` mutates the tree (it runs `fmt` first), so it never proves the
+*committed* tree is green. `just verify` does not mutate anything — it is the
+gate for a PR or a completion claim.
 
 ## Architecture
 
@@ -39,14 +47,30 @@ src/my_package/
 - Separate concerns: one module per logical unit
 - Update `docs/reference.md` and README examples whenever you change the public API
 
+## Sources of Truth
+
+| Concern | Canonical source |
+|---|---|
+| Tooling and quality commands | `justfile`, `pyproject.toml`, CI workflows |
+| Current public API shape | `src/my_package/__init__.py` `__all__` and public signatures |
+| Current execution status | Git, fresh test output, and CI — never prose or test counts in a prompt |
+
 ## Review Checklist
 
 Before submitting a PR:
 
-1. `just check` passes (format, lint, type check, tests)
+1. `just verify` passes (lint, strict docs build, wheel smoke, tests)
 2. New public APIs have type annotations and docstrings
 3. Tests cover the new functionality
 4. No unnecessary dependencies added
+
+## Git Workflow
+
+- Every change goes through a branch and a pull request; the
+  `no-commit-to-branch --branch main` pre-commit hook enforces this.
+- Keep the implementation, its regression test, and any required doc update in
+  the same logical commit.
+- Run `just verify` before a completion claim, on any code change.
 
 ## Conventions: tests/**/*.py
 
@@ -55,7 +79,7 @@ Before submitting a PR:
 - Verify exception messages with `pytest.raises(..., match=r"...")`; also test cleanup and recovery after failures.
 - Consider empty, boundary, type, collection, concurrent, and state-transition cases; use parametrization with readable ids for related inputs.
 - Prefer narrow factory fixtures, `tmp_path` for filesystem work, `monkeypatch` for environment variables, and `yield` teardown for resources.
-- Mock only I/O or other external boundaries; prefer fakes and assert outcomes rather than call counts.
+- Mock only I/O or other external boundaries; prefer fakes and assert outcomes rather than call counts, except when the call itself is the contract (retry/rate-limit behavior, a skipped step, proving no network call happened).
 - Keep tests isolated and deterministic: no shared mutable state, ordering dependencies, `@pytest.mark.skip`, TODO tests, or `time.sleep()`.
 - Maintain the 80% coverage floor, prioritize branch and error-path coverage, and fix flaky tests instead of suppressing them.
 
@@ -110,8 +134,8 @@ even if no dependency changed, so the cutoff does not drift too far behind:
 
 ### Design
 
-- Keep modules under 300 lines; one logical concern per module
-- Keep functions under 40 lines; prefer 3 or fewer parameters (group related params with dataclass or TypedDict)
+- Treat 300-line modules and 40-line functions as review triggers, not absolute correctness rules; split only when doing so improves a real responsibility boundary. One logical concern per module.
+- Prefer 3 or fewer parameters (group related params with dataclass or TypedDict)
 - Google-style docstrings (Args/Returns/Raises) on all public functions; document *why*, not what the type signature already says; don't document obvious code
 
 ### Error Handling
@@ -168,5 +192,15 @@ and `.codex/hooks.json`.
 - `format.py` (PostToolUse) runs ruff fixes and formatting on edited Python files.
 - `stop_check.py` (Stop) runs ruff and mypy when Python files or `pyproject.toml` changed.
 
+`.claude/settings.json` resolves the hook scripts via `${CLAUDE_PROJECT_DIR}`,
+not `$(git rev-parse --show-toplevel)`: the latter resolves against the
+shell's current working directory, which is wrong the moment a session adds a
+second repository as a working directory and the shell `cd`s into it — every
+Bash/Write call then fails looking for `.agents/hooks/` in the wrong repo.
+`.codex/hooks.json` keeps `$(git rev-parse --show-toplevel)` because Codex
+does not define `CLAUDE_PROJECT_DIR`; do not "unify" the two files.
+
 Start sessions from the repository root so project-level hook configuration is
 loaded. Review and trust each hook definition before relying on it.
+Agent worktrees under `.claude/worktrees/` (if used) accumulate over time;
+`just worktree-clean` removes the ones whose branch already has a merged PR.

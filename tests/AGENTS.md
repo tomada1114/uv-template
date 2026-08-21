@@ -46,7 +46,7 @@
 
 - Mock at boundaries only: I/O, network, clock, external services — never the unit under test
 - Prefer fakes (in-memory implementations) over mocks for repositories and stores
-- Assert on behavior and outputs, not on how many times a mock was called
+- Assert on behavior and outputs, not on how many times a mock was called — except when the call itself is the contract (retry/rate-limit behavior, a skipped step, proving no network call happened)
 - Needing more than two mocks in one test usually means the code under test has too many dependencies
 
 ## Test Independence and Reliability

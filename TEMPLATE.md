@@ -66,9 +66,16 @@ rg -n "your-username|my-package|my_package|uv-template|Your Name|you@example" .
 - **Never commit directly on `main`.** The pre-commit `no-commit-to-branch`
   hook blocks it, and `.agents/hooks/guard.py` blocks `--no-verify`, so the
   way through is a feature branch and a PR — not a bypass flag.
+- The toolchain baseline is Python 3.14 (`requires-python`, ruff
+  `target-version`, mypy `python_version`, `.python-version`, the
+  devcontainer image, and every CI workflow). Lower it everywhere at once if
+  the new project needs to support older interpreters.
 - Python dependencies are updated manually; see
   the `pyproject.toml` convention in `AGENTS.md` for the `exclude-newer`
   procedure.
+- `just verify` (lint, strict docs build, wheel smoke, tests) is the
+  non-mutating gate for a PR or a completion claim; `just check` mutates the
+  tree first (`fmt`) and is for local iteration only.
 
 ## Design Philosophy
 

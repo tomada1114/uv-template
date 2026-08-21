@@ -9,7 +9,7 @@
 
 ## Checklist
 
-- [ ] `just check` passes
+- [ ] Full local verification passes on the committed tree (`just verify`)
 - [ ] Docs updated, if the public API changed
 - [ ] `CHANGELOG.md` updated, if this is a user-facing change
 - [ ] Breaking changes called out in the Summary

@@ -7,7 +7,7 @@ name = "my-package"
 version = "0.1.0"
 description = "A short description of the project."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Your Name", email = "you@example.com" }]
@@ -16,8 +16,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Typing :: Typed",
 ]
@@ -30,7 +28,15 @@ Issues = "https://github.com/your-username/my-package/issues"
 Changelog = "https://github.com/your-username/my-package/blob/main/CHANGELOG.md"
 
 [dependency-groups]
-dev = ["mypy>=2.3.0", "pre-commit>=4.6.0", "pytest>=8.0", "pytest-cov>=7.1.0", "ruff>=0.15.22"]
+dev = [
+    "mypy>=2.3.0",
+    "pre-commit>=4.6.0",
+    "pytest>=8.0",
+    "pytest-cov>=7.1.0",
+    "pytest-split>=0.11",
+    "pytest-xdist>=3.6",
+    "ruff>=0.15.22",
+]
 docs = ["mkdocs-material>=9.7.6", "mkdocstrings[python]>=1.0.6"]
 
 # --------------------------------------------------------------------------- #
@@ -52,9 +58,18 @@ packages = ["src/my_package"]
 # --------------------------------------------------------------------------- #
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py314"
 line-length = 88
 src = ["src", "tests", "scripts"]
+
+# Agent hook scripts declare their own `requires-python = ">=3.12"` (PEP 723)
+# and run via `uv run --script`, which may resolve an older interpreter than
+# the project's own 3.14 floor. Pin them below the project target-version so
+# neither the formatter nor version-specific lint rules introduce syntax
+# (e.g. PEP 758 unparenthesized `except`) that would be a SyntaxError there.
+[tool.ruff.per-file-target-version]
+".agents/hooks/*.py" = "py312"
+".claude/skills/merge-dependabot/scripts/*.py" = "py312"
 
 [tool.ruff.lint]
 select = [
@@ -142,7 +157,7 @@ indent-style = "space"
 # --------------------------------------------------------------------------- #
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.14"
 strict = true
 warn_return_any = true
 warn_unused_configs = true

@@ -7,7 +7,7 @@ your development environment and submit changes.
 
 Install these tools:
 
-- [Python 3.12+](https://www.python.org/)
+- [Python 3.14+](https://www.python.org/)
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)
 - [Just](https://just.systems/man/en/installation.html) (optional — you can run
   `uv run` commands directly)
@@ -39,8 +39,11 @@ just test
 # Build and verify the wheel in an isolated temp environment
 just smoke
 
-# Run everything (format → lint → test)
+# Mutating development check (format → lint → test)
 just check
+
+# Non-mutating PR/completion gate (lint + strict docs build + wheel smoke + test)
+just verify
 ```
 
 **Without Just**, run the equivalent commands:
@@ -49,16 +52,18 @@ just check
 uv run ruff check --fix .
 uv run ruff format .
 uv run ruff check .
+uv run ruff format --check .
 uv run mypy src scripts tests
-uv run pytest --cov --cov-report=term-missing:skip-covered --cov-fail-under=80
-uv build && uv run python scripts/smoke_test.py
+uv run pytest -n auto --cov --cov-report=term-missing:skip-covered --cov-fail-under=80
+uv run mkdocs build --strict
+uv build --wheel && uv run python scripts/smoke_test.py
 ```
 
 ## Pull Request Process
 
 1. Fork the repository and create a branch from `main`
 2. Make your changes
-3. Ensure `just check` passes
+3. Apply formatting with `just fmt`, commit the result, then ensure `just verify` passes
 4. Write or update tests for your changes
 5. Open a pull request using the PR template
 

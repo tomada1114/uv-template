@@ -138,11 +138,11 @@ git add uv.lock && git commit -m "deps: regenerate uv.lock"
 Verify locally before pushing:
 
 ```bash
-just check      # fmt + lint + test
-just smoke      # wheel builds and imports
+just fmt      # apply formatting; commit if it changes tracked files
+just verify   # non-mutating gate: lint -> docs-check -> smoke -> test
 ```
 
-If `just check` fails, fix it on the branch if the fix is mechanical (a lint rule
+If `just verify` fails, fix it on the branch if the fix is mechanical (a lint rule
 renamed by a new ruff, a new mypy error). If it needs a judgement call, stop and
 report — do not merge around it.
 
