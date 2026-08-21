@@ -25,7 +25,7 @@ jobs:
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           enable-cache: true
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Install dependencies
         run: uv sync --group dev --locked
@@ -40,12 +40,12 @@ jobs:
         run: uv run mypy src scripts tests
 
   test:
-    name: Test (Python ${{ matrix.python-version }})
+    name: Test (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13", "3.14"]
+        shard: [1, 2, 3, 4]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -55,13 +55,64 @@ jobs:
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           enable-cache: true
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.14"
 
       - name: Install dependencies
         run: uv sync --group dev --locked
 
+      # `just test` isn't used directly, so `-n auto` is specified here as well
+      # as in the justfile; it tracks the runner's actual core count. Coverage
+      # thresholds are only checked once all shards' data has been combined.
       - name: Run tests
-        run: uv run pytest --cov --cov-report=term-missing:skip-covered --cov-fail-under=80
+        env:
+          COVERAGE_FILE: .coverage.${{ matrix.shard }}
+        run: >-
+          uv run pytest
+          --splits 4
+          --group ${{ matrix.shard }}
+          --durations-path .test_durations
+          -n auto
+          --cov
+          --cov-branch
+          --cov-report=
+
+      - name: Upload shard coverage
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-${{ matrix.shard }}
+          path: .coverage*
+          include-hidden-files: true
+          if-no-files-found: error
+
+  coverage:
+    name: Coverage
+    if: ${{ needs.test.result == 'success' }}
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --group dev --locked
+
+      - name: Download shard coverage
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: coverage-*
+          merge-multiple: true
+
+      - name: Combine and validate coverage
+        run: |
+          uv run coverage combine
+          uv run coverage report --fail-under=80
 
   spell-check:
     name: Spell Check
@@ -89,7 +140,7 @@ jobs:
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           enable-cache: true
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Build package
         run: uv build
@@ -109,7 +160,7 @@ jobs:
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           enable-cache: true
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Install dependencies
         run: uv sync --group docs --locked
@@ -129,7 +180,7 @@ jobs:
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           enable-cache: true
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: zizmor
         env:
