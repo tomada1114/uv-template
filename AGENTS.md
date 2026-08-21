@@ -48,6 +48,17 @@ Before submitting a PR:
 3. Tests cover the new functionality
 4. No unnecessary dependencies added
 
+## Conventions: tests/**/*.py
+
+- Mirror the source layout with `tests/test_<module>.py`; use descriptive names such as `test_<what>_<scenario>_<expected_result>`.
+- Test behavior through the public API, using Arrange-Act-Assert and covering both happy and error paths for each public function.
+- Verify exception messages with `pytest.raises(..., match=r"...")`; also test cleanup and recovery after failures.
+- Consider empty, boundary, type, collection, concurrent, and state-transition cases; use parametrization with readable ids for related inputs.
+- Prefer narrow factory fixtures, `tmp_path` for filesystem work, `monkeypatch` for environment variables, and `yield` teardown for resources.
+- Mock only I/O or other external boundaries; prefer fakes and assert outcomes rather than call counts.
+- Keep tests isolated and deterministic: no shared mutable state, ordering dependencies, `@pytest.mark.skip`, TODO tests, or `time.sleep()`.
+- Maintain the 80% coverage floor, prioritize branch and error-path coverage, and fix flaky tests instead of suppressing them.
+
 ## Important Reminders
 
 - All code, docs, commits, and PRs must be written in English
