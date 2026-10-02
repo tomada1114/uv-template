@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "A short description of the project."
 readme = "README.md"
 requires-python = ">=3.14"
+dependencies = []
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Your Name", email = "you@example.com" }]
@@ -21,11 +22,11 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-username/my-package"
-Documentation = "https://your-username.github.io/my-package"
-Repository = "https://github.com/your-username/my-package"
-Issues = "https://github.com/your-username/my-package/issues"
-Changelog = "https://github.com/your-username/my-package/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/your-username/uv-template"
+Documentation = "https://your-username.github.io/uv-template"
+Repository = "https://github.com/your-username/uv-template"
+Issues = "https://github.com/your-username/uv-template/issues"
+Changelog = "https://github.com/your-username/uv-template/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 dev = [
@@ -179,6 +180,7 @@ disallow_untyped_calls = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = [
+    "--import-mode=importlib",
     "--strict-markers",
     "--strict-config",
 ]

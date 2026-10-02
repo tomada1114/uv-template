@@ -6,6 +6,7 @@ import datetime as dt
 import importlib.util
 import shutil
 import subprocess
+import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -44,10 +45,11 @@ def _load_bootstrap_module() -> ModuleType:
 
 
 def _copy_tracked_files(destination: Path) -> None:
-    result = subprocess.run(  # noqa: S603
-        ["git", "-C", str(REPO_ROOT), "ls-files"],  # noqa: S607
+    result = subprocess.run(
+        ["git", "ls-files"],  # noqa: S607
         check=True,
         capture_output=True,
+        cwd=REPO_ROOT,
         text=True,
     )
     for relative_path in result.stdout.splitlines():
@@ -105,6 +107,23 @@ def test_bootstrap_replaces_all_placeholders(template_copy):
             assert placeholder not in text, f"{placeholder!r} still present in {path}"
 
 
+def test_bootstrap_does_not_rewrite_secret_files_in_a_non_git_copy(template_copy):
+    root, bootstrap = template_copy
+    env_file = root / ".env.local"
+    env_example = root / ".env.example"
+    secret_file = root / "secrets" / "credentials.txt"
+    env_file.write_text("my-package\n", encoding="utf-8")
+    env_example.write_text("my-package\n", encoding="utf-8")
+    secret_file.parent.mkdir()
+    secret_file.write_text("my-package\n", encoding="utf-8")
+
+    _bootstrap_into(root, bootstrap)
+
+    assert env_file.read_text(encoding="utf-8") == "my-package\n"
+    assert secret_file.read_text(encoding="utf-8") == "my-package\n"
+    assert env_example.read_text(encoding="utf-8") == "acme-widgets\n"
+
+
 def test_bootstrap_writes_the_description_everywhere(template_copy):
     root, bootstrap = template_copy
 
@@ -113,6 +132,55 @@ def test_bootstrap_writes_the_description_everywhere(template_copy):
     for relative_path in ("pyproject.toml", "mkdocs.yml", "README.md"):
         text = (root / relative_path).read_text(encoding="utf-8")
         assert "Widgets that never jam." in text, relative_path
+
+
+def test_bootstrap_uses_a_separate_github_repository_name(template_copy):
+    root, bootstrap = template_copy
+
+    _bootstrap_into(root, bootstrap, github_repository="widgets-library")
+
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
+    assert "github.com/ada/widgets-library" in readme
+    assert "github.com/ada/widgets-library" in pyproject
+    assert "pypi.org/project/acme-widgets" in readme
+
+
+def test_bootstrap_does_not_rewrite_new_values_as_old_placeholders(template_copy):
+    root, bootstrap = template_copy
+
+    _bootstrap_into(
+        root,
+        bootstrap,
+        package_name="uv-template-lib",
+        github_repository="library",
+    )
+
+    project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    assert project["project"]["name"] == "uv-template-lib"
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    assert "pypi.org/project/uv-template-lib" in readme
+    assert "github.com/ada/library" in readme
+
+
+def test_bootstrap_escapes_metadata_values_for_project_files(template_copy):
+    root, bootstrap = template_copy
+
+    _bootstrap_into(
+        root,
+        bootstrap,
+        author='Ada "The Enchantress" Lovelace',
+        description='Widgets "that" never jam.',
+    )
+
+    project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    assert project["project"]["authors"] == [
+        {"name": 'Ada "The Enchantress" Lovelace', "email": "ada@example.com"}
+    ]
+    assert project["project"]["description"] == 'Widgets "that" never jam.'
+
+    mkdocs = (root / "mkdocs.yml").read_text(encoding="utf-8")
+    assert 'site_description: "Widgets \\"that\\" never jam."' in mkdocs
 
 
 def test_bootstrap_renames_the_devcontainer(template_copy):
@@ -175,6 +243,22 @@ def test_bootstrap_keeps_its_scaffolding_when_asked(template_copy):
         assert (root / relative_path).is_file(), relative_path
 
 
+def test_bootstrap_keeps_python_scaffolding_valid_with_quoted_metadata(template_copy):
+    root, bootstrap = template_copy
+
+    _bootstrap_into(
+        root,
+        bootstrap,
+        author='Ada "The Enchantress" Lovelace',
+        description='Widgets "that" never jam.',
+        keep_bootstrap=True,
+    )
+
+    for relative_path in ("scripts/bootstrap.py", "tests/test_bootstrap.py"):
+        source = (root / relative_path).read_text(encoding="utf-8")
+        compile(source, str(root / relative_path), "exec")
+
+
 def test_bootstrap_requires_a_github_user(template_copy):
     root, bootstrap = template_copy
 
@@ -190,3 +274,74 @@ def test_bootstrap_rejects_invalid_package_name(template_copy):
 
     with pytest.raises(SystemExit):
         _bootstrap_into(root, bootstrap, package_name="1-invalid-name")
+
+
+@pytest.mark.parametrize("package_name", ["class", "acme/widgets", ""])
+def test_bootstrap_rejects_non_importable_package_names(template_copy, package_name):
+    root, bootstrap = template_copy
+
+    with pytest.raises(SystemExit):
+        _bootstrap_into(root, bootstrap, package_name=package_name)
+
+    assert (root / "src" / "my_package").is_dir()
+
+
+def test_bootstrap_rejects_existing_source_destination(template_copy):
+    root, bootstrap = template_copy
+    (root / "src" / "acme_widgets").mkdir()
+
+    with pytest.raises(SystemExit, match=r"already exists"):
+        _bootstrap_into(root, bootstrap)
+
+    assert (root / "src" / "my_package").is_dir()
+
+
+def test_bootstrap_rejects_multiline_metadata_before_writing(template_copy):
+    root, bootstrap = template_copy
+
+    with pytest.raises(SystemExit, match=r"single line"):
+        _bootstrap_into(root, bootstrap, description="first line\nsecond line")
+
+    assert (root / "src" / "my_package").is_dir()
+
+
+def test_bootstrap_rejects_an_empty_explicit_repository_name(template_copy):
+    root, bootstrap = template_copy
+
+    with pytest.raises(SystemExit, match=r"GitHub repository name"):
+        _bootstrap_into(root, bootstrap, github_repository="")
+
+    assert (root / "src" / "my_package").is_dir()
+
+
+def test_git_failure_does_not_trigger_an_unsafe_filesystem_fallback(
+    template_copy, monkeypatch
+):
+    root, bootstrap = template_copy
+    (root / ".git").mkdir()
+
+    def fail_git(*args, **kwargs):
+        return subprocess.CompletedProcess(
+            args=args[0], returncode=128, stdout="", stderr="repository is broken"
+        )
+
+    monkeypatch.setattr(bootstrap.subprocess, "run", fail_git)
+
+    with pytest.raises(SystemExit, match=r"repository is broken"):
+        _bootstrap_into(root, bootstrap)
+
+
+def test_nested_git_directory_does_not_trigger_an_unsafe_filesystem_fallback(
+    template_copy, monkeypatch
+):
+    root, bootstrap = template_copy
+
+    def report_ancestor_git_root(*args, **kwargs):
+        return subprocess.CompletedProcess(
+            args=args[0], returncode=0, stdout=f"{root.parent}\n", stderr=""
+        )
+
+    monkeypatch.setattr(bootstrap.subprocess, "run", report_ancestor_git_root)
+
+    with pytest.raises(SystemExit, match=r"Bootstrap must run at the Git root"):
+        _bootstrap_into(root, bootstrap)

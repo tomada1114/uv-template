@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A safer bootstrap flow with validated package/repository names, collision
+  checks, syntax-safe metadata quoting, and protection against rewriting
+  untracked, symlinked, or secret files after a Git failure
+- Distribution smoke tests now install and import both wheels and source
+  distributions in isolated environments
 - Initial project structure
 - `scripts/bootstrap.py` deterministic template initializer: renames the
   package and replaces every placeholder (`my-package`, `my_package`,
@@ -78,6 +83,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `scripts/bootstrap.py` accepts a GitHub repository name independent of the
+  PyPI distribution name and replaces placeholders without cascading into new
+  values
+- Build and smoke recipes clear stale artifacts, and documentation deployment
+  now rebuilds when `README.md` changes
 - Coverage now names the measured code once, in `[tool.coverage.run]
   source`, so the justfile / CI / CONTRIBUTING command is just `pytest
   --cov ...` and survives the bootstrap rename untouched
@@ -177,4 +187,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   which broke every Bash/Write call once a session's shell `cd`'d into a
   second working-directory repository lacking `.agents/hooks/`
 
-[Unreleased]: https://github.com/your-username/my-package/commits/main
+[Unreleased]: https://github.com/your-username/uv-template/commits/main

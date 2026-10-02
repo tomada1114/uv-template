@@ -1,8 +1,8 @@
 site_name: my-package
-site_description: A short description of the project.
-site_url: https://your-username.github.io/my-package
-repo_url: https://github.com/your-username/my-package
-repo_name: your-username/my-package
+site_description: "A short description of the project."
+site_url: https://your-username.github.io/uv-template
+repo_url: https://github.com/your-username/uv-template
+repo_name: your-username/uv-template
 edit_uri: edit/main/docs/
 
 theme:

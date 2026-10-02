@@ -35,12 +35,12 @@ MYPY_PATHS = ("src", "scripts", "tests")
 def _checks(root: Path) -> list[list[str]]:
     """Build the check commands, skipping mypy when it has nothing to read."""
     checks = [
-        ["uv", "run", "ruff", "check", "."],
-        ["uv", "run", "ruff", "format", "--check", "."],
+        ["uv", "run", "--locked", "ruff", "check", "."],
+        ["uv", "run", "--locked", "ruff", "format", "--check", "."],
     ]
     paths = [path for path in MYPY_PATHS if (root / path).exists()]
     if paths:
-        checks.append(["uv", "run", "mypy", *paths])
+        checks.append(["uv", "run", "--locked", "mypy", *paths])
     return checks
 
 
@@ -50,9 +50,10 @@ SUBPROCESS_ENV = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
 
 def _python_files_changed(root: Path) -> bool:
     """Return True when uncommitted changes touch Python code or its config."""
-    result = subprocess.run(  # noqa: S603
-        ["git", "-C", str(root), "status", "--porcelain", "-uall"],  # noqa: S607
+    result = subprocess.run(
+        ["git", "status", "--porcelain", "-uall"],  # noqa: S607
         capture_output=True,
+        cwd=root,
         text=True,
         check=False,
     )

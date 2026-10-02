@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
+import keyword
 import re
 import shutil
 import subprocess
@@ -14,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 OLD_DISTRIBUTION_NAME = "my-package"
 OLD_MODULE_NAME = "my_package"
-OLD_TEMPLATE_SLUG = "uv-template"
+OLD_REPOSITORY_NAME = "uv-template"
 OLD_GITHUB_USER = "your-username"
 OLD_AUTHOR_NAME = "Your Name"
 OLD_AUTHOR_EMAIL = "you@example.com"
@@ -48,6 +50,7 @@ BOOTSTRAP_FILES = (
 )
 
 EXCLUDED_FILE_NAMES = {"uv.lock"}
+ENV_EXAMPLE_SUFFIXES = (".example", ".sample", ".template")
 # Only used for the non-git fallback walk (e.g. after ``.git`` was removed):
 # generated/untracked directories that must never be rewritten.
 EXCLUDED_DIR_NAMES = {
@@ -64,46 +67,151 @@ EXCLUDED_DIR_NAMES = {
     "htmlcov",
     ".tox",
     "node_modules",
+    "secrets",
 }
 
-_MODULE_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
+_DISTRIBUTION_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+_GITHUB_USER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]*$")
+_REPOSITORY_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+_EMAIL_PATTERN = re.compile(r"^[^@\s<>]+@[^@\s<>]+$")
+_CONTROL_CHARACTER_PATTERN = re.compile(r"[\x00-\x1f\x7f]")
+
+_TOML_DESCRIPTION_PATTERN = re.compile(r'(?m)^(?P<prefix>\s*description\s*=\s*)"[^"]*"')
+_TOML_AUTHOR_PATTERN = re.compile(
+    r'(?P<prefix>\bname\s*=\s*)"[^"]*"(?P<suffix>\s*,\s*email\s*=)'
+)
+_TOML_EMAIL_PATTERN = re.compile(r'(?P<prefix>\bemail\s*=\s*)"[^"]*"')
+_MKDOCS_DESCRIPTION_PATTERN = re.compile(
+    r'(?m)^(?P<prefix>\s*site_description:\s*)"[^"]*"'
+)
 
 
 def _normalize_module_name(package_name: str) -> str:
     """Return the snake_case module name derived from a distribution name."""
-    module_name = package_name.replace("-", "_")
-    if not _MODULE_NAME_PATTERN.fullmatch(module_name):
+    if not _DISTRIBUTION_NAME_PATTERN.fullmatch(package_name):
+        msg = (
+            f"Invalid package name {package_name!r}: use letters, numbers, "
+            "periods, hyphens, or underscores, starting with a letter or number."
+        )
+        raise SystemExit(msg)
+
+    module_name = re.sub(r"[-.]+", "_", package_name).lower()
+    if not module_name.isidentifier() or keyword.iskeyword(module_name):
         msg = (
             f"Invalid package name {package_name!r}: must become a valid Python "
-            "identifier once hyphens are replaced with underscores."
+            "module name once hyphens and periods are replaced with underscores."
         )
         raise SystemExit(msg)
     return module_name
+
+
+def _validate_single_line(value: str | None, label: str) -> None:
+    """Reject values that would create malformed generated files."""
+    if value is not None and _CONTROL_CHARACTER_PATTERN.search(value):
+        msg = f"Invalid {label}: it must be a single line without control characters."
+        raise SystemExit(msg)
+
+
+def _validate_inputs(  # noqa: PLR0913
+    package_name: str,
+    author: str | None,
+    email: str | None,
+    github_user: str,
+    github_repository: str | None,
+    description: str | None,
+) -> str:
+    """Validate bootstrap inputs and return the normalized module name."""
+    module_name = _normalize_module_name(package_name)
+    if not _GITHUB_USER_PATTERN.fullmatch(github_user):
+        msg = f"Invalid GitHub user or organization {github_user!r}."
+        raise SystemExit(msg)
+
+    repository = package_name if github_repository is None else github_repository
+    if not _REPOSITORY_NAME_PATTERN.fullmatch(repository):
+        msg = f"Invalid GitHub repository name {repository!r}."
+        raise SystemExit(msg)
+
+    _validate_single_line(author, "author")
+    _validate_single_line(email, "email")
+    _validate_single_line(description, "description")
+    if email is not None and not _EMAIL_PATTERN.fullmatch(email):
+        msg = f"Invalid email address {email!r}."
+        raise SystemExit(msg)
+    return module_name
+
+
+def _is_protected_path(path: Path) -> bool:
+    """Return whether a path may contain credentials rather than placeholders."""
+    name = path.name
+    if name == ".env" or (
+        name.startswith(".env.") and not name.endswith(ENV_EXAMPLE_SUFFIXES)
+    ):
+        return True
+    return "secrets" in path.parts
 
 
 def _git_tracked_files(repo_root: Path) -> list[Path] | None:
     """Return absolute paths of git-tracked files under repo_root.
 
     Returns:
-        The tracked files (excluding EXCLUDED_FILE_NAMES), or None when
-        repo_root is not a git repository or git is unavailable.
+        The tracked files (excluding protected files), or None when repo_root
+        is not a Git repository and a filesystem walk is therefore required.
+        A Git failure inside a repository raises instead of widening the write
+        scope to untracked files.
     """
     try:
-        result = subprocess.run(  # noqa: S603
-            ["git", "-C", str(repo_root), "ls-files", "-z"],  # noqa: S607
-            check=True,
+        top_level = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],  # noqa: S607
+            check=False,
             capture_output=True,
+            cwd=repo_root,
             text=True,
         )
-    except OSError, subprocess.CalledProcessError:
+    except OSError as error:
+        if (repo_root / ".git").exists():
+            msg = f"Git is unavailable while inspecting {repo_root}: {error}"
+            raise SystemExit(msg) from error
         return None
+
+    if top_level.returncode != 0:
+        if not (repo_root / ".git").exists():
+            return None
+        msg = f"Could not identify the Git root for {repo_root}: {top_level.stderr.strip()}"
+        raise SystemExit(msg)
+    git_root = Path(top_level.stdout.strip()).resolve()
+    if git_root != repo_root:
+        msg = (
+            f"Bootstrap must run at the Git root ({repo_root}); "
+            f"Git found an ancestor root at {git_root}."
+        )
+        raise SystemExit(msg)
+
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "-z"],  # noqa: S607
+            check=False,
+            capture_output=True,
+            cwd=repo_root,
+            text=True,
+        )
+    except OSError as error:
+        if (repo_root / ".git").exists():
+            msg = f"Git is unavailable while inspecting {repo_root}: {error}"
+            raise SystemExit(msg) from error
+        return None
+
+    if result.returncode != 0:
+        if not (repo_root / ".git").exists():
+            return None
+        msg = f"Could not list tracked files in {repo_root}: {result.stderr.strip()}"
+        raise SystemExit(msg)
 
     files = []
     for relative_path in result.stdout.split("\0"):
         if not relative_path or Path(relative_path).name in EXCLUDED_FILE_NAMES:
             continue
         path = repo_root / relative_path
-        if path.is_file():
+        if path.is_file() and not path.is_symlink() and not _is_protected_path(path):
             files.append(path)
     return files
 
@@ -112,11 +220,13 @@ def _walk_project_files(repo_root: Path) -> list[Path]:
     """Return every file under repo_root, skipping excluded dirs and files."""
     files = []
     for path in repo_root.rglob("*"):
-        if not path.is_file():
+        if not path.is_file() or path.is_symlink():
             continue
         if path.name in EXCLUDED_FILE_NAMES:
             continue
         if EXCLUDED_DIR_NAMES & set(path.relative_to(repo_root).parts):
+            continue
+        if _is_protected_path(path):
             continue
         files.append(path)
     return files
@@ -136,7 +246,12 @@ def _iter_project_files(repo_root: Path) -> list[Path]:
     return _walk_project_files(repo_root)
 
 
-def _replace_placeholders_in_file(path: Path, replacements: dict[str, str]) -> bool:
+def _replace_placeholders_in_file(
+    path: Path,
+    replacements: dict[str, str],
+    *,
+    python_literals: bool = False,
+) -> bool:
     """Replace every placeholder occurrence in a single file.
 
     Returns:
@@ -144,12 +259,34 @@ def _replace_placeholders_in_file(path: Path, replacements: dict[str, str]) -> b
     """
     try:
         text = path.read_text(encoding="utf-8")
-    except UnicodeDecodeError, OSError:
+    except UnicodeDecodeError:
         return False
 
-    new_text = text
-    for old, new in replacements.items():
-        new_text = new_text.replace(old, new)
+    if python_literals:
+        literal_values = "|".join(
+            re.escape(old) for old in sorted(replacements, key=len, reverse=True)
+        )
+        literal_pattern = re.compile(
+            rf"(?P<quote>['\"])(?P<value>{literal_values})(?P=quote)"
+        )
+        new_text = literal_pattern.sub(
+            lambda match: (
+                _quoted_string(replacements[match.group("value")])
+                if match.group("quote") == '"'
+                else repr(replacements[match.group("value")])
+            ),
+            text,
+        )
+    else:
+        placeholder_pattern = re.compile(
+            "|".join(
+                re.escape(old) for old in sorted(replacements, key=len, reverse=True)
+            )
+        )
+        new_text = placeholder_pattern.sub(
+            lambda match: replacements[match.group(0)],
+            text,
+        )
 
     if new_text == text:
         return False
@@ -167,7 +304,59 @@ def _rename_source_directory(repo_root: Path, new_module_name: str) -> None:
     if not old_dir.is_dir():
         msg = f"Expected source directory not found: {old_dir}"
         raise SystemExit(msg)
+    if new_dir.exists() or new_dir.is_symlink():
+        msg = f"Destination source directory already exists: {new_dir}"
+        raise SystemExit(msg)
     shutil.move(str(old_dir), str(new_dir))
+
+
+def _quoted_string(value: str) -> str:
+    """Encode a value as a double-quoted string literal."""
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _rewrite_project_metadata(
+    repo_root: Path,
+    author: str | None,
+    email: str | None,
+    description: str | None,
+) -> None:
+    """Write user-provided metadata with syntax-safe TOML and YAML quoting."""
+    pyproject = repo_root / "pyproject.toml"
+    if pyproject.is_file():
+        text = pyproject.read_text(encoding="utf-8")
+        if description:
+            text = _TOML_DESCRIPTION_PATTERN.sub(
+                lambda match: f"{match.group('prefix')}{_quoted_string(description)}",
+                text,
+                count=1,
+            )
+        if author:
+            text = _TOML_AUTHOR_PATTERN.sub(
+                lambda match: (
+                    f"{match.group('prefix')}{_quoted_string(author)}"
+                    f"{match.group('suffix')}"
+                ),
+                text,
+                count=1,
+            )
+        if email:
+            text = _TOML_EMAIL_PATTERN.sub(
+                lambda match: f"{match.group('prefix')}{_quoted_string(email)}",
+                text,
+                count=1,
+            )
+        pyproject.write_text(text, encoding="utf-8")
+
+    mkdocs = repo_root / "mkdocs.yml"
+    if description and mkdocs.is_file():
+        text = mkdocs.read_text(encoding="utf-8")
+        text = _MKDOCS_DESCRIPTION_PATTERN.sub(
+            lambda match: f"{match.group('prefix')}{_quoted_string(description)}",
+            text,
+            count=1,
+        )
+        mkdocs.write_text(text, encoding="utf-8")
 
 
 def _rewrite_exclude_newer(repo_root: Path, today: dt.date) -> None:
@@ -217,6 +406,7 @@ def bootstrap(  # noqa: PLR0913
     github_user: str,
     description: str | None = None,
     *,
+    github_repository: str | None = None,
     keep_bootstrap: bool = False,
 ) -> str:
     """Rename the package and replace template placeholders in-place.
@@ -224,27 +414,57 @@ def bootstrap(  # noqa: PLR0913
     Returns:
         The normalized module name the source directory was renamed to.
     """
-    module_name = _normalize_module_name(package_name)
+    module_name = _validate_inputs(
+        package_name,
+        author,
+        email,
+        github_user,
+        github_repository,
+        description,
+    )
+    repository_name = package_name if github_repository is None else github_repository
+    repo_root = repo_root.resolve()
+    old_dir = repo_root / "src" / OLD_MODULE_NAME
+    new_dir = repo_root / "src" / module_name
+    if not old_dir.is_dir():
+        msg = f"Expected source directory not found: {old_dir}"
+        raise SystemExit(msg)
+    if old_dir != new_dir and (new_dir.exists() or new_dir.is_symlink()):
+        msg = f"Destination source directory already exists: {new_dir}"
+        raise SystemExit(msg)
+
     today = dt.datetime.now(tz=dt.UTC).date()
 
     replacements = {
         OLD_MODULE_NAME: module_name,
         OLD_DISTRIBUTION_NAME: package_name,
-        OLD_TEMPLATE_SLUG: package_name,
+        OLD_REPOSITORY_NAME: repository_name,
         OLD_GITHUB_USER: github_user,
     }
-    if author:
-        replacements[OLD_AUTHOR_NAME] = author
-    if email:
-        replacements[OLD_AUTHOR_EMAIL] = email
-    if description:
-        for old_description in OLD_DESCRIPTIONS:
-            replacements[old_description] = description
 
-    for path in _iter_project_files(repo_root):
+    project_files = _iter_project_files(repo_root)
+    pyproject = repo_root / "pyproject.toml"
+    mkdocs = repo_root / "mkdocs.yml"
+    for path in project_files:
         _replace_placeholders_in_file(path, replacements)
+        file_replacements: dict[str, str] = {}
+        if path != pyproject:
+            if author:
+                file_replacements[OLD_AUTHOR_NAME] = author
+            if email:
+                file_replacements[OLD_AUTHOR_EMAIL] = email
+        if path not in (pyproject, mkdocs) and description:
+            for old_description in OLD_DESCRIPTIONS:
+                file_replacements[old_description] = description
+        if file_replacements:
+            _replace_placeholders_in_file(
+                path,
+                file_replacements,
+                python_literals=path.suffix == ".py",
+            )
 
     _rewrite_exclude_newer(repo_root, today)
+    _rewrite_project_metadata(repo_root, author, email, description)
     _rewrite_license_year(repo_root, today)
     _reset_changelog(repo_root)
     _rename_source_directory(repo_root, module_name)
@@ -287,6 +507,11 @@ def main(argv: list[str]) -> int:
         help="GitHub username or org (required: it is baked into project URLs)",
     )
     parser.add_argument(
+        "--github-repository",
+        default=None,
+        help="GitHub repository name (defaults to the package name)",
+    )
+    parser.add_argument(
         "--description", default=None, help="One-line description of the project"
     )
     parser.add_argument(
@@ -303,6 +528,7 @@ def main(argv: list[str]) -> int:
         args.email,
         args.github_user,
         args.description,
+        github_repository=args.github_repository,
         keep_bootstrap=args.keep_bootstrap,
     )
     _run_uv_lock(REPO_ROOT)

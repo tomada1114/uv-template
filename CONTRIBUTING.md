@@ -15,13 +15,13 @@ Install these tools:
 Then:
 
 ```bash
-uv sync --all-groups
+uv sync --all-groups --locked
 ```
 
 If you're working in a Git checkout, also install the local hooks:
 
 ```bash
-uv run pre-commit install --install-hooks
+uv run --locked pre-commit install --install-hooks
 ```
 
 ## Development Workflow
@@ -36,27 +36,27 @@ just lint
 # Run tests
 just test
 
-# Build and verify the wheel in an isolated temp environment
+# Build and verify distribution artifacts in isolated temp environments
 just smoke
 
 # Mutating development check (format → lint → test)
 just check
 
-# Non-mutating PR/completion gate (lint + strict docs build + wheel smoke + test)
+# Non-mutating PR/completion gate (lock check + lint + docs + distribution smoke + test)
 just verify
 ```
 
 **Without Just**, run the equivalent commands:
 
 ```bash
-uv run ruff check --fix .
-uv run ruff format .
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy src scripts tests
-uv run pytest -n auto --cov --cov-report=term-missing:skip-covered --cov-fail-under=80
-uv run mkdocs build --strict
-uv build --wheel && uv run python scripts/smoke_test.py
+uv run --locked ruff check --fix .
+uv run --locked ruff format .
+uv run --locked ruff check .
+uv run --locked ruff format --check .
+uv run --locked mypy src scripts tests
+uv run --locked pytest -n auto --cov --cov-report=term-missing:skip-covered --cov-fail-under=80
+uv run --locked mkdocs build --strict
+uv build --clear && uv run --locked python scripts/smoke_test.py
 ```
 
 ## Pull Request Process
@@ -105,7 +105,7 @@ what users should read to understand what changed in a release.
 
 Releases are cut by pushing a `v*` tag. `.github/workflows/release.yml` then
 runs ruff, mypy and pytest as a gate, checks the tag against
-`project.version`, builds the sdist and wheel, smoke-tests the wheel, attests
+`project.version`, builds the sdist and wheel, smoke-tests both distributions, attests
 its build provenance, publishes to PyPI and creates the GitHub Release. A
 failing gate stops the run before anything is built or published. Nothing is uploaded by hand, and there is no PyPI
 API token anywhere in this repository: the `publish` job authenticates to PyPI
@@ -125,7 +125,7 @@ must match the workflow, or PyPI rejects the token exchange:
 | Field | Value |
 | --- | --- |
 | Owner | `your-username` |
-| Repository name | `my-package` |
+| Repository name | `uv-template` |
 | Workflow name | `release.yml` |
 | Environment name | `release` |
 

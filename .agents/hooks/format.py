@@ -36,8 +36,8 @@ def main() -> int:
         ):
             continue
         for args in (
-            ["uv", "run", "ruff", "check", "--fix", str(file_path)],
-            ["uv", "run", "ruff", "format", str(file_path)],
+            ["uv", "run", "--locked", "ruff", "check", "--fix", str(file_path)],
+            ["uv", "run", "--locked", "ruff", "format", str(file_path)],
         ):
             result = subprocess.run(  # noqa: S603
                 args,

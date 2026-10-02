@@ -31,13 +31,13 @@ jobs:
         run: uv sync --group dev --locked
 
       - name: Ruff check
-        run: uv run ruff check .
+        run: uv run --locked ruff check .
 
       - name: Ruff format check
-        run: uv run ruff format --check .
+        run: uv run --locked ruff format --check .
 
       - name: mypy
-        run: uv run mypy src scripts tests
+        run: uv run --locked mypy src scripts tests
 
   test:
     name: Test (shard ${{ matrix.shard }}/4)
@@ -67,7 +67,7 @@ jobs:
         env:
           COVERAGE_FILE: .coverage.${{ matrix.shard }}
         run: >-
-          uv run pytest
+          uv run --locked pytest
           --splits 4
           --group ${{ matrix.shard }}
           --durations-path .test_durations
@@ -110,8 +110,8 @@ jobs:
 
       - name: Combine and validate coverage
         run: |
-          uv run coverage combine
-          uv run coverage report --fail-under=80
+          uv run --locked coverage combine
+          uv run --locked coverage report --fail-under=80
 
   spell-check:
     name: Spell Check
@@ -142,10 +142,10 @@ jobs:
           python-version: "3.14"
 
       - name: Build package
-        run: uv build
+        run: uv build --clear
 
       - name: Smoke test install
-        run: uv run python scripts/smoke_test.py dist/*.whl
+        run: uv run --locked python scripts/smoke_test.py
 
   docs:
     name: Docs Build
@@ -165,7 +165,7 @@ jobs:
         run: uv sync --group docs --locked
 
       - name: Build docs strictly
-        run: uv run mkdocs build --strict
+        run: uv run --locked mkdocs build --strict
 
   zizmor:
     name: Workflow Security Lint
