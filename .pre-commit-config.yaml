@@ -6,6 +6,9 @@ repos:
       - id: end-of-file-fixer
       - id: check-toml
       - id: check-yaml
+      - id: check-json
+      - id: check-case-conflict
+      - id: check-symlinks
       - id: check-merge-conflict
       - id: check-added-large-files
         args: ["--maxkb=500"]
@@ -20,7 +23,7 @@ repos:
       - id: ruff-format
 
   - repo: https://github.com/crate-ci/typos
-    rev: v1.44.0
+    rev: v1.48.0
     hooks:
       - id: typos
         args: ["--config", "typos.toml"]
@@ -34,7 +37,7 @@ repos:
     hooks:
       - id: mypy
         name: mypy
-        entry: uv run mypy src scripts tests
+        entry: uv run --locked mypy src scripts tests
         language: system
         types: [python]
         pass_filenames: false

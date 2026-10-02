@@ -30,16 +30,16 @@ jobs:
         run: uv sync --group dev --locked
 
       - name: Ruff check
-        run: uv run ruff check .
+        run: uv run --locked ruff check .
 
       - name: Ruff format check
-        run: uv run ruff format --check .
+        run: uv run --locked ruff format --check .
 
       - name: mypy
-        run: uv run mypy src scripts tests
+        run: uv run --locked mypy src scripts tests
 
       - name: Run tests
-        run: uv run pytest --cov --cov-report=term-missing:skip-covered --cov-fail-under=80
+        run: uv run --locked pytest --cov --cov-report=term-missing:skip-covered --cov-fail-under=80
 
   build:
     name: Build distribution
@@ -81,10 +81,10 @@ jobs:
           PY
 
       - name: Build
-        run: uv build
+        run: uv build --clear
 
-      - name: Smoke test built wheel
-        run: uv run python scripts/smoke_test.py dist/*.whl
+      - name: Smoke test built distributions
+        run: uv run --locked python scripts/smoke_test.py
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1

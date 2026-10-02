@@ -15,9 +15,10 @@ just fmt             # Format code (ruff check --fix + ruff format)
 just lint            # Lint (ruff check) + type check (mypy)
 just test            # Run tests in parallel with coverage
 just test-durations  # Regenerate the pytest-split duration file used by CI shards
-just smoke           # Build and verify the wheel in a temp virtual environment
+just smoke           # Build and verify wheel and sdist in temp environments
 just check           # Mutating dev check: fmt → lint → test
-just verify          # Non-mutating PR/completion gate: lint → docs-check → smoke → test
+just lock            # Update uv.lock after dependency changes
+just verify          # Non-mutating gate: lock-check → lint → docs → smoke → test
 just docs            # Serve docs locally
 just docs-check      # Build docs and fail on warnings
 just build           # Build distribution packages
@@ -27,7 +28,7 @@ just clean           # Remove build artifacts and caches
 
 Without Just: replace `just <cmd>` with the corresponding `uv run` commands
 in the `justfile`. Run a single test with
-`uv run pytest tests/test_<module>.py::test_<name>`.
+`uv run --locked pytest tests/test_<module>.py::test_<name>`.
 
 `just check` mutates the tree (it runs `fmt` first), so it never proves the
 *committed* tree is green. `just verify` does not mutate anything — it is the
@@ -59,7 +60,7 @@ src/my_package/
 
 Before submitting a PR:
 
-1. `just verify` passes (lint, strict docs build, wheel smoke, tests)
+1. `just verify` passes (lock check, lint, strict docs build, wheel/sdist smoke, tests)
 2. New public APIs have type annotations and docstrings
 3. Tests cover the new functionality
 4. No unnecessary dependencies added
@@ -107,7 +108,7 @@ Before submitting a PR:
 - Use version ranges (`>=X.Y`) for runtime dependencies -- never pin exact versions in a library
 - NEVER remove existing ruff rules without explicit user approval
 - NEVER lower the coverage threshold (currently 80%)
-- After modifying dependencies, run `uv sync --all-groups`
+- After modifying dependencies, run `uv lock`, then `uv sync --all-groups --locked`
 - The `uv.lock` file MUST be committed alongside dependency changes
 
 ### `[tool.uv] exclude-newer`
@@ -157,8 +158,7 @@ even if no dependency changed, so the cutoff does not drift too far behind:
 
 ### Performance
 
-Do not optimize preemptively. Profile first; optimize only measured hotspots, and note the
-measurement in the PR description.
+Do not optimize preemptively; profile measured hotspots and note the measurement in the PR description.
 
 ### Pythonic Patterns
 
@@ -192,15 +192,8 @@ and `.codex/hooks.json`.
 - `format.py` (PostToolUse) runs ruff fixes and formatting on edited Python files.
 - `stop_check.py` (Stop) runs ruff and mypy when Python files or `pyproject.toml` changed.
 
-`.claude/settings.json` resolves the hook scripts via `${CLAUDE_PROJECT_DIR}`,
-not `$(git rev-parse --show-toplevel)`: the latter resolves against the
-shell's current working directory, which is wrong the moment a session adds a
-second repository as a working directory and the shell `cd`s into it — every
-Bash/Write call then fails looking for `.agents/hooks/` in the wrong repo.
-`.codex/hooks.json` keeps `$(git rev-parse --show-toplevel)` because Codex
-does not define `CLAUDE_PROJECT_DIR`; do not "unify" the two files.
+`.claude/settings.json` uses `${CLAUDE_PROJECT_DIR}` because it remains stable when multiple repositories are open; `.codex/hooks.json` uses `$(git rev-parse --show-toplevel)` because Codex has no `CLAUDE_PROJECT_DIR`.
 
-Start sessions from the repository root so project-level hook configuration is
-loaded. Review and trust each hook definition before relying on it.
+Start sessions from the repository root so project-level hook configuration is loaded; review and trust each hook before relying on it.
 Agent worktrees under `.claude/worktrees/` (if used) accumulate over time;
 `just worktree-clean` removes the ones whose branch already has a merged PR.

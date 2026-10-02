@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "CONTRIBUTING.md"
+      - "README.md"
       - "docs/**"
       - "mkdocs.yml"
       - "src/**"
@@ -35,7 +36,7 @@ jobs:
         run: uv sync --group docs --locked
 
       - name: Build docs strictly
-        run: uv run mkdocs build --strict
+        run: uv run --locked mkdocs build --strict
 
       - name: Build & deploy
-        run: uv run mkdocs gh-deploy --force
+        run: uv run --locked mkdocs gh-deploy --force

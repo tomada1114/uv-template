@@ -7,55 +7,61 @@ default:
 
 # Install dependencies and git hooks when available
 install:
-    uv sync --all-groups
-    if git rev-parse --git-dir >/dev/null 2>&1; then uv run pre-commit install --install-hooks; else echo "Skipping pre-commit hook installation (not a Git repository)."; fi
+    uv sync --all-groups --locked
+    if git rev-parse --git-dir >/dev/null 2>&1; then uv run --locked pre-commit install --install-hooks; else echo "Skipping pre-commit hook installation (not a Git repository)."; fi
 
 # Alias for first-time project setup
 setup: install
 
 # Format code (lint fixes first so the formatter has the last word)
 fmt:
-    uv run ruff check --fix .
-    uv run ruff format .
+    uv run --locked ruff check --fix .
+    uv run --locked ruff format .
 
 # Run linters and type checker
 lint:
-    uv run ruff check .
-    uv run ruff format --check .
-    uv run mypy src scripts tests
+    uv run --locked ruff check .
+    uv run --locked ruff format --check .
+    uv run --locked mypy src scripts tests
 
 # Run tests in parallel with coverage
 test:
-    uv run pytest -n auto --cov --cov-report=term-missing:skip-covered --cov-fail-under=80
+    uv run --locked pytest -n auto --cov --cov-report=term-missing:skip-covered --cov-fail-under=80
 
 # Regenerate the pytest-split duration file used to balance CI shards
 test-durations:
-    uv run pytest --store-durations
+    uv run --locked pytest --store-durations
+
+# Update uv.lock after changing dependency declarations
+lock:
+    uv lock
 
 # Run all checks: format, lint, test
 check: fmt lint test
 
 # Serve documentation locally
 docs:
-    uv run mkdocs serve
+    uv run --locked mkdocs serve
 
 # Build documentation and fail on warnings
 docs-check:
-    uv run mkdocs build --strict
+    uv run --locked mkdocs build --strict
 
 # Build distribution packages
 build:
-    uv build
+    uv build --clear
 
-# Build and smoke-test the wheel in a temporary virtual environment
-# (`--wheel` skips the sdist round-trip `just build` does; the smoke test only
-# installs the wheel, and the sdist is still built by `just build` and release)
+# Build and smoke-test distributions in temporary virtual environments
 smoke:
-    uv build --wheel
-    uv run python scripts/smoke_test.py
+    uv build --clear
+    uv run --locked python scripts/smoke_test.py
 
 # Non-mutating local release/PR gate (fail-fast: cheap gates before the suite)
-verify: lint docs-check smoke test
+verify: lock-check lint docs-check smoke test
+
+# Confirm the lockfile is current without changing it.
+lock-check:
+    uv lock --check
 
 # Remove build artifacts
 clean:

@@ -24,7 +24,6 @@ Standard library only, Python >= 3.10. Imported, never executed.
 from __future__ import annotations
 
 import json
-import os
 import re
 import subprocess
 import sys
@@ -67,7 +66,7 @@ def _absolute(value: str, base: Path) -> Path:
     path = Path(value)
     if not path.is_absolute():
         path = base / path
-    return Path(os.path.normpath(str(path)))
+    return path.resolve(strict=False)
 
 
 def patch_files(patch: str, base: Path) -> list[Path]:
@@ -94,7 +93,11 @@ def from_payload(raw: dict) -> Event:
         tool = None
 
     cwd_value = raw.get("cwd")
-    cwd = Path(cwd_value) if isinstance(cwd_value, str) and cwd_value else Path.cwd()
+    cwd = (
+        Path(cwd_value).resolve(strict=False)
+        if isinstance(cwd_value, str) and cwd_value
+        else Path.cwd().resolve()
+    )
 
     command = tool_input.get("command") if tool == "shell" else None
     if not isinstance(command, str):

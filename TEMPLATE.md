@@ -10,18 +10,23 @@ it from the spawned repo, so nothing here ships to your library's users.
 2. Run `scripts/bootstrap.py` to rename the package and replace placeholders:
 
    ```bash
-   uv run python scripts/bootstrap.py my-cool-lib \
+   uv run --locked python scripts/bootstrap.py my-cool-lib \
      --author "Jane Doe" --email jane@example.com --github-user janedoe \
+     --github-repository my-cool-lib-repo \
      --description "One line about what this library does."
    ```
 
    This renames `src/my_package` to `src/my_cool_lib` and replaces
    `my-package`, `my_package`, `uv-template`, `your-username`, `Your Name`,
-   and `you@example.com` across all tracked files. It also writes the current
-   year into `LICENSE`, moves `[tool.uv] exclude-newer` to two weeks before
-   today, resets `CHANGELOG.md` to an empty skeleton, and runs `uv lock` (a
-   lock file still naming the template would fail the first CI run — if the
-   lock step warns, run `uv lock` yourself before committing).
+   and `you@example.com` across all eligible tracked files. The distribution name and
+   GitHub repository name may differ; omit `--github-repository` when they are
+   the same. Metadata values are validated before any files are changed, and
+   quoted author and description values are escaped for TOML and YAML. The
+   script also writes the current year into `LICENSE`, moves `[tool.uv]
+   exclude-newer` to two weeks before today, resets `CHANGELOG.md` to an empty
+   skeleton, and runs `uv lock` (a lock file still naming the template would
+   fail the first CI run — if the lock step warns, run `uv lock` yourself
+   before committing).
 
    `--github-user` is required: it is baked into the project URLs, and
    leaving it out ships a dead security-report link in
@@ -33,8 +38,9 @@ it from the spawned repo, so nothing here ships to your library's users.
    `--keep-bootstrap` to keep them.
 3. Update `pyproject.toml` metadata (keywords, URLs) beyond what the
    script covers
-4. Update `README.md`, `SECURITY.md`, and `AGENTS.md`; update `CLAUDE.md` only
-   when the new project has Claude-specific settings or workflow notes
+4. Update `README.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `LICENSE`, and
+   `AGENTS.md`; update `CLAUDE.md` only when the new project has
+   Claude-specific settings or workflow notes
 5. Replace the placeholder implementation and keep `src/<your_package>/__init__.py`,
    `docs/reference.md`, and the usage examples in sync with your public API
 6. **Register PyPI Trusted Publishing** for the new repository before the
@@ -73,7 +79,7 @@ rg -n "your-username|my-package|my_package|uv-template|Your Name|you@example" .
 - Python dependencies are updated manually; see
   the `pyproject.toml` convention in `AGENTS.md` for the `exclude-newer`
   procedure.
-- `just verify` (lint, strict docs build, wheel smoke, tests) is the
+- `just verify` (lock check, lint, strict docs build, distribution smoke, tests) is the
   non-mutating gate for a PR or a completion claim; `just check` mutates the
   tree first (`fmt`) and is for local iteration only.
 
