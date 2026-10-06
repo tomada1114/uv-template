@@ -3,11 +3,11 @@ name: building-api-routes
 description: >
   Covers the FastAPI entry point in src/my_app/api/: the create_app factory and
   app.state.container, service dependencies in dependencies.py, one APIRouter per
-  resource under routers/, Pydantic request and response models in schemas.py, status
-  codes and responses= for documented errors, one-line route docstrings, and TestClient
-  tests through the client fixture. Use when adding or changing an HTTP route, a
-  request or response body, a dependency, or a router, or when removing the API. The
-  skill is deleted along with src/my_app/api/.
+  resource under routers/, Pydantic request and response models in schemas.py, success
+  status codes and the responses= declaration, and TestClient tests through the client
+  fixture. Use when adding or changing an HTTP route, a request or response body, a
+  dependency, or a router, or when removing the API. Which status a domain error
+  becomes is designing-errors'. The skill is deleted along with src/my_app/api/.
 ---
 
 # Building API Routes
@@ -23,7 +23,17 @@ a route calls (`designing-core-logic`); trying a route against a live server
 This skill describes the HTTP entry point only. A project that drops the API deletes
 `.agents/skills/building-api-routes/` with it, runs `just agents-sync`, and removes the
 skill's row from AGENTS.md's Skills table, alongside the files and configuration
-AGENTS.md's "Architecture" lists for that removal.
+AGENTS.md's "Architecture" lists for that removal. Then it prunes what sibling skills
+say about the API:
+
+- `designing-errors`: "The HTTP mapping", step 4 of "Adding a failure mode", and the
+  API half of "Two kinds of failure" and "Configuration errors";
+- `designing-core-logic`: the `building-api-routes` pointer in "Adding a use case" and
+  the FastAPI thread-pool reason under "Services are the use cases";
+- `running-the-app`: "Running a server of your own" and the server tier of "Evidence,
+  cheapest first";
+- `designing-clis`: "`serve` and imports";
+- `writing-python`: the examples that quote `api/` files.
 
 ## How a request flows
 
@@ -55,8 +65,12 @@ Reading from `request.app.state` rather than a module global lets every `create_
 call — one per test — own an independent store. A new service on `Container` gets its
 own function and alias in the same shape:
 
+Excerpts in this skill drop docstrings where marked; the real code keeps them, because
+ruff's `D` rules require them.
+
 ```python
 def get_todo_service(request: Request) -> TodoService:
+    # ... docstring elided
     container: Container = request.app.state.container
     return container.todos
 
@@ -64,9 +78,22 @@ def get_todo_service(request: Request) -> TodoService:
 TodoServiceDep = Annotated[TodoService, Depends(get_todo_service)]
 ```
 
+FastAPI reads a dependency function's annotations at run time too, and no
+`runtime-evaluated-decorators` entry can cover it, because nothing decorates it. Every
+type in its signature stays a real import, never under `if TYPE_CHECKING:`. Moved
+there, `request: Request` silently becomes a required query parameter and every call
+answers 422 (observed with fastapi 0.139.2, 2026-10-06). Ruff leaves `Request` alone in
+`dependencies.py` only because `Depends` is a run-time import from the same package,
+which the `TC` rules' default non-strict mode accepts. A dependency module without such
+an import gets a `TC002` finding there, and that finding is the one to argue in a
+reasoned `noqa`, not to apply. A type used only inside the body, like `Container`
+above, may stay under `if TYPE_CHECKING:`.
+
 ## Routers
 
-One module per resource, each with a single `router = APIRouter(prefix=..., tags=[...])`.
+One module per resource, each with a single module-level `router = APIRouter(...)` with
+`tags=`, plus a `prefix=` when every path in it shares one: `routers/todos.py` has
+`prefix="/todos"`, while `routers/health.py` serves `/healthz` with no prefix.
 
 - **Parameters are typed.** A path parameter typed `int` gives FastAPI's own 422 for a
   non-integer; the body is a request model; the service is the `...Dep` alias.
@@ -78,8 +105,8 @@ One module per resource, each with a single `router = APIRouter(prefix=..., tags
   `ErrorResponse` as its model, so the OpenAPI document shows it. The dictionaries are
   module constants shared by the routes that need them (`_NOT_FOUND`,
   `_INVALID_TITLE`), with the `# Any:` comment their type needs.
-- **The docstring is one plain-text line,** because FastAPI publishes it as the
-  operation's description. Reasoning goes in the module docstring or a comment.
+- **The docstring is one plain-text line** (`writing-python` owns the rule and its
+  reason).
 - **`/healthz` touches no repository,** so a slow or missing database never gets a live
   process restarted. Keep a new probe the same way.
 

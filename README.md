@@ -31,7 +31,8 @@ characters after trimming is a 422. Either way the body is `{"detail":
 "<reason>"}` — only a request that does not parse at all gets FastAPI's
 list-shaped `detail`.
 
-The CLI prints any failure as one line on stderr and exits with:
+The CLI exits with one of these codes. A domain or configuration error prints
+one line on stderr; a usage error prints Typer's own usage message.
 
 | Code | Meaning |
 |---|---|
@@ -75,10 +76,14 @@ therefore be removed by deleting files, without touching the core:
 - **Drop the API:** delete `src/my_app/api/`, `src/my_app/cli/serve.py` and
   its registration line in `src/my_app/cli/main.py`, `tests/api/`, and
   `tests/cli/test_serve.py`; remove the `fastapi` and `uvicorn` dependencies,
-  the `httpx` dev dependency, and the `just dev` recipe; run `uv lock`.
+  the `httpx` dev dependency, and the `just dev` recipe; run `uv lock`. Delete
+  the `.agents/skills/building-api-routes/` skill and its row in `AGENTS.md`'s
+  Skills table, then run `just agents-sync`.
 - **Drop the CLI:** delete `src/my_app/cli/` and `tests/cli/`; remove
   `[project.scripts]`, the `typer` dependency, and the `just run` recipe; run
-  `uv lock`. `uvicorn` stays, for `just dev`.
+  `uv lock`. `uvicorn` stays, for `just dev`. Delete the
+  `.agents/skills/designing-clis/` skill and its row in `AGENTS.md`'s Skills
+  table, then run `just agents-sync`.
 
 `AGENTS.md`'s Architecture section lists the matching ruff config lines.
 

@@ -14,8 +14,8 @@ description: >
 
 **Owns:** what counts as a domain error, the `AppError` hierarchy, and the two tables
 that turn one into an HTTP status and into a CLI exit code. **Does not own:** where the
-rule that raises an error lives (`designing-core-logic`); listing a status in a route's
-`responses=` (`building-api-routes`); wrapping a command in `exit_on_domain_error`
+rule that raises an error lives (`designing-core-logic`); the shape of a route and its
+`responses=` declaration (`building-api-routes`); wrapping a command in `exit_on_domain_error`
 (`designing-clis`); `raise ... from`, the `EM` message variable, and logging calls in
 general (`writing-python`).
 
@@ -27,9 +27,10 @@ general (`writing-python`).
   logged, and never shows a traceback.
 - **A bug:** anything else — a naive `datetime` from a clock, a driver error nobody
   translated. It is a builtin exception or left to propagate, and it keeps its
-  traceback: the API answers a plain-text `500 Internal Server Error` while uvicorn logs
-  the traceback, and the CLI prints Python's traceback. Never catch `Exception` to
-  dress a bug up as a domain error.
+  traceback: the API answers a plain-text `500 Internal Server Error` while the
+  traceback goes to the server's log (observed with starlette 1.3.1 and fastapi
+  0.139.2, 2026-10-06), and the CLI prints Python's traceback. Never catch `Exception`
+  to dress a bug up as a domain error.
 
 `core/models.py` draws the line in one function: `_check_invariants` raises
 `InvalidTodoError` for a bad title but a plain `ValueError` for a naive `created_at`,
@@ -44,16 +45,19 @@ caller needs data it carries. Otherwise raise an existing class with a new messa
 
 - Keep the data a caller needs as attributes, so nobody parses the message.
 - Pass exactly the constructor's arguments to `super().__init__`, so pickling (process
-  pools, task queues) rebuilds an equal error; `tests/core/test_errors.py` pins the
-  round trip for every subclass.
+  pools, task queues) rebuilds an equal error. `tests/core/test_errors.py` checks the
+  round trip only for the subclasses listed in its parametrized tests, so each new one
+  is added there (step 6 below).
 - `str(error)` is the user-facing sentence, and both entry points show it verbatim — the
   API as `detail`, the CLI after `Error: `. It must be safe to hand a client: never a
   credential, a SQL statement, a server path, or a stack detail.
 
-`TodoNotFoundError` has all three properties:
+`TodoNotFoundError` has all three properties. Excerpts in this skill drop docstrings
+where marked; the real code keeps them, because ruff's `D` rules require them.
 
 ```python
 class TodoNotFoundError(AppError):
+    # ... docstrings elided
     def __init__(self, todo_id: int) -> None:
         super().__init__(todo_id)
         self.todo_id = todo_id
@@ -91,13 +95,25 @@ The body is always `ErrorResponse`, `{"detail": str(error)}`. FastAPI's own 422 
 request that does not parse (a missing field, a non-integer path parameter) keeps its
 list-shaped `detail`, so a client tells the two apart by the type of `detail`.
 
-The 400 fallback is deliberate: a new subclass is the client's problem until it gets a
-case of its own, never an unhandled 500.
-`tests/api/test_app.py::test_unmapped_app_error_returns_400_not_500` pins it.
+Each status names a cause. 404 means the named thing does not exist. 422 means the
+request parsed but its input breaks a domain rule on a field — `InvalidTodoError`'s
+kind of failure. A new error class gets its own case when a specific status names its
+cause: 404 for something missing, 409 `HTTPStatus.CONFLICT` for a conflict with the
+current state such as a duplicate, 422 for invalid input.
 
-A new error that should not be a 400 gets a `case` in `_status_for`, with a subclass's
-case above its base class's. Pick the `HTTPStatus` member that names the cause: 404 when
-the named thing does not exist, 422 when the request parsed but breaks a domain rule.
+400 is only the fallback for an `AppError` that has no case yet: it keeps an unmapped
+subclass the client's problem, never an unhandled 500, and
+`tests/api/test_app.py::test_unmapped_app_error_returns_400_not_500` pins it. Never
+choose 400 on purpose for a new error; give it the status that names its cause.
+
+Adding a status for a new error:
+
+1. Add a `case` to `_status_for`, with a subclass's case above its base class's.
+2. List the status, with `ErrorResponse` as its model, in `responses=` on every route
+   that can raise the error.
+3. Assert the status and the exact `{"detail": ...}` in a `TestClient` test, and add
+   the route's status to the parametrized OpenAPI test in `tests/api/test_todos.py`.
+4. Describe the status in the README beside the existing 404 and 422.
 
 ```python
 match error:
@@ -120,9 +136,11 @@ match error:
 | 2 | `USAGE_ERROR` | a missing or malformed argument | Typer itself |
 | 3 | `CONFIG_ERROR` | a `MY_APP_*` variable that does not validate | `load_settings()` |
 
-Every `AppError` is exit 1; the CLI tells subclasses apart only by their message. Each
-failure is one line on stderr starting `Error: `, nothing on stdout, and no traceback,
-and it ends in `raise typer.Exit(code=ExitCode.<member>) from error`.
+Every `AppError` is exit 1; the CLI tells subclasses apart only by their message. Exit
+1 and exit 3 are this package's own: one line on stderr starting `Error: `, nothing on
+stdout, no traceback, ending in `raise typer.Exit(code=ExitCode.<member>) from error`.
+Exit 2 is Typer's own usage output instead — several lines on stderr: the usage line, a
+`--help` hint, and a boxed error message (observed with typer 0.27.0, 2026-10-06).
 
 Scripts branch on these numbers, so an existing code is never renumbered. A new cause
 that scripts must separate becomes a new `ExitCode` member, added together with
@@ -150,10 +168,12 @@ catches one to add context logs it with `logging.exception()` and re-raises.
    attributes, a pickle-safe `__init__`, and a client-safe `__str__`.
 3. Raise it in the core where the rule is checked, or translate to it in an adapter, and
    name it in the `Raises:` section of the port or service method.
-4. API: add a `case` to `_status_for` unless 400 is right, list the status in
-   `responses=` on each route that can raise it, and assert the status and the exact
-   `{"detail": ...}` in a `TestClient` test. **REQUIRED:** `building-api-routes`.
-5. CLI: no mapping to add; assert `ExitCode.DOMAIN_ERROR`, an empty stdout, and the
-   stderr line in a `CliRunner` test. **REQUIRED:** `designing-clis`.
-6. Add a `pytest.param` for it to the parametrized tests in `tests/core/test_errors.py`.
+4. If the project has the API: give it a status by the steps in "The HTTP mapping",
+   with a mapping test. **REQUIRED:** `building-api-routes`.
+5. If the project has the CLI: no mapping to add; assert `ExitCode.DOMAIN_ERROR`, an
+   empty stdout, and the stderr line in a `CliRunner` test. **REQUIRED:**
+   `designing-clis`.
+6. Required, not optional: add a `pytest.param` for it to both parametrized tests in
+   `tests/core/test_errors.py` (it is an `AppError`; its pickle round trip keeps type,
+   message, and args), plus a test for any attribute it carries.
 7. Update the README where it describes the API's error statuses or the exit codes.

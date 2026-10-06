@@ -23,7 +23,15 @@ by hand (`running-the-app`); module-level Python style (`writing-python`).
 This skill describes the command-line entry point only. A project that drops the CLI
 deletes `.agents/skills/designing-clis/` with it, runs `just agents-sync`, and removes
 the skill's row from AGENTS.md's Skills table, alongside the files and configuration
-AGENTS.md's "Architecture" lists for that removal.
+AGENTS.md's "Architecture" lists for that removal. Then it prunes what sibling skills
+say about the CLI:
+
+- `designing-errors`: "The CLI mapping", step 5 of "Adding a failure mode", and the
+  CLI half of "Two kinds of failure" and "Configuration errors";
+- `designing-core-logic`: the `designing-clis` pointer in "Adding a use case";
+- `running-the-app`: "Running the CLI" and the CLI tier of "Evidence, cheapest first";
+  its server script switches to the `uvicorn ... --factory` command it names;
+- `writing-python`: the examples that quote `cli/` files.
 
 ## The command tree
 
@@ -33,8 +41,8 @@ AGENTS.md's "Architecture" lists for that removal.
   `app.command()(serve)`, and holds nothing else.
 - Each group is its own module with its own `typer.Typer(help=..., no_args_is_help=True)`,
   so `my-app <group>` with no subcommand prints help rather than doing something.
-- A command whose natural name is a builtin is registered by name over a descriptive
-  function: `@app.command("list")` on `def list_todos(...)`.
+- A command never shadows a builtin: it is registered by name over a descriptive
+  function (`writing-python` owns the rule).
 
 ## Services come from the group's callback
 
@@ -45,10 +53,14 @@ A command never calls `build_container` or constructs an adapter itself, and nev
 builds `Settings()` directly: `load_settings()` is what turns an invalid `MY_APP_*`
 variable into exit 3 and one line instead of a traceback.
 
+Excerpts in this skill drop comments, docstrings, and enclosing code where marked; the
+real code keeps its docstrings, because ruff's `D` rules require them.
+
 ```python
 @app.callback()
 def load_services(ctx: typer.Context) -> None:
     """Create, list, complete, and delete to-dos."""
+    # ... comment elided
     if ctx.obj is None:
         ctx.obj = build_container(load_settings())
 ```
@@ -59,8 +71,8 @@ def load_services(ctx: typer.Context) -> None:
   `help=`, and a `metavar=` where the parameter name reads badly in usage text
   (`metavar="ID"`). A typed parameter (`int`) gives Typer's own usage error, exit 2,
   for a malformed value. Defaults are named module constants.
-- The docstring is one plain-text line, because Typer prints it as `--help`. Reasoning
-  goes in the module docstring or a comment.
+- The docstring is one plain-text line (`writing-python` owns the rule and its
+  reason).
 - The service call that can raise an `AppError` sits inside
   `with exit_on_domain_error():`, and the output is printed after the block, so the
   wrapper maps only the domain failure. A command whose service cannot raise one (a
@@ -84,13 +96,15 @@ def complete_todo(
   script can split, rendered by one helper (`_describe` prints `3 [x] buy milk`) with
   its markers as named constants. An empty result says so in words ("No to-dos yet.")
   rather than printing nothing. `print` fails lint (`T20`).
-- **Failures go to stderr as one line,** and only through the two helpers in
-  `cli/errors.py` — `exit_on_domain_error()` and `load_settings()` — so the `Error: `
-  prefix and the exit code stay uniform. A command never echoes an error itself and
-  never raises `typer.Exit` with a bare integer: it uses an `ExitCode` member. The
-  codes are `designing-errors`'.
-- **No logging and no progress chatter on stdout.** No module under `cli/` logs; a
-  usage error's boxed message is Typer's own.
+- **A domain or configuration failure goes to stderr as one line** (exit 1 or 3), and
+  only through the two helpers in `cli/errors.py` — `exit_on_domain_error()` and
+  `load_settings()` — so the `Error: ` prefix and the exit code stay uniform. A command
+  never echoes an error itself and never raises `typer.Exit` with a bare integer: it
+  uses an `ExitCode` member. The codes are `designing-errors`'.
+- **A usage error (exit 2) is Typer's own output,** several lines on stderr — the usage
+  line, a `--help` hint, and a boxed message (observed with typer 0.27.0, 2026-10-06).
+  A command does not try to reshape it.
+- **No logging and no progress chatter on stdout.** No module under `cli/` logs.
 
 ## Each invocation is its own process
 
@@ -128,6 +142,7 @@ that needs a heavy optional stack defers its import the same way. `serve` binds
   `run` fixture wraps that, sharing one container across calls:
 
   ```python
+  # ... fixture header and docstring elided
   runner = CliRunner()
   container = make_container()
 
@@ -137,8 +152,13 @@ that needs a heavy optional stack defers its import the same way. `serve` binds
 
 - Assert `result.exit_code` against an `ExitCode` member, `result.stdout` exactly, and
   `result.stderr` for the error line; a failure also asserts `stdout == ""`.
-- Only a test of reading settings omits `obj=`, and it sets `MY_APP_DATABASE_URL` to a
-  `tmp_path` file with `monkeypatch`.
+- A test omits `obj=` when what it checks happens before, or instead of, the group's
+  container: reading settings from the environment
+  (`test_todo_without_supplied_container_reads_settings_from_env` in
+  `tests/cli/test_todo.py`, the config-error test in `tests/cli/test_errors.py`) and
+  every test in `tests/cli/test_serve.py`, because `serve` builds its app from
+  `load_settings()`, not from `ctx.obj`. Such a test sets the `MY_APP_*` variables it
+  needs with `monkeypatch`, pointing a database at a `tmp_path` file.
 - `serve` is tested with `uvicorn.run` replaced by a recording fake (`serve_calls` in
   `tests/cli/test_serve.py`); a test never binds a port.
 - Run `uv run --locked pytest tests/cli/`.

@@ -26,14 +26,19 @@ as a command (`designing-clis`); module-level Python style (`writing-python`).
 imports nothing outside the standard library and itself.
 
 - Enforced by: `pyproject.toml` `[tool.ruff.lint.flake8-tidy-imports.banned-api]`
-  (`TID251`), which bans fastapi, typer, uvicorn, sqlite3, and httpx outside the layers
-  re-allowed by its per-file-ignores.
-- Enforced by: `tests/core/test_imports.py`, which is stricter: it rejects every
-  third-party import in `core/` (Pydantic included) and any reach into another layer,
-  across subpackages too.
+  (`TID251`), which bans fastapi, typer, uvicorn, sqlite3, and httpx everywhere, while
+  its per-file-ignores switch off all of `TID251` for `api/**`, `cli/**`,
+  `adapters/**`, and `tests/**`. The ban therefore bites in `core/`, `settings.py`,
+  `composition.py`, and `scripts/`.
+- Enforced by: `tests/core/test_imports.py`, which is stricter for `core/`: it rejects
+  every third-party import (Pydantic included) and any reach into another layer,
+  across subpackages too. Its `BANNED_MODULES` covers what that rule cannot: standard
+  library modules that do I/O, such as `sqlite3`.
 
-A new framework or driver the core must not touch gets a `banned-api` entry and a
-per-file-ignore for the one layer that uses it, in the same change that adds it.
+A new framework or driver the core must not touch gets a `banned-api` entry in the same
+change that adds it; the per-file-ignores already let the outer layers use it. A banned
+standard-library I/O module also goes into `BANNED_MODULES`, since the third-party rule
+does not catch it.
 
 ## Models hold the invariants
 
@@ -57,8 +62,12 @@ a service and nothing below it, so a rule added to a service holds for every ent
 point. A method's docstring records the behavior a caller may rely on — `complete`
 returns an already-completed to-do unchanged, so a retried request is safe.
 
+Excerpts in this skill drop docstrings where marked; the real code keeps them, because
+ruff's `D` rules require them.
+
 ```python
 def create(self, raw_title: str) -> Todo:
+    # ... docstring elided
     draft = TodoDraft(title=normalize_title(raw_title), created_at=self._clock())
     return self._repository.add(draft)
 ```
@@ -127,6 +136,7 @@ function that picks it, driven by a setting.
 
 ```python
 def build_container(settings: Settings, clock: Clock = utc_now) -> Container:
+    # ... docstring elided
     return Container(todos=TodoService(_build_repository(settings), clock))
 ```
 
@@ -137,13 +147,32 @@ by default, and `tests/test_composition.py` covers the wiring itself.
 ## Adding a use case
 
 1. A rule the operation needs goes in the model or a core function, with its
-   `InvalidTodoError`-style domain error (`designing-errors`).
+   `InvalidTodoError`-style domain error. **REQUIRED:** `designing-errors`.
 2. A method on the service, calling ports only, with `Args:`, `Returns:`, and `Raises:`.
 3. A port method if storage must do something new, implemented in every adapter, and a
    contract-suite test that every adapter must pass.
 4. Tests in `tests/core/` through the service's public methods, happy and error paths.
-5. Expose it in each entry point that offers it. **REQUIRED:** `building-api-routes`
-   for a route, `designing-clis` for a command.
+5. Expose it in each entry point the project keeps. **REQUIRED:** `building-api-routes`
+   for a route, if the API exists; `designing-clis` for a command, if the CLI exists.
+
+## Adding a port and its adapters
+
+For a new outside dependency — another store, a remote service, a source of randomness:
+
+1. A `Protocol` in `core/ports.py`, typed with core models only, whose docstrings state
+   what each method returns and raises.
+2. One adapter per technology in `adapters/`, satisfying the port by shape, translating
+   its driver's failures into the domain errors the port names, and safe across threads.
+3. A contract suite for the port in `tests/adapters/test_<port>_contract.py`, written
+   once and parametrized over every implementation the way `REPOSITORY_FACTORIES` is,
+   plus `tests/adapters/test_<adapter>.py` for what only one adapter does.
+4. An in-memory adapter that passes the same suite and serves as the core tests' fake.
+5. The service that needs it takes it as a constructor parameter; `build_container`
+   builds the adapter (choosing between implementations by a `Settings` field when
+   there is more than one) and passes it in, and a new service gets its `Container`
+   field.
+6. A new setting follows "Settings are read once, at the boundary"; a new driver
+   follows "The direction dependencies point".
 
 Run the narrowest checks while iterating: `uv run --locked pytest tests/core/
 tests/adapters/ tests/test_composition.py tests/test_settings.py`.
