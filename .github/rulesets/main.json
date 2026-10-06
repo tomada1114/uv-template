@@ -27,14 +27,14 @@
       "parameters": {
         "strict_required_status_checks_policy": false,
         "required_status_checks": [
-          { "context": "Lint & Type Check" },
-          { "context": "Coverage" },
-          { "context": "Spell Check" },
-          { "context": "Workflow Security Lint" },
-          { "context": "Validate PR title" },
-          { "context": "Analyze (python)" },
-          { "context": "Analyze (actions)" },
-          { "context": "Dependency Review" }
+          { "context": "Lint & Type Check", "integration_id": 15368 },
+          { "context": "Coverage", "integration_id": 15368 },
+          { "context": "Spell Check", "integration_id": 15368 },
+          { "context": "Workflow Security Lint", "integration_id": 15368 },
+          { "context": "Validate PR title", "integration_id": 15368 },
+          { "context": "Analyze (python)", "integration_id": 15368 },
+          { "context": "Analyze (actions)", "integration_id": 15368 },
+          { "context": "Dependency Review", "integration_id": 15368 }
         ]
       }
     }

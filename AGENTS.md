@@ -196,10 +196,14 @@ status checks. `just ruleset` creates it, or updates it by name, through
 rights, so **`just ruleset` is a human (admin) step** — an agent never runs it.
 Rerun it after editing `main.json`.
 
-A required check must be a job that runs on every pull request: never a job in
-a workflow whose `pull_request` trigger has `paths` or `paths-ignore` (it
-would leave other pull requests waiting forever), and the aggregate `Coverage`
-job rather than the test shards. `tests/test_apply_ruleset.py` enforces this.
+A required check must be a job that runs on every pull request and cannot be
+skipped: never a job in a workflow whose `pull_request` trigger has `paths` or
+`paths-ignore` (other pull requests would wait forever), and never a job whose
+`if:` could skip it — a skipped required check counts as passing. A job with
+`needs:` must be guarded with `!cancelled()` or `always()` and fail on its own
+when a needed job failed, as `Coverage` does; it is required instead of the
+test shards. `tests/test_apply_ruleset.py` enforces the trigger and `if:`
+rules, and fails on a workflow layout its scanner cannot read.
 
 ### Security settings
 
@@ -212,10 +216,15 @@ just fail the job. These are separate repository settings to turn on:
 - Dependabot alerts
 - The dependency graph, which Dependency Review (`dependency-review.yml`) needs
 
+Do not enable CodeQL "default setup": it rejects uploads from the advanced
+`codeql.yml`, which fails the required "Analyze" checks.
+
 On a private repository, CodeQL and Dependency Review need GitHub Code
 Security, and secret scanning needs GitHub Secret Protection. Without them,
 delete `codeql.yml` and `dependency-review.yml` rather than guarding them with
-an `if:` on visibility; `osv-scanner.yml`, `security-audit.yml`, and `ci.yml`'s
+an `if:` on visibility — but first remove "Analyze (python)", "Analyze
+(actions)", and "Dependency Review" from `.github/rulesets/main.json` and
+re-run `just ruleset`, or every pull request waits forever on them; `osv-scanner.yml`, `security-audit.yml`, and `ci.yml`'s
 zizmor job run anywhere. Private vulnerability reporting works only on public
 repositories, so a private repository must replace the reporting route in
 `SECURITY.md` and the security contact link in

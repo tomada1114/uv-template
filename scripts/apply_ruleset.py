@@ -28,6 +28,7 @@ HUMAN_STEP = (
     "(`gh auth status`)"
 )
 _DENIED_MARKERS = ("HTTP 403", "HTTP 404")
+_PLAN_MARKERS = ("upgrade to github pro", "make this repository public")
 
 
 class RulesetFileError(ValueError):
@@ -70,27 +71,72 @@ def load_ruleset(path: Path) -> dict[str, Any]:
 
 def _gh(args: list[str], stdin: str | None = None) -> str:
     command = ["gh", *args]
-    result = subprocess.run(  # noqa: S603 -- fixed argv, no shell
-        command, check=False, capture_output=True, text=True, input=stdin
-    )
+    try:
+        result = subprocess.run(  # noqa: S603 -- fixed argv, no shell
+            command, check=False, capture_output=True, text=True, input=stdin
+        )
+    except FileNotFoundError as error:
+        msg = f"gh not found on PATH: {error}"
+        raise GhError(msg) from error
     if result.returncode != 0:
         msg = f"gh {' '.join(args)}: {result.stderr.strip()}"
         raise GhError(msg)
     return result.stdout
 
 
+def _gh_json(args: list[str], stdin: str | None = None) -> Any:
+    # Any: gh returns arbitrary JSON; callers check its shape.
+    output = _gh(args, stdin)
+    try:
+        return json.loads(output)
+    except json.JSONDecodeError as error:
+        msg = f"gh {' '.join(args)}: output is not JSON: {output[:200]!r}"
+        raise GhError(msg) from error
+
+
 def current_repo() -> str:
-    """Return ``owner/repo`` of the checkout, as `gh repo view` reports it."""
-    return _gh(
-        ["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]
-    ).strip()
+    """Return ``owner/repo`` of the checkout, as `gh repo view` reports it.
+
+    Raises:
+        GhError: When `gh` fails or reports no ``owner/repo``.
+    """
+    repo = _gh(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"])
+    repo = repo.strip()
+    owner, _, name = repo.partition("/")
+    if not owner or not name:
+        msg = f"gh repo view returned no owner/repo: {repo!r}"
+        raise GhError(msg)
+    return repo
 
 
 def find_ruleset_id(repo: str, name: str) -> int | None:
-    """Return the id of the repository ruleset called ``name``, if any."""
-    listed = json.loads(_gh(["api", f"repos/{repo}/rulesets", "--paginate"]) or "[]")
-    for entry in listed:
-        if entry.get("name") == name:
+    """Return the id of this repository's own branch ruleset called ``name``.
+
+    Rulesets inherited from an organization are excluded, so an org ruleset
+    of the same name is never overwritten.
+
+    Raises:
+        GhError: When `gh` fails or returns an unexpected shape.
+    """
+    # --slurp wraps every page in one array, so the output stays valid JSON.
+    pages = _gh_json(
+        [
+            "api",
+            f"repos/{repo}/rulesets?includes_parents=false",
+            "--paginate",
+            "--slurp",
+        ]
+    )
+    if not isinstance(pages, list) or not all(isinstance(p, list) for p in pages):
+        msg = f"ruleset listing is not a JSON array of pages: {pages!r}"
+        raise GhError(msg)
+    for entry in (item for page in pages for item in page):
+        if (
+            isinstance(entry, dict)
+            and entry.get("name") == name
+            and entry.get("source_type") == "Repository"
+            and entry.get("target") == "branch"
+        ):
             return int(entry["id"])
     return None
 
@@ -116,6 +162,23 @@ def _fail(code: str, detail: str, expected: str, next_step: str) -> int:
     return 1
 
 
+def _report_gh_error(detail: str) -> int:
+    if any(marker in detail.lower() for marker in _PLAN_MARKERS):
+        return _fail(
+            "ERR_RULESET_PLAN_UNSUPPORTED",
+            detail,
+            "a public repository, or a plan that supports rulesets on private ones",
+            "make the repository public or upgrade its plan, then rerun `just ruleset`",
+        )
+    denied = any(marker in detail for marker in _DENIED_MARKERS)
+    return _fail(
+        "ERR_RULESET_GH",
+        detail,
+        "an authenticated `gh` with admin rights on the repository",
+        HUMAN_STEP if denied else "check `gh auth status` and rerun `just ruleset`",
+    )
+
+
 def main(argv: list[str] | None = None, ruleset_file: Path = RULESET_FILE) -> int:
     """Upsert the ruleset and return an exit code."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -133,19 +196,14 @@ def main(argv: list[str] | None = None, ruleset_file: Path = RULESET_FILE) -> in
     try:
         repo = args.repo or current_repo()
         ruleset_id = find_ruleset_id(repo, ruleset["name"])
-        output = _gh(upsert_command(repo, ruleset_id), stdin=json.dumps(ruleset))
+        applied = _gh_json(upsert_command(repo, ruleset_id), stdin=json.dumps(ruleset))
     except GhError as error:
-        detail = str(error)
-        denied = any(marker in detail for marker in _DENIED_MARKERS)
-        return _fail(
-            "ERR_RULESET_GH",
-            detail,
-            "an authenticated `gh` with admin rights on the repository",
-            HUMAN_STEP if denied else "check `gh auth status` and rerun `just ruleset`",
-        )
-    applied = json.loads(output)
+        return _report_gh_error(str(error))
+    applied_id = (
+        applied.get("id", ruleset_id) if isinstance(applied, dict) else ruleset_id
+    )
     verb = "created" if ruleset_id is None else "updated"
-    print(f"{verb}: ruleset {ruleset['name']!r} id {applied.get('id', ruleset_id)}")
+    print(f"{verb}: ruleset {ruleset['name']!r} id {applied_id}")
     return 0
 
 
