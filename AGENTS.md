@@ -90,7 +90,7 @@ some clones and makes Codex register a nested `references/SKILL.md` as a skill.
 | Skill | Load it when |
 |---|---|
 | `create-pr` | opening or updating a pull request |
-| `merge-dependabot` | landing Dependabot pull requests |
+| `merging-dependency-prs` | landing open Dependabot pull requests (GitHub Actions bumps) |
 | `release-workflow` | cutting a release |
 | `shipping-issues` | shipping the next issue or the whole backlog: rank, implement, review, PR, CI, merge |
 | `smart-commit` | grouping working-tree changes into commits |
