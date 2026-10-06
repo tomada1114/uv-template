@@ -53,7 +53,7 @@ block scalar (`description: >`). Do not add any third key — no `paths`, no `gl
 field would gate auto-invocation on a glob, but Codex CLI has no such field: it ignores
 an unknown key and matches only on `description`. The same skill would then auto-fire
 on different terms per host, so a portable skill keeps `description` as its one trigger
-surface. `create-pr`, `smart-commit`, and `release-workflow` predate this rule and still
+surface. `create-pr` and `smart-commit` predate this rule and still
 carry `allowed-tools`/`metadata` keys and a `references/platform-notes.md` annex; do not
 copy that shape into a new skill.
 
@@ -99,8 +99,8 @@ agent reads it regardless of task, and a task-specific skill holds only the reas
 agent doing that task needs.
 
 Every new skill opens with a two-line ownership block (`**Owns:**` / `**Does not
-own:**`) naming what it decides and what a named sibling decides. `create-pr`,
-`smart-commit`, and `release-workflow` predate the convention. Cross-reference a sibling
+own:**`) naming what it decides and what a named sibling decides. `create-pr` and
+`smart-commit` predate the convention. Cross-reference a sibling
 skill by its name in backticks, never by path, and an `AGENTS.md` rule by its section
 name in quotes, never by line number. A pointer that sends the reader to a sibling skill
 as a step of the task carries one of two markers and no other: `**REQUIRED:** <skill>`

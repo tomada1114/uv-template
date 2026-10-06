@@ -11,8 +11,8 @@ gh run list --branch <branch> --limit 1 --json databaseId -q '.[0].databaseId' \
 ```
 
 Which _job_ failed is the fastest way to tell these apart. CI runs `Lint & Type Check`,
-the sharded `Test` jobs and `Coverage`, `Spell Check`, `Build & Smoke Test`,
-`Docs Build`, and `Workflow Security Lint` (zizmor).
+the sharded `Test` jobs and `Coverage`, `Spell Check`, and `Workflow Security Lint`
+(zizmor).
 
 ## F1 — Workflow security lint
 

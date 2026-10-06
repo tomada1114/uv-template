@@ -8,7 +8,7 @@ from now — and assumes no context beyond the repository.
 Three places hold the reasoning, and each has one job:
 
 - `AGENTS.md`'s "Architecture" section describes the layout every project starts with —
-  the `src/` package, its public API in `__init__.py`, and where new code goes. It is
+  the `src/` package layout and where new code goes. It is
   the ground the ADRs build on, not a record of choices.
 - `TEMPLATE.md`'s "Design Philosophy" holds the template's own reasoning: why the `src/`
   layout, strict mypy and Ruff, Just, the coverage floor. The template ships no ADRs of

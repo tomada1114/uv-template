@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a Python library built with [uv](https://docs.astral.sh/uv/) and
+This is a Python application built with [uv](https://docs.astral.sh/uv/) and
 [hatchling](https://hatch.pypa.io/). It uses a strict `src/` layout with
 comprehensive type checking and linting.
 
@@ -15,14 +15,10 @@ just fmt             # Format code (ruff check --fix + ruff format)
 just lint            # Lint (ruff check) + type check (mypy)
 just test            # Run tests in parallel with coverage
 just test-durations  # Regenerate the pytest-split duration file used by CI shards
-just smoke           # Build and verify wheel and sdist in temp environments
 just check           # Mutating dev check: fmt → lint → test
 just lock            # Update uv.lock after dependency changes
-just verify          # Non-mutating gate: lock-check → agents-check → lint → test-skills → docs → smoke → test
+just verify          # Non-mutating gate: lock-check → agents-check → lint → test-skills → test
 just test-skills     # Run the unittest suites bundled under .agents/skills/*/scripts/tests
-just docs            # Serve docs locally
-just docs-check      # Build docs and fail on warnings
-just build           # Build distribution packages
 just worktree-clean  # Remove agent worktrees under .claude/worktrees with a merged PR
 just agents-sync     # Regenerate the .claude/skills mirror from .agents/skills
 just agents-check    # Fail when the skills mirror has drifted
@@ -52,7 +48,6 @@ being run at all.
 | A script under `scripts/` | `uv run --locked pytest tests/test_<script>.py` |
 | A skill under `.agents/skills/` | `just agents-sync && just agents-check && just test-skills` |
 | Dependencies in `pyproject.toml` | `uv lock`, `uv sync --all-groups --locked`, then `just verify` |
-| `docs/` or `mkdocs.yml` | `just docs-check` |
 | A workflow under `.github/workflows/` | `uv run --locked pre-commit run zizmor --all-files` |
 | Markdown or other prose | `uv run --locked pre-commit run typos --files <file>` |
 
@@ -60,22 +55,19 @@ being run at all.
 
 ```
 src/my_package/
-├── __init__.py   # Public API — export everything users need here
-├── py.typed      # PEP 561 marker for typed package
+├── __init__.py   # Package root — keep it thin
 └── core.py       # Placeholder module — replace and re-export via __init__.py
 ```
 
-- Keep the public API surface small — export via `__init__.py.__all__`
 - Internal modules can use a leading underscore (`_internal.py`)
 - Separate concerns: one module per logical unit
-- Update `docs/reference.md` and README examples whenever you change the public API
+- Update README.md when a command, setting, or behavior it documents changes
 
 ## Sources of Truth
 
 | Concern | Canonical source |
 |---|---|
 | Tooling and quality commands | `justfile`, `pyproject.toml`, CI workflows |
-| Current public API shape | `src/my_package/__init__.py` `__all__` and public signatures |
 | Current execution status | Git, fresh test output, and CI — never prose or test counts in a prompt |
 
 ## Skills
@@ -93,7 +85,6 @@ some clones and makes Codex register a nested `references/SKILL.md` as a skill.
 | `create-pr` | opening or updating a pull request |
 | `merging-dependency-prs` | landing open Dependabot pull requests (GitHub Actions bumps) |
 | `recording-architecture-decisions` | a change owes an ADR, or an ADR under `docs/architecture/` is proposed, accepted, or superseded |
-| `release-workflow` | cutting a release |
 | `shipping-issues` | shipping the next issue or the whole backlog: rank, implement, review, PR, CI, merge |
 | `smart-commit` | grouping working-tree changes into commits |
 | `steering-the-roadmap` | asked what to work on next, or the Now / Next / Later roadmap moves |
@@ -136,8 +127,8 @@ repository created from this template.
 
 Before submitting a PR:
 
-1. `just verify` passes (lock check, lint, strict docs build, wheel/sdist smoke, tests)
-2. New public APIs have type annotations and docstrings
+1. `just verify` passes (lock check, skills mirror, lint, skill tests, tests)
+2. New public functions have type annotations and docstrings
 3. Tests cover the new functionality
 4. No unnecessary dependencies added
 
@@ -216,14 +207,14 @@ dependency is proposed and the agent stops for sign-off.
 - Document non-obvious behavior, architecture decisions, and trade-offs
 - Do NOT document what is obvious from the code or already expressed by the type system
 - Code examples in docs must be valid Python that works with the current API
-- Use admonitions (note, warning, tip) for important callouts in MkDocs pages
+- Use GitHub Markdown alerts (`> [!NOTE]`, `> [!WARNING]`, `> [!TIP]`) for important callouts
 
 ## Conventions: pyproject.toml
 
 - Runtime dependencies go under `[project] dependencies`
-- Dev dependencies go under `[dependency-groups] dev`; docs under `[dependency-groups] docs`
+- Dev dependencies go under `[dependency-groups] dev`
 - Before adding a dependency: verify active maintenance, compatible license (MIT/BSD/Apache), and minimal transitive dependencies
-- Use version ranges (`>=X.Y`) for runtime dependencies -- never pin exact versions in a library
+- Use version ranges (`>=X.Y`) for runtime dependencies in `pyproject.toml`; `uv.lock` pins the exact versions
 - NEVER remove existing ruff rules without explicit user approval
 - NEVER lower the coverage threshold (currently 80%)
 - After modifying dependencies, run `uv lock`, then `uv sync --all-groups --locked`

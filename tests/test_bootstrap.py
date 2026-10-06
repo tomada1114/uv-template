@@ -24,7 +24,7 @@ PLACEHOLDERS = (
     "you@example.com",
     "uv-template",
     "A short description of the project.",
-    "A short description of what this library does.",
+    "A short description of what this application does.",
 )
 SELF_DELETED = (
     "TEMPLATE.md",
@@ -129,7 +129,7 @@ def test_bootstrap_writes_the_description_everywhere(template_copy):
 
     _bootstrap_into(root, bootstrap, description="Widgets that never jam.")
 
-    for relative_path in ("pyproject.toml", "mkdocs.yml", "README.md"):
+    for relative_path in ("pyproject.toml", "README.md"):
         text = (root / relative_path).read_text(encoding="utf-8")
         assert "Widgets that never jam." in text, relative_path
 
@@ -143,7 +143,7 @@ def test_bootstrap_uses_a_separate_github_repository_name(template_copy):
     pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
     assert "github.com/ada/widgets-library" in readme
     assert "github.com/ada/widgets-library" in pyproject
-    assert "pypi.org/project/acme-widgets" in readme
+    assert readme.startswith("# acme-widgets\n")
 
 
 def test_bootstrap_does_not_rewrite_new_values_as_old_placeholders(template_copy):
@@ -159,7 +159,7 @@ def test_bootstrap_does_not_rewrite_new_values_as_old_placeholders(template_copy
     project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
     assert project["project"]["name"] == "uv-template-lib"
     readme = (root / "README.md").read_text(encoding="utf-8")
-    assert "pypi.org/project/uv-template-lib" in readme
+    assert readme.startswith("# uv-template-lib\n")
     assert "github.com/ada/library" in readme
 
 
@@ -178,9 +178,6 @@ def test_bootstrap_escapes_metadata_values_for_project_files(template_copy):
         {"name": 'Ada "The Enchantress" Lovelace', "email": "ada@example.com"}
     ]
     assert project["project"]["description"] == 'Widgets "that" never jam.'
-
-    mkdocs = (root / "mkdocs.yml").read_text(encoding="utf-8")
-    assert 'site_description: "Widgets \\"that\\" never jam."' in mkdocs
 
 
 def test_bootstrap_renames_the_devcontainer(template_copy):
