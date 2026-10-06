@@ -10,6 +10,30 @@ It ships a framework-free core with two entry points over it: a FastAPI HTTP
 API and a Typer CLI (`my-app`). The sample domain is a to-do list — replace it
 with your own, and delete whichever entry point you do not need.
 
+## Product
+
+<!-- template-only -->
+In the template every entry below stays a `TODO:` on purpose: each repository cut
+from it writes its own, and `tests/test_product_section.py` fails here if one is
+filled in.
+<!-- /template-only -->
+
+This section is about the application rather than the harness: without it, an
+agent implementing an issue has no in-repo answer to "is this in scope?". The owner
+decides every entry; an agent drafts one only from what the owner has said. Once the
+bootstrap has run (`.template-origin` exists), `tests/test_product_section.py` — and
+so `just verify` — fails while a `TODO:` is left here.
+
+- **What it is, and who it is for** — TODO: one paragraph: the problem it solves,
+  and whose problem that is.
+- **The core interaction** — TODO: the one thing a user does most. If the app does
+  not do this well, nothing else about it matters.
+- **Non-goals** — TODO: what this app deliberately does not do, even where it would
+  be easy. Moving anything from here to a goal is a human's decision, not an
+  implementer's.
+- **Where these decisions are recorded** — TODO: `docs/product/requirements.md`,
+  and the ADRs under `docs/architecture/` for the choices made since.
+
 ## Quick Reference
 
 The recipes are grouped by who runs them: finite checks an agent runs to
@@ -157,6 +181,7 @@ some clones and makes Codex register a nested `references/SKILL.md` as a skill.
 | `recording-architecture-decisions` | a change owes an ADR, or an ADR under `docs/architecture/` is proposed, accepted, or superseded |
 | `shipping-issues` | shipping the next issue or the whole backlog: rank, implement, review, PR, CI, merge |
 | `smart-commit` | grouping working-tree changes into commits |
+| `starting-an-app` | turning this template into an app, or setting up a repository cut from it: the bootstrap, the Product section, labels, ruleset, security settings, removing the sample |
 | `steering-the-roadmap` | asked what to work on next, or the Now / Next / Later roadmap moves |
 | `triaging-issues` | filing, labelling, or prioritizing an issue, or recording a problem found outside the task |
 
