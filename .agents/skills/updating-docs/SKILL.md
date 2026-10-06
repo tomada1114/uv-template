@@ -3,8 +3,8 @@ name: updating-docs
 description: >
   Decides whether a change owes a documentation update and which surface it lands on:
   README.md (quickstart, CLI and HTTP tables, exit codes, configuration), CONTRIBUTING.md,
-  CHANGELOG.md's [Unreleased] entry, AGENTS.md, a skill, docs/architecture/, TEMPLATE.md,
-  or a docstring - plus what belongs in prose, GitHub Markdown alerts, and examples that
+  CHANGELOG.md's [Unreleased] entry, AGENTS.md, a skill, docs/architecture/, or a
+  docstring - plus what belongs in prose, GitHub Markdown alerts, and examples that
   must work with the current code. Use when deciding whether a pull request needs a
   document changed, when one change must move two files at once, or when a command,
   setting, or behavior a document describes changed.
@@ -26,8 +26,8 @@ began in. A command, an HTTP route, a status code, an exit code, a `MY_APP_*` se
 test-only change needs no documentation change — say so in the pull request rather than
 leaving the reader to guess. Deciding that nothing is owed is a legitimate outcome.
 
-Create no new documentation file unless the request asks for one; extend the surface
-that already owns the topic.
+A documentation file nobody asked for is never created (AGENTS.md's "Overview"); extend
+the surface that already owns the topic.
 
 ## Purpose per file
 
@@ -41,8 +41,12 @@ Each surface has one job; do not let one grow a second copy of another's content
 | `AGENTS.md` | What every agent task needs: the quick reference, the "Validating a change" table, the architecture, the Skills table, the approval rules, the enforcement layers | One of those facts changes |
 | `.agents/skills/<name>/` | One kind of change's conventions, loaded on demand | Those conventions change (`authoring-skills`) |
 | `docs/architecture/` | ADRs and the roadmap | A decision owes an ADR, or the direction moves |
-| `TEMPLATE.md` | Why the template is built this way and how to bootstrap it; `scripts/bootstrap.py` deletes it | The template's design or bootstrap changes |
 | Docstrings | A function's contract and its why | The function changes (`writing-python`) |
+
+<!-- template-only -->
+In the template, `TEMPLATE.md` holds why the template is built this way; it changes with
+the template's design or its bootstrap, and `scripts/bootstrap.py` deletes it from an app.
+<!-- /template-only -->
 
 `README.md` links to `CONTRIBUTING.md` and `AGENTS.md` instead of repeating them, so it
 must not grow a second command index or a second rule list. A `CHANGELOG.md` entry says

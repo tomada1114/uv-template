@@ -34,11 +34,10 @@ Decide this before the test, because the layer decides which surface the test dr
 - **A decision** — a rule, a calculation, a state transition — goes in `core/`, tested
   by calling the service or model directly with the in-memory fake and `fixed_clock`.
   **REQUIRED:** `designing-core-logic`.
-- **A route** stays thin: parse, call a service, shape the response. A branch that
-  decides something moves down into the core, where its test needs no HTTP at all.
-  **REQUIRED:** `building-api-routes`.
-- **A command** is thin in the same way. **REQUIRED:** `designing-clis`.
-- **A storage detail** is an adapter, held to the shared contract suite.
+- **A route or a command** only translates between its protocol and a service; what
+  belongs in one, and what moves down into the core, is **REQUIRED:**
+  `building-api-routes` or `designing-clis`.
+- **A storage detail** is an adapter. **REQUIRED:** `designing-core-logic`.
 - **A repository script** under `scripts/` is tested through its `main()` and its public
   functions. **REQUIRED:** `writing-repo-scripts`.
 

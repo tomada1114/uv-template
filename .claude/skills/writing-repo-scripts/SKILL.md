@@ -2,7 +2,7 @@
 name: writing-repo-scripts
 description: >
   Covers the contract for a repository script under scripts/*.py (sync_agents,
-  sync_labels, apply_ruleset, check_staged, bootstrap): stdlib-only imports, the module
+  sync_labels, apply_ruleset, check_staged): stdlib-only imports, the module
   docstring with Usage, main(argv) returning an exit code, failures reported on stderr
   as ERR_<STAGE>_<KIND> with Expected and Next lines, a gh or git subprocess with a
   fixed argv, scripts that write to GitHub, and tests in tests/test_<script>.py that
@@ -41,14 +41,21 @@ a new dependency proposal first. **REQUIRED:** `managing-dependencies`.
 
 ## Shape
 
-- A module docstring that says what the script does, why, and a `Usage:` block with the
-  exact commands; add `Exit codes:` when there are more than two (`check_staged.py`).
-- `REPO_ROOT = Path(__file__).resolve().parents[1]`, and every default path built from
-  it, so the script works from any working directory.
-- `main(argv: list[str] | None = None, <path>: Path = <DEFAULT>) -> int`, parsing with
-  `argparse` and returning the exit code. The path parameter lets a test point the
-  script at a `tmp_path` copy instead of the real file (`apply_ruleset.main`'s
-  `ruleset_file`, `sync_agents.main`'s `root`).
+What the scripts share, read from `scripts/*.py`:
+
+- A module docstring that says what the script does and why, with the exact command
+  that runs it — a `Usage:` block in `sync_agents.py`, `sync_labels.py`,
+  `apply_ruleset.py`, and `check_staged.py`, which also lists its `Exit codes:`.
+- A script that reads repository files defines
+  `REPO_ROOT = Path(__file__).resolve().parents[1]` and builds its default paths from
+  it, so it works from any working directory. `check_staged.py` has none: it reads the
+  index through `git`.
+- `main(argv: ... | None = None) -> int`, parsing with `argparse` and returning the exit
+  code; `argv` is `list[str]`, or `Sequence[str]` in `check_staged.py`.
+- A file a test must swap is a keyword parameter of `main` with the real path as its
+  default — `apply_ruleset.main`'s `ruleset_file`, `sync_labels.main`'s `labels_file`,
+  `sync_agents.main`'s `root` — so the test passes a `tmp_path` copy. Where a script has
+  no such parameter, its test drives a real `git` repository under `tmp_path` instead.
 - The file ends with an `if __name__ == "__main__":` guard that exits with `main()`'s
   return code, so importing it for a test runs nothing.
 - Errors the script raises itself are its own exception classes
@@ -78,10 +85,10 @@ Next: fix <repo>/.github/rulesets/main.json and rerun `just ruleset`
 
 ## Subprocesses
 
-`gh` and `git` run through `subprocess.run` with a fixed argv list, never `shell=True`.
-The `noqa` carries its reason: `# noqa: S603 -- fixed argv, no shell`. A script checks
-the return code itself and reports a failure through the contract above rather than
-letting `CalledProcessError` print a traceback.
+`gh` and `git` run through `subprocess.run` with the fixed argv and justified `noqa`
+`writing-python`'s "Security" asks for. A script checks the return code itself and
+reports a failure through the contract above rather than letting `CalledProcessError`
+print a traceback.
 
 ## A script that writes to GitHub
 

@@ -38,11 +38,14 @@ a script's tests (`writing-repo-scripts`).
   Wanting to reach a private helper means the module is the wrong shape, not that the
   test needs an exception.
 - Cover the happy path **and** the error path of every public function.
-- Each entry point has one seam, and its skill owns the mechanics. **REQUIRED** for the
-  matching case: `building-api-routes` ("Testing a route": the `client` fixture),
-  `designing-clis` ("Testing a command": `CliRunner` with `obj=` a container), and
-  `designing-core-logic` (the one repository contract suite, the in-memory fake, and
-  containers built through the composition root rather than wired by hand).
+- Each entry point has one seam, and its skill owns the mechanics:
+  - a route — **REQUIRED:** `building-api-routes` ("Testing a route": the `client`
+    fixture);
+  - a command — **REQUIRED:** `designing-clis` ("Testing a command": `CliRunner` with
+    `obj=` a container);
+  - a service, a port, or an adapter — **REQUIRED:** `designing-core-logic` (the one
+    repository contract suite, the in-memory fake, and containers built through the
+    composition root rather than wired by hand).
 
 ## Expected values come from outside the code
 

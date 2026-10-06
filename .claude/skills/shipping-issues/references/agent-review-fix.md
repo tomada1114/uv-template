@@ -28,7 +28,8 @@ matters`. Findings I rejected are not listed here and must not be inferred.}
 </findings>
 
 Project conventions: read {workdir}/AGENTS.md (and the host's own instruction
-file, if any) before changing anything.
+file, if any) before changing anything, and load the skills its Skills table
+names for tests, commits, and the areas the findings touch.
 Verification command: {verify_command}
 
 Do:

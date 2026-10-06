@@ -36,9 +36,9 @@ them, and which coverage floor governs them. **Does not own:** how a test is wri
 Three files hold a rule for a whole layer rather than one module, and grow by a new case
 rather than by a new file:
 
-- `tests/adapters/test_repository_contract.py` — every repository adapter runs this one
-  contract suite. A new adapter adds a `pytest.param`; only what one adapter alone does
-  goes in `tests/adapters/test_<adapter>.py`. **REQUIRED:** `designing-core-logic`.
+- `tests/adapters/test_repository_contract.py` — the one contract suite every
+  repository adapter runs; how an adapter joins it, and what goes in its own file
+  instead. **REQUIRED:** `designing-core-logic`.
 - `tests/core/test_imports.py` — the core's import boundary. **BACKGROUND:**
   `designing-core-logic`.
 - `tests/core/test_errors.py` — every `AppError` subclass joins its parametrized tests.
@@ -82,9 +82,10 @@ is given the average recorded duration (observed in pytest-split 0.11.0's
   `--cov-fail-under=80`, and CI's `Coverage` job with `coverage report --fail-under=80`
   after combining the shards. Neither `scripts/` nor `tests/` is measured, so a script's
   tests guard behavior but move no number.
-- **A floor, not a ceiling.** It is never lowered, and no line leaves the measurement to
-  move the number — AGENTS.md's "Security and human approval" holds that prohibition.
-  `changing-gates` lists what counts as moving it.
+- **A floor, not a ceiling.** It is never lowered (AGENTS.md's "Security and human
+  approval"), and no line leaves the measurement to move the number — a
+  `# pragma: no cover`, an `omit`, or an `exclude_lines` entry is a weakened gate, as
+  `changing-gates`' "What weakening a gate means here" lists.
 - **Branch coverage matters more than line coverage.** Cover both sides of a
   conditional; a test that only adds a line hit is not the fix.
 - **Missing coverage asks "is this reachable?"** If no input reaches the branch, delete

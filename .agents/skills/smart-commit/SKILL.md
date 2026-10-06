@@ -42,9 +42,8 @@ git diff --cached --stat
   requires a pull request into `main`.
 - **Detached HEAD:** stop and ask; a commit there belongs to no branch.
 - **A merge, rebase, or cherry-pick in progress:** read "When the hooks run" in
-  [references/pre-commit-hook.md](references/pre-commit-hook.md) first. At a rebase
-  stop, commit the resolution with `git commit` before `git rebase --continue`:
-  `--continue` alone commits it through no hook at all.
+  [references/pre-commit-hook.md](references/pre-commit-hook.md) first, then commit a
+  rebase resolution with `git commit` before `git rebase --continue`.
 - **Something already staged** that you did not stage: it is the requester's. Ask before
   folding it into a group or unstaging it.
 

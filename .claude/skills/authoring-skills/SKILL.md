@@ -30,8 +30,9 @@ document a change owes (`updating-docs`).
 - Drift between the two trees fails `just agents-check` (part of `just verify`),
   `tests/test_sync_agents.py`, the `agents-check` pre-commit hook, and CI's
   `Lint & Type Check` job — all compare the trees byte for byte, not just spot-check
-  `name`. The pre-commit hook judges the working tree, so a commit that stages only one
-  of the two trees still passes there; `just verify` and CI judge the commit.
+  `name`. The pre-commit hook and `just agents-check` judge the working tree, so a
+  commit that stages only one of the two trees still passes there; they match the
+  commit only when the tree is clean. CI judges the commit.
 
 ## Layout
 

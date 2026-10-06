@@ -1,13 +1,13 @@
 ---
 name: changing-gates
 description: >
-  Covers editing a file that enforces rather than implements: .pre-commit-config.yaml,
+  Covers changing a file that enforces rather than implements: .pre-commit-config.yaml,
   scripts/check_staged.py, a .github/workflows/*.yml job, .github/rulesets/main.json,
-  the justfile's verify, lint, and test recipes, typos.toml, and pyproject.toml's
-  [tool.ruff], [tool.mypy], [tool.pytest.ini_options], and [tool.coverage] tables - and
-  what weakening a gate means here (a removed ruff rule, a noqa or type ignore without a
-  reason, a lower coverage floor, a skipped test, a dropped CI step). Use when adding or
-  loosening a check, renaming a required CI job, or a hook refuses intended work.
+  the justfile's verify, lint, and test recipes, typos.toml, and pyproject.toml's ruff,
+  mypy, pytest, and coverage tables - and what weakening a gate means here (a removed
+  ruff rule, a noqa without a reason, a lower coverage floor, a skipped test, a dropped
+  CI step). Use when changing hook configuration, a lint, type, or coverage setting, or
+  a CI job or required check. A hook refusing a commit is smart-commit's.
 ---
 
 # Changing Gates
@@ -62,7 +62,7 @@ AGENTS.md's "Enforcement layers" names the layers. Keeping them in step is this 
 |---|---|---|---|
 | ruff check, ruff format | `ruff`, `ruff-format` | `lint` | `Lint & Type Check` |
 | mypy `src scripts tests` | `mypy` | `lint` | `Lint & Type Check` |
-| Skills mirror | `agents-check` (working tree) | `agents-check` (commit) | `Lint & Type Check` |
+| Skills mirror | `agents-check` (working tree) | `agents-check` (working tree) | `Lint & Type Check` (the commit) |
 | Skill script tests | — | `test-skills` | `Lint & Type Check` |
 | `uv lock --check` | — | `lock-check` | `--locked` on every `uv sync` |
 | Tests and the 80% floor | — | `test` | `Test` shards, then `Coverage` |
@@ -134,7 +134,8 @@ Read the current values in the file rather than a copy here. Traps that have cos
   skill's frontmatter parses (`authoring-skills`) or AGENTS.md's Skills table matches
   the directories. Check these by hand.
 - A staged deletion: `check-staged` never inspects one, by design.
-- Commits git makes itself — rebase replays, cherry-picks, reverts — which run no hook.
+- Commits that run no hook at all ([references/pre-commit-layer.md](references/pre-commit-layer.md)
+  › "When the hooks run, and when they do not").
 
 A gate proposed to close one of these gaps is a real gate, argued for in its own pull
 request.

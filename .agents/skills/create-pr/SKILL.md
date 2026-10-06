@@ -58,8 +58,9 @@ file, so a pass proves the *committed* tree is green — `just check` runs `fmt`
 proves nothing about what was committed.
 
 - **Any failure stops the PR.** Fix it on the branch, or report it. A formatting failure
-  is fixed with `just fmt` and a commit, then the gate runs again. Never weaken a gate
-  to make the run pass (AGENTS.md's "Security and human approval").
+  is fixed with `just fmt`; committing that fix needs the sign-off step 1 names (this
+  skill never commits), then the gate runs again. Never weaken a gate to make the run
+  pass (AGENTS.md's "Security and human approval").
 - **Then `git status --short` again.** Anything that changed means the branch differs
   from what was just judged: commit it (with the sign-off step 1 names) and run the gate
   again.
@@ -83,7 +84,7 @@ Each row feeds a checklist item or the Summary:
 |---|---|
 | A new package in `pyproject.toml` | Stop unless the owner already signed off on that package; then put the review record in the body. **BACKGROUND:** `managing-dependencies`. |
 | A weakened gate (`changing-gates`' list: a removed ruff rule, a `noqa` without a reason, a skipped test, …) | Stop. The PR waits until a human decides; it is not opened with the problem in it. |
-| New behavior without a test that covers it | Stop and add the test. **BACKGROUND:** `tdd`. |
+| New behavior without a test that covers it | Stop and add the test. **REQUIRED:** `tdd`. |
 | A new public function without type annotations or a docstring that says why | Add them. **BACKGROUND:** `writing-python`. |
 | A command, route, status, exit code, or `MY_APP_*` setting a user observes changed | The README and a `CHANGELOG.md` entry change on this branch. **REQUIRED:** `updating-docs` decides what is owed. |
 | A removed or changed public behavior | A breaking change: call it out in the Summary, in one line a user can act on, and mark the title with `!`. |

@@ -79,10 +79,11 @@ just verify
 published after the given timestamp, so a dependency cannot be resolved until it has
 survived in the wild for a while.
 
-It is also why Python dependencies are updated **by hand**, not by Dependabot:
-`.github/dependabot.yml` covers GitHub Actions only. Dependencies here live in PEP 735
-`[dependency-groups]` plus `uv.lock`, which Dependabot's `pip` ecosystem does not
-manage, and a bump it proposed could not resolve past the cutoff anyway.
+This repository updates Python dependencies **by hand**, under that cooldown, and
+`.github/dependabot.yml` covers GitHub Actions only — a bot bump younger than the cutoff
+would not resolve here anyway. Whether Dependabot's `uv` ecosystem, with a cooldown of
+its own, should take this over is an open question tracked in issue #92; until it is
+decided, the procedure below is the only update path.
 
 **The update procedure** — run it before every release, and at least monthly even if no
 dependency changed, so the cutoff does not drift too far behind:
@@ -92,8 +93,10 @@ dependency changed, so the cutoff does not drift too far behind:
 3. Run `just check`, then `just verify`.
 4. Commit `pyproject.toml` and `uv.lock` together, in one commit of their own.
 
+<!-- template-only -->
 `scripts/bootstrap.py` sets the cutoff to today minus 14 days in a new project, so the
 procedure starts from there.
+<!-- /template-only -->
 
 ### An exception for one package
 

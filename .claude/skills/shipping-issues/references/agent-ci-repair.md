@@ -32,7 +32,8 @@ the GitHub API otherwise, do not watch CI, do not sleep or poll.
 Base branch: {base_branch}
 Verification command: {verify_command, from step 3's smoke run}
 Project conventions: read {workdir}/AGENTS.md (and the host's own instruction
-file, if any) before changing anything.
+file, if any) before changing anything, and load the skills its Skills table
+names for tests, commits, gates, and the area the failure is in.
 
 The failing output is in:
   {log_path}

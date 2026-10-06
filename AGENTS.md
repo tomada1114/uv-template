@@ -13,7 +13,8 @@ Every task here:
 - Write everything — code, docs, commits, pull requests — in English.
 - Do what has been asked; nothing more, nothing less. Note an improvement
   outside the current scope instead of making it (`triaging-issues`).
-- Never create a file unless it is necessary; prefer editing an existing one.
+- Create no file unless it is absolutely necessary, and no documentation file
+  unless asked; prefer editing an existing one.
 
 ## Product
 
@@ -187,8 +188,9 @@ model is inherited. `tests/test_agent_tiers.py` holds their instructions equal.
 
 - **Commit, push, and pull request need a human's sign-off** — given per
   request, or by one of the [standing exceptions](#standing-exceptions) below.
-  Nothing in the repository blocks a force-push or `gh pr merge --admin`; this
-  instruction is the rule itself.
+  The ruleset blocks a force-push to or deletion of `main` only once a human has
+  applied it with `just ruleset`; nothing else blocks a force-push or
+  `gh pr merge --admin`, so this instruction is the rule itself.
 - Never bypass a git hook — no `--no-verify`, no `SKIP=<hook id>`, no edit to
   `.git/hooks/`. `--no-verify` switches off the secret gate of the
   [enforcement layers](#enforcement-layers) along with everything else.
@@ -233,14 +235,11 @@ Each layer catches what the one before it cannot; `changing-gates` owns them.
 |---|---|---|
 | Git hooks (pre-commit, `.pre-commit-config.yaml`) | Every `git commit` by any author — a human, Claude Code, Codex CLI, any tool; `check-staged` also on merge commits | No staged secret (`check-staged`), no commit on `main` (`no-commit-to-branch`), ruff, ruff-format, mypy, typos, zizmor, the skills mirror |
 | `just verify` | Before a pull request or a completion claim | A current `uv.lock`, the skills mirror, ruff, mypy, the skill script tests, the test suite and its 80% branch-coverage floor |
-| CI (`.github/workflows/`) | Every pull request and push to `main` | The `just verify` checks plus typos and zizmor; CodeQL, Dependency Review, OSV-Scanner; the PR title; a weekly gitleaks scan of the whole history |
+| CI (`.github/workflows/`) | Every pull request and push to `main`, unless noted | The `just verify` checks, typos, zizmor, and CodeQL; the PR title and Dependency Review (pull requests only); OSV-Scanner (when `uv.lock` changes, and weekly); gitleaks over the whole history (weekly) |
 | GitHub ruleset (`.github/rulesets/main.json`) | Every change to `main` | Every change arrives by a branch and a pull request, with the required checks green; no force-push, no deletion |
 
-- The git hooks are the only guard for every author, so `just install` installs
-  both (`pre-commit`, `pre-merge-commit`) and fails when one is missing. Every
-  worktree shares the main checkout's `.git/hooks/`: run it from the main checkout.
-- Commits git makes itself — rebase replays, cherry-picks, reverts — run no
-  hook; the weekly gitleaks scan is their backstop.
+- How `just install` installs the hooks, and which commits run none:
+  `changing-gates`' `references/pre-commit-layer.md`.
 - No agent-specific hook, permission rule, model choice, or plugin marketplace
   is committed: one person's trust would bind every repository made from this
   template. Keep them in `~/.claude/settings.json`, `~/.codex/config.toml`, or

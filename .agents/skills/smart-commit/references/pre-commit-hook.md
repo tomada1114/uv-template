@@ -27,9 +27,9 @@ only what each refusal means and how to clear it without switching the hook off.
   hand-changed files (observed in pre-commit 4.6.0's `git.get_conflicted_files`,
   2026-10-06), while `check-staged` reads the whole index itself. Only `check-staged`
   runs on a clean merge, through git's `pre-merge-commit` hook.
-- Commits git makes itself run no hook: `git rebase`'s replays (including after
-  `git rebase --continue`), `git cherry-pick`, and `git revert`. Commit a rebase
-  resolution with `git commit` first, so the hooks judge it.
+- Some commits git makes itself run no hook at all — `changing-gates`'
+  `references/pre-commit-layer.md` lists them. `git rebase --continue` is one, so
+  commit a rebase resolution with `git commit` first, so the hooks judge it.
 
 ## Recovery, one row per hook
 

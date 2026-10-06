@@ -31,6 +31,7 @@ is not an ADR and takes no status: when an ADR moves a boundary it describes, th
 records why and the "Architecture" section is updated to describe the result, in the
 same pull request.
 
+<!-- template-only -->
 ## The template or a project
 
 The template repository ships the index empty, on purpose. Its own reasoning lives in
@@ -40,6 +41,7 @@ The template repository ships the index empty, on purpose. Its own reasoning liv
   hits a trigger below updates `TEMPLATE.md`'s "Design Philosophy", not the tree. Never
   seed the template's index with an ADR.
 - In a project, the same change owes an ADR.
+<!-- /template-only -->
 
 ## When a change owes an ADR
 

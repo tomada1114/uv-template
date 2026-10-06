@@ -115,13 +115,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `AGENTS.md` keeps only what every task needs — Overview, Product, Quick
-  Reference, Validating a change, Architecture, Skills, Sub-agents, Security and
-  human approval, Enforcement layers — and its conventions and procedures moved
-  into skills; the GitHub settings a new repository enables moved to
-  `starting-an-app`'s `references/github-settings.md`. `tests/AGENTS.md` is gone. `create-pr` and `smart-commit` are
-  refreshed from the sibling templates: frontmatter is `name` and
-  `description` only, and smart-commit carries a recovery table for each
-  pre-commit hook
+  Reference, Validating a change, Architecture, Skills, Sub-agents, Security
+  and human approval, Enforcement layers — and its conventions and
+  procedures moved into skills; the GitHub settings a new repository enables
+  moved to `starting-an-app`'s `references/github-settings.md`.
+  `tests/AGENTS.md` is gone. `create-pr` and `smart-commit` are refreshed
+  from the sibling templates: frontmatter is `name` and `description` only,
+  and smart-commit carries a recovery table for each pre-commit hook
 - **Breaking:** `scripts/bootstrap.py` is rebuilt for the application template.
   It replaces `my-app`, `my_app`, `My App` (the new display-name placeholder),
   `MY_APP_`, `your-username/uv-template`, and `Your Name`; validates every value
