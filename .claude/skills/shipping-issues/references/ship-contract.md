@@ -27,6 +27,10 @@ which is why `file_followup.py` writes a contract on everything this run files.
 | `area=`                   | `file_followup.py`, labels                   | The area label a follow-up inherits.                                                                     |
 | `design=`                 | the readiness gate                           | `design=open` holds the issue out of automatic implementation exactly as a `blocked: design` label does. |
 
+An empty `blocked-by=` reads as none; an empty `tier=` or `touches=` counts as missing.
+A value may not itself start like `key=` (`touches=a=b.py` does not parse), and an
+empty field never swallows the field after it.
+
 `touches=` is the load-bearing one. Without it, deciding whether two issues can run in
 parallel worktrees is a judgement about which files they _might_ collide on. With it,
 the decision is a set intersection — which is why `plan.py` reports

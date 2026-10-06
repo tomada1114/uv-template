@@ -237,7 +237,8 @@ def settle_contract_design(body: str) -> str | None:
         return None
 
     def settle_field(field: re.Match[str]) -> str:
-        if field.group(1).lower() != "design" or field.group(2).lower() != "open":
+        value = field.group(2) or ""
+        if field.group(1).lower() != "design" or value.lower() != "open":
             return field.group(0)
         return field.group(0)[: field.start(2) - field.start(0)] + "settled"
 
