@@ -42,7 +42,7 @@ just smoke
 # Mutating development check (format → lint → test)
 just check
 
-# Non-mutating PR/completion gate (lock check + lint + docs + distribution smoke + test)
+# Non-mutating PR/completion gate (lock check + skills mirror + lint + skill tests + docs + distribution smoke + test)
 just verify
 ```
 

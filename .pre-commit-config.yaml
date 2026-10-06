@@ -35,6 +35,14 @@ repos:
 
   - repo: local
     hooks:
+      # Judges the working tree, so a commit that stages only one of the two
+      # skills trees still passes here; CI and `just verify` judge the commit.
+      - id: agents-check
+        name: skills mirror matches .agents/skills
+        entry: uv run --locked python scripts/sync_agents.py --check
+        language: system
+        files: ^\.(agents|claude)/skills/
+        pass_filenames: false
       - id: mypy
         name: mypy
         entry: uv run --locked mypy src scripts tests

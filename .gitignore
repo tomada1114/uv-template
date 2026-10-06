@@ -35,9 +35,13 @@ site/
 *.swo
 *~
 
-# Claude Code
+# Claude Code: personal settings and agent worktrees stay local
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+.claude/worktrees/
+
+# Codex CLI: personal project rules stay local; the rest of .codex/ is shared
+/.codex/rules/local.rules
 
 # Environment variables
 .env

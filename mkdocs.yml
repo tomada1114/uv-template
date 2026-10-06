@@ -4,6 +4,10 @@ site_url: https://your-username.github.io/uv-template
 repo_url: https://github.com/your-username/uv-template
 repo_name: your-username/uv-template
 edit_uri: edit/main/docs/
+# docs/architecture/ (ADRs and the roadmap) is read in the repository, not
+# published: its ADR template links placeholder files a strict build rejects.
+exclude_docs: |
+  architecture/
 
 theme:
   name: material

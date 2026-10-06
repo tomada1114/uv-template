@@ -18,11 +18,15 @@ just test-durations  # Regenerate the pytest-split duration file used by CI shar
 just smoke           # Build and verify wheel and sdist in temp environments
 just check           # Mutating dev check: fmt → lint → test
 just lock            # Update uv.lock after dependency changes
-just verify          # Non-mutating gate: lock-check → lint → docs → smoke → test
+just verify          # Non-mutating gate: lock-check → agents-check → lint → test-skills → docs → smoke → test
+just test-skills     # Run the unittest suites bundled under .agents/skills/*/scripts/tests
 just docs            # Serve docs locally
 just docs-check      # Build docs and fail on warnings
 just build           # Build distribution packages
 just worktree-clean  # Remove agent worktrees under .claude/worktrees with a merged PR
+just agents-sync     # Regenerate the .claude/skills mirror from .agents/skills
+just agents-check    # Fail when the skills mirror has drifted
+just labels          # Create/update GitHub labels from .github/labels.yml (writes to GitHub; ask first)
 just clean           # Remove build artifacts and caches
 ```
 
@@ -33,6 +37,24 @@ in the `justfile`. Run a single test with
 `just check` mutates the tree (it runs `fmt` first), so it never proves the
 *committed* tree is green. `just verify` does not mutate anything — it is the
 gate for a PR or a completion claim.
+
+## Validating a change
+
+Run the narrowest check that can fail while iterating, then `just verify` before
+a completion claim. `just verify` on every edit is slow enough that it stops
+being run at all.
+
+| What you changed | The narrowest check that can fail |
+|---|---|
+| A module under `src/` | `uv run --locked pytest tests/test_<module>.py` |
+| One test | `uv run --locked pytest tests/test_<module>.py::test_<name>` |
+| Any Python file's lint or types | `uv run --locked ruff check <file>`, then `uv run --locked mypy src scripts tests` |
+| A script under `scripts/` | `uv run --locked pytest tests/test_<script>.py` |
+| A skill under `.agents/skills/` | `just agents-sync && just agents-check && just test-skills` |
+| Dependencies in `pyproject.toml` | `uv lock`, `uv sync --all-groups --locked`, then `just verify` |
+| `docs/` or `mkdocs.yml` | `just docs-check` |
+| A workflow under `.github/workflows/` | `uv run --locked pre-commit run zizmor --all-files` |
+| Markdown or other prose | `uv run --locked pre-commit run typos --files <file>` |
 
 ## Architecture
 
@@ -56,6 +78,60 @@ src/my_package/
 | Current public API shape | `src/my_package/__init__.py` `__all__` and public signatures |
 | Current execution status | Git, fresh test output, and CI — never prose or test counts in a prompt |
 
+## Skills
+
+Skills are authored under `.agents/skills/` — the path Codex CLI reads — and
+mirrored byte for byte into `.claude/skills/`, the only path Claude Code reads.
+Edit `.agents/skills/` only, then run `just agents-sync` and commit both trees;
+drift fails `just agents-check`, `tests/test_sync_agents.py`, the pre-commit
+hook, and CI. Both copies are real files, never symlinks: a symlink breaks on
+some clones and makes Codex register a nested `references/SKILL.md` as a skill.
+
+| Skill | Load it when |
+|---|---|
+| `authoring-skills` | adding, editing, or reviewing a skill under `.agents/skills/`, or a skill never fires |
+| `create-pr` | opening or updating a pull request |
+| `merging-dependency-prs` | landing open Dependabot pull requests (GitHub Actions bumps) |
+| `recording-architecture-decisions` | a change owes an ADR, or an ADR under `docs/architecture/` is proposed, accepted, or superseded |
+| `release-workflow` | cutting a release |
+| `shipping-issues` | shipping the next issue or the whole backlog: rank, implement, review, PR, CI, merge |
+| `smart-commit` | grouping working-tree changes into commits |
+| `steering-the-roadmap` | asked what to work on next, or the Now / Next / Later roadmap moves |
+| `triaging-issues` | filing, labelling, or prioritizing an issue, or recording a problem found outside the task |
+
+## Sub-agents
+
+A skill runs every step inline by default. On a host that can hand a step to a
+named sub-agent, a step marked for a tier may go to one of three:
+
+| Tier | Effort | Takes |
+|---|---|---|
+| `executor` | low | a settled spec with a clear pass/fail: implementing it, adding tests, getting a check green, bulk edits, research that only collects |
+| `architect` | high | design judgment, review and bug finding, multi-file work, synthesis, a spec that still has holes |
+| `worker` | medium | single-shot, tool-free writing or checking from a complete brief |
+
+Each tier is defined once per host, and both hosts describe the same three:
+`.claude/agents/<tier>.md` for Claude Code pins a model alias (`opus` for
+`executor` and `architect`, `sonnet` for `worker` — never a dated model ID) and
+an `effort`; `.codex/agents/<tier>.toml` for Codex CLI sets only
+`model_reasoning_effort` and omits `model`, so the session's model is
+inherited. The instructions are the same text in both files, and
+`tests/test_agent_tiers.py` holds the two directories to that.
+
+- Neither file declares a permission — no `sandbox_mode`, no tool list.
+- Codex CLI loads `.codex/` only for a trusted project; in an untrusted
+  checkout a step marked for a tier runs inline.
+- Codex CLI ships a built-in `worker`; `.codex/agents/worker.toml` replaces it
+  inside this repository on purpose.
+
+## Personal settings
+
+No permission rule, model choice, or plugin marketplace is committed. Keep them
+in your own `~/.claude/settings.json` / `~/.codex/config.toml`, or in the
+gitignored `.claude/settings.local.json` and `.codex/rules/local.rules`. A
+committed allowlist would force one person's trust decisions on every
+repository created from this template.
+
 ## Review Checklist
 
 Before submitting a PR:
@@ -73,6 +149,47 @@ Before submitting a PR:
   the same logical commit.
 - Run `just verify` before a completion claim, on any code change.
 
+## Security and human approval
+
+- **Commit, push, and pull request need a human's sign-off** — given per
+  request, or by one of the [standing exceptions](#standing-exceptions) below.
+  The `guard.py` hook (see "Agent hooks") blocks the most dangerous spellings,
+  but its inspection is best-effort; this instruction is the rule itself.
+- Never weaken a gate to make a run pass: no lowered coverage threshold, no
+  removed ruff rule, no `noqa`, `type: ignore`, or per-file ignore without a
+  written reason, no skipped or deleted test, no removed `--locked`. If a gate
+  is wrong, say so and let a human decide.
+- When a command is denied — by a permission setting, a hook, or a human —
+  re-spelling it (`bash -c '…'`, an alias, a wrapper script) is forbidden. Stop
+  and ask.
+
+### Standing exceptions
+
+Invoking a skill that lists the commits or remote writes it makes is the
+sign-off for exactly those, for that invocation only:
+
+- `shipping-issues`: the writes its `SKILL.md` lists — priority and status
+  labels, syncing label definitions from `.github/labels.yml` with
+  `just labels`, pushing its own branches, creating the pull request, merging
+  it once CI passes, filing and labelling follow-up issues and the comments it
+  posts, and deleting the branches it created.
+- `create-pr`: pushing the current branch, `gh pr create` for it, and
+  `gh pr edit` on its own open pull request — never a force-push and never a
+  merge.
+- `smart-commit`: the commits it makes on the current branch, and pushing that
+  branch only when the request asked for a push — never a force-push and never
+  `main`.
+
+One request is a standing exception too: the owner explicitly asking for an
+issue ("file an issue for this") is the sign-off for the `gh issue create` of
+each issue that request asks for, with the labels `triaging-issues` gives it.
+An issue the agent would file from a friction it noticed on its own is drafted
+in the reply and waits for a yes.
+
+None of them covers a force-push or other history rewrite, `--no-verify` or
+any other hook bypass, weakening a gate, or adding a dependency — a new
+dependency is proposed and the agent stops for sign-off.
+
 ## Conventions: tests/**/*.py
 
 - Mirror the source layout with `tests/test_<module>.py`; use descriptive names such as `test_<what>_<scenario>_<expected_result>`.
@@ -88,6 +205,7 @@ Before submitting a PR:
 
 - All code, docs, commits, and PRs must be written in English
 - Do what has been asked; nothing more, nothing less
+- Note improvements you spot outside the current scope instead of making them (`triaging-issues` says how)
 - NEVER create files unless absolutely necessary
 - ALWAYS prefer editing an existing file to creating a new one
 - NEVER proactively create documentation files unless explicitly requested
@@ -185,7 +303,7 @@ Do not optimize preemptively; profile measured hotspots and note the measurement
 
 The project hook configuration runs the scripts in `.agents/hooks/` for tool
 calls made in this repository. The wiring files are `.claude/settings.json`
-and `.codex/hooks.json`.
+(which holds nothing but this wiring) and `.codex/hooks.json`.
 
 - `guard.py` (PreToolUse) blocks writes to `uv.lock`, `.env*`, and `secrets/**`,
   plus `git commit --no-verify`, plain force-pushes, and `gh pr merge --admin`.
