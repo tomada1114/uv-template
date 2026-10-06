@@ -69,11 +69,10 @@ On success, the following checklist items are verified:
 
 Analyze `git diff main..HEAD` to determine:
 
-**Public API changes:**
-- Check if `__init__.py`'s `__all__` was modified
-- Check if public function signatures changed
-- If changes found: verify README was updated
-  - If not updated: mark "Documentation updated" as unchecked and warn
+**User-facing changes:**
+- Check if a user-facing behavior, command, or setting changed
+- If so: verify README.md or `docs/` was updated
+  - If not updated: mark "Docs updated" as unchecked and warn
 
 **Breaking changes:**
 - Detect deleted public functions, changed arguments, changed return types
@@ -123,7 +122,7 @@ Fill each item based on verification results from Steps 2-3:
 | Item | Criteria |
 |------|----------|
 | `just verify` passes | Verified in Step 2 |
-| Docs updated | Required only when the public API changed. No change = checked |
+| Docs updated | Required only when a user-facing behavior, command, or setting changed. No change = checked |
 | Breaking changes called out | None, or described in the Summary = checked |
 
 **If any item is unchecked, abort PR creation** and report the issue.

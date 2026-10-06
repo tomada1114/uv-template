@@ -59,7 +59,6 @@ EXCLUDED_DIR_NAMES = {
     "venv",
     "dist",
     "build",
-    "site",
     "__pycache__",
     ".mypy_cache",
     ".ruff_cache",
@@ -439,9 +438,9 @@ def bootstrap(  # noqa: PLR0913
                 file_replacements[OLD_AUTHOR_NAME] = author
             if email:
                 file_replacements[OLD_AUTHOR_EMAIL] = email
-        if path != pyproject and description:
-            for old_description in OLD_DESCRIPTIONS:
-                file_replacements[old_description] = description
+            if description:
+                for old_description in OLD_DESCRIPTIONS:
+                    file_replacements[old_description] = description
         if file_replacements:
             _replace_placeholders_in_file(
                 path,

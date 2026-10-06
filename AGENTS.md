@@ -55,13 +55,13 @@ being run at all.
 
 ```
 src/my_package/
-├── __init__.py   # Package entry point — re-export what the rest of the app imports
+├── __init__.py   # Package root — keep it thin
 └── core.py       # Placeholder module — replace and re-export via __init__.py
 ```
 
 - Internal modules can use a leading underscore (`_internal.py`)
 - Separate concerns: one module per logical unit
-- Update README examples whenever you change what they show
+- Update README.md when a command, setting, or behavior it documents changes
 
 ## Sources of Truth
 
@@ -212,7 +212,7 @@ dependency is proposed and the agent stops for sign-off.
 ## Conventions: pyproject.toml
 
 - Runtime dependencies go under `[project] dependencies`
-- Dev dependencies go under `[dependency-groups] dev`; docs under `[dependency-groups] docs`
+- Dev dependencies go under `[dependency-groups] dev`
 - Before adding a dependency: verify active maintenance, compatible license (MIT/BSD/Apache), and minimal transitive dependencies
 - Use version ranges (`>=X.Y`) for runtime dependencies in `pyproject.toml`; `uv.lock` pins the exact versions
 - NEVER remove existing ruff rules without explicit user approval
