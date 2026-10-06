@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `scripts/check_staged.py`, a pre-commit hook (`check-staged`) that refuses
+  a commit staging a secret-shaped path (`.env*` except `.env.example`,
+  `.envrc*`, `secrets/**`, `*.pem`, `*.key`, `id_rsa*`, personal agent
+  settings) or credential-shaped content, read from the index; it also runs on
+  merge commits (`pre-merge-commit`) and at rebase stops. `just install` now
+  fails when the git hooks are missing (opt-out: `ALLOW_MISSING_GIT_HOOKS=1`;
+  skipped in CI)
 - A safer bootstrap flow with validated package/repository names, collision
   checks, syntax-safe metadata quoting, and protection against rewriting
   untracked, symlinked, or secret files after a Git failure
@@ -66,6 +73,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- The agent hooks under `.agents/hooks/` (`guard.py`, `format.py`,
+  `stop_check.py`, `hook_payload.py`) and their wiring in
+  `.claude/settings.json` and `.codex/hooks.json`; the guard rails now run as
+  git hooks for every author, and `AGENTS.md` maps each former behavior to its
+  replacement
 - The empty `tests/conftest.py` — nothing needed it
 - `docs/getting-started.md`, and the hand-maintained copy of the README in
   `docs/index.md`. The docs home page now includes `README.md` via

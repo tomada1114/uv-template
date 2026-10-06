@@ -51,7 +51,7 @@ jump to `1.0.0` without the user explicitly asking for it.
 ## Step 3: Prepare the Release Branch
 
 Never commit directly on `main` (`no-commit-to-branch` blocks it, and
-`--no-verify` is blocked by `.agents/hooks/guard.py`).
+`--no-verify` is never an option: it also switches off the secret gate).
 
 ```bash
 git checkout -b chore/release-vX.Y.Z

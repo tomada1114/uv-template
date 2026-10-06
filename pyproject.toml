@@ -65,15 +65,13 @@ src = ["src", "tests", "scripts"]
 # The generated skills mirror is linted through its source, .agents/skills.
 extend-exclude = [".claude/skills"]
 
-# Agent hook scripts declare their own `requires-python = ">=3.12"` (PEP 723)
-# and run via `uv run --script`, which may resolve an older interpreter than
-# the project's own 3.14 floor. Pin them below the project target-version so
-# neither the formatter nor version-specific lint rules introduce syntax
-# (e.g. PEP 758 unparenthesized `except`) that would be a SyntaxError there.
+# Skill scripts run under whatever `python3` the host provides, which may be
+# older than the project's own 3.14 floor. Pin them below the project
+# target-version so neither the formatter nor version-specific lint rules
+# introduce syntax (e.g. PEP 758 unparenthesized `except`) that would be a
+# SyntaxError there. `**` so a skill's bundled `scripts/tests/` is pinned too:
+# those tests import the scripts and run under the same interpreters.
 [tool.ruff.per-file-target-version]
-".agents/hooks/*.py" = "py312"
-# `**` so a skill's bundled `scripts/tests/` is pinned too: those tests import
-# the scripts and run under the same interpreters.
 ".agents/skills/*/scripts/**/*.py" = "py312"
 
 [tool.ruff.lint]

@@ -70,8 +70,9 @@ rg -n "your-username|my-package|my_package|uv-template|Your Name|you@example" .
 ### Working in the new repository
 
 - **Never commit directly on `main`.** The pre-commit `no-commit-to-branch`
-  hook blocks it, and `.agents/hooks/guard.py` blocks `--no-verify`, so the
-  way through is a feature branch and a PR — not a bypass flag.
+  hook blocks it, and `--no-verify` would also switch off the secret gate
+  (`scripts/check_staged.py`), so the way through is a feature branch and a
+  PR — not a bypass flag.
 - The toolchain baseline is Python 3.14 (`requires-python`, ruff
   `target-version`, mypy `python_version`, `.python-version`, the
   devcontainer image, and every CI workflow). Lower it everywhere at once if
@@ -120,13 +121,20 @@ coding agent (Claude Code, Codex, Cursor, Gemini CLI, ...) the context it
 needs to match your project's standards; `CLAUDE.md` imports it and adds
 Claude Code specifics. Skills are authored once in `.agents/skills/` and
 mirrored into `.claude/skills/` (`just agents-sync`); `.claude/agents/` and
-`.codex/agents/` define the same three sub-agent tiers for each host;
-`.agents/hooks/` contains the shared hooks, wired by `.claude/settings.json`
-and `.codex/hooks.json`. The shared hooks deterministically auto-format
-edited files, block edits to `uv.lock`/`.env*`/`secrets/**` as well as
-`--no-verify`, force-push, and `gh pr merge --admin` commands, and run ruff +
-mypy before the agent ends a turn. Permission allowlists, model choices, and
-plugin marketplaces are personal and are never committed.
+`.codex/agents/` define the same three sub-agent tiers for each host.
+Permission allowlists, model choices, plugin marketplaces, and editor hooks
+are personal and are never committed.
+
+### Why a pre-commit layer instead of agent hooks?
+
+A guard rail wired into one agent's hook configuration protects nothing when
+a human, or a different tool, makes the commit. So the template commits no
+agent hooks: its guard rails are git hooks run by pre-commit, which fire on
+`git commit` for every author. `scripts/check_staged.py` refuses secret-shaped
+paths and credential-shaped content straight from the index, on ordinary,
+merge, and rebase-stop commits, and `just install` fails when the git hooks
+are missing. What the old agent hooks did and where each behavior went is the
+replacement table under "Pre-commit layer" in `AGENTS.md`.
 
 ### Why 80% coverage minimum?
 
