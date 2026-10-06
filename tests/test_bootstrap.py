@@ -17,8 +17,8 @@ if TYPE_CHECKING:
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PLACEHOLDERS = (
-    "my-package",
-    "my_package",
+    "my-app",
+    "my_app",
     "your-username",
     "Your Name",
     "you@example.com",
@@ -94,7 +94,7 @@ def test_bootstrap_replaces_all_placeholders(template_copy):
 
     assert module_name == "acme_widgets"
     assert (root / "src" / "acme_widgets").is_dir()
-    assert not (root / "src" / "my_package").exists()
+    assert not (root / "src" / "my_app").exists()
 
     for path in root.rglob("*"):
         if not path.is_file() or path.name == "uv.lock":
@@ -112,15 +112,15 @@ def test_bootstrap_does_not_rewrite_secret_files_in_a_non_git_copy(template_copy
     env_file = root / ".env.local"
     env_example = root / ".env.example"
     secret_file = root / "secrets" / "credentials.txt"
-    env_file.write_text("my-package\n", encoding="utf-8")
-    env_example.write_text("my-package\n", encoding="utf-8")
+    env_file.write_text("my-app\n", encoding="utf-8")
+    env_example.write_text("my-app\n", encoding="utf-8")
     secret_file.parent.mkdir()
-    secret_file.write_text("my-package\n", encoding="utf-8")
+    secret_file.write_text("my-app\n", encoding="utf-8")
 
     _bootstrap_into(root, bootstrap)
 
-    assert env_file.read_text(encoding="utf-8") == "my-package\n"
-    assert secret_file.read_text(encoding="utf-8") == "my-package\n"
+    assert env_file.read_text(encoding="utf-8") == "my-app\n"
+    assert secret_file.read_text(encoding="utf-8") == "my-app\n"
     assert env_example.read_text(encoding="utf-8") == "acme-widgets\n"
 
 
@@ -263,7 +263,7 @@ def test_bootstrap_requires_a_github_user(template_copy):
         bootstrap.main(["acme-widgets"])
 
     # The run must abort before touching anything.
-    assert (root / "src" / "my_package").is_dir()
+    assert (root / "src" / "my_app").is_dir()
 
 
 def test_bootstrap_rejects_invalid_package_name(template_copy):
@@ -280,7 +280,7 @@ def test_bootstrap_rejects_non_importable_package_names(template_copy, package_n
     with pytest.raises(SystemExit):
         _bootstrap_into(root, bootstrap, package_name=package_name)
 
-    assert (root / "src" / "my_package").is_dir()
+    assert (root / "src" / "my_app").is_dir()
 
 
 def test_bootstrap_rejects_existing_source_destination(template_copy):
@@ -290,7 +290,7 @@ def test_bootstrap_rejects_existing_source_destination(template_copy):
     with pytest.raises(SystemExit, match=r"already exists"):
         _bootstrap_into(root, bootstrap)
 
-    assert (root / "src" / "my_package").is_dir()
+    assert (root / "src" / "my_app").is_dir()
 
 
 def test_bootstrap_rejects_multiline_metadata_before_writing(template_copy):
@@ -299,7 +299,7 @@ def test_bootstrap_rejects_multiline_metadata_before_writing(template_copy):
     with pytest.raises(SystemExit, match=r"single line"):
         _bootstrap_into(root, bootstrap, description="first line\nsecond line")
 
-    assert (root / "src" / "my_package").is_dir()
+    assert (root / "src" / "my_app").is_dir()
 
 
 def test_bootstrap_rejects_an_empty_explicit_repository_name(template_copy):
@@ -308,7 +308,7 @@ def test_bootstrap_rejects_an_empty_explicit_repository_name(template_copy):
     with pytest.raises(SystemExit, match=r"GitHub repository name"):
         _bootstrap_into(root, bootstrap, github_repository="")
 
-    assert (root / "src" / "my_package").is_dir()
+    assert (root / "src" / "my_app").is_dir()
 
 
 def test_git_failure_does_not_trigger_an_unsafe_filesystem_fallback(

@@ -14,8 +14,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-OLD_DISTRIBUTION_NAME = "my-package"
-OLD_MODULE_NAME = "my_package"
+OLD_DISTRIBUTION_NAME = "my-app"
+OLD_MODULE_NAME = "my_app"
 OLD_REPOSITORY_NAME = "uv-template"
 OLD_GITHUB_USER = "your-username"
 OLD_AUTHOR_NAME = "Your Name"
@@ -292,7 +292,7 @@ def _replace_placeholders_in_file(
 
 
 def _rename_source_directory(repo_root: Path, new_module_name: str) -> None:
-    """Rename src/my_package to src/<new_module_name> in place."""
+    """Rename src/my_app to src/<new_module_name> in place."""
     old_dir = repo_root / "src" / OLD_MODULE_NAME
     new_dir = repo_root / "src" / new_module_name
     if old_dir == new_dir:

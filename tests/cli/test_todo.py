@@ -1,0 +1,108 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+import pytest
+from typer.testing import CliRunner
+
+from my_app.cli.main import app
+
+if TYPE_CHECKING:
+    from typer.testing import Result
+
+EXIT_OK = 0
+EXIT_DOMAIN_ERROR = 1
+EXIT_USAGE_ERROR = 2
+
+
+@pytest.fixture
+def run(make_container):
+    """Invoke ``my-app`` against one in-memory container shared across calls.
+
+    Passing the container as ``obj`` mirrors one long-lived process, so a
+    to-do added by one invocation is visible to the next.
+    """
+    runner = CliRunner()
+    container = make_container()
+
+    def _run(*args: str) -> Result:
+        return runner.invoke(app, list(args), obj=container)
+
+    return _run
+
+
+def test_todo_add_then_list_shows_the_todo(run):
+    added = run("todo", "add", "buy milk")
+    listed = run("todo", "list")
+
+    assert added.exit_code == EXIT_OK
+    assert added.stdout == "Added 1 [ ] buy milk\n"
+    assert listed.exit_code == EXIT_OK
+    assert listed.stdout == "1 [ ] buy milk\n"
+
+
+def test_todo_list_empty_store_says_so(run):
+    result = run("todo", "list")
+
+    assert result.exit_code == EXIT_OK
+    assert result.stdout == "No to-dos yet.\n"
+
+
+@pytest.mark.parametrize(
+    "title",
+    [pytest.param("", id="empty"), pytest.param("   ", id="whitespace-only")],
+)
+def test_todo_add_empty_title_exits_1_with_error_on_stderr(run, title):
+    result = run("todo", "add", title)
+
+    assert result.exit_code == EXIT_DOMAIN_ERROR
+    assert result.stdout == ""
+    assert result.stderr.startswith("Error: Title must be 1-200 characters")
+    assert run("todo", "list").stdout == "No to-dos yet.\n"
+
+
+def test_todo_complete_existing_id_marks_it_completed(run):
+    run("todo", "add", "buy milk")
+
+    result = run("todo", "complete", "1")
+
+    assert result.exit_code == EXIT_OK
+    assert result.stdout == "Completed 1 [x] buy milk\n"
+    assert run("todo", "list").stdout == "1 [x] buy milk\n"
+
+
+def test_todo_delete_existing_id_removes_it(run):
+    run("todo", "add", "buy milk")
+
+    result = run("todo", "delete", "1")
+
+    assert result.exit_code == EXIT_OK
+    assert result.stdout == "Deleted to-do 1\n"
+    assert run("todo", "list").stdout == "No to-dos yet.\n"
+
+
+@pytest.mark.parametrize("command", ["complete", "delete"])
+def test_todo_command_unknown_id_exits_1_with_error_on_stderr(run, command):
+    result = run("todo", command, "999")
+
+    assert result.exit_code == EXIT_DOMAIN_ERROR
+    assert result.stdout == ""
+    assert result.stderr == "Error: To-do 999 not found\n"
+
+
+@pytest.mark.parametrize("command", ["complete", "delete"])
+def test_todo_command_non_integer_id_exits_with_usage_error(run, command):
+    result = run("todo", command, "abc")
+
+    assert result.exit_code == EXIT_USAGE_ERROR
+
+
+def test_todo_without_supplied_container_reads_settings_from_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("MY_APP_DATABASE_URL", f"sqlite:///{tmp_path / 'todos.db'}")
+    runner = CliRunner()
+
+    runner.invoke(app, ["todo", "add", "buy milk"])
+    result = runner.invoke(app, ["todo", "list"])
+
+    assert result.exit_code == EXIT_OK
+    assert result.stdout == "1 [ ] buy milk\n"

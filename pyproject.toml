@@ -3,12 +3,17 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "my-package"
+name = "my-app"
 version = "0.1.0"
 description = "A short description of the project."
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "fastapi>=0.139",
+    "pydantic-settings>=2.14",
+    "typer>=0.27",
+    "uvicorn>=0.51",
+]
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Your Name", email = "you@example.com" }]
@@ -20,6 +25,9 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 
+[project.scripts]
+my-app = "my_app.cli.main:app"
+
 [project.urls]
 Homepage = "https://github.com/your-username/uv-template"
 Repository = "https://github.com/your-username/uv-template"
@@ -27,6 +35,7 @@ Issues = "https://github.com/your-username/uv-template/issues"
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28",
     "mypy>=2.3.0",
     "pre-commit>=4.6.0",
     "pytest>=8.0",
@@ -48,7 +57,7 @@ exclude-newer = "2026-07-21T00:00:00Z"
 # --------------------------------------------------------------------------- #
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/my_package"]
+packages = ["src/my_app"]
 
 # --------------------------------------------------------------------------- #
 #  Ruff – linter & formatter
@@ -123,6 +132,8 @@ select = [
     "PGH",  # pygrep-hooks
     # --- Ruff-specific ---
     "RUF",  # ruff-specific rules
+    # --- Layer boundaries ---
+    "TID251", # banned-api: keeps the core framework-free (see banned-api below)
 ]
 ignore = [
     "E501",   # line too long — handled by formatter
@@ -133,8 +144,38 @@ ignore = [
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
+# Pydantic and FastAPI read annotations at run time, so the types they name must
+# stay real imports rather than move under `if TYPE_CHECKING:`.
+[tool.ruff.lint.flake8-type-checking]
+runtime-evaluated-base-classes = [
+    "pydantic.BaseModel",
+    "pydantic_settings.BaseSettings",
+]
+runtime-evaluated-decorators = [
+    "fastapi.APIRouter.get",
+    "fastapi.APIRouter.post",
+    "fastapi.APIRouter.put",
+    "fastapi.APIRouter.patch",
+    "fastapi.APIRouter.delete",
+]
+
+# The core (src/my_app/core) must stay framework- and I/O-free so every entry
+# point and adapter can share it. These modules are banned everywhere, then
+# allowed back below only in the layers that exist to use them.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"fastapi".msg = "the core is framework-free; use fastapi only in my_app.api"
+"typer".msg = "the core is framework-free; use typer only in my_app.cli"
+"uvicorn".msg = "the core is framework-free; use uvicorn only in my_app.cli"
+"sqlite3".msg = "the core is I/O-free; use sqlite3 only in my_app.adapters"
+"httpx".msg = "the core is I/O-free; use httpx only in an adapter or a test"
+
 [tool.ruff.lint.per-file-ignores]
+# The outer layers exist to use the frameworks and drivers the core may not.
+"src/my_app/api/**" = ["TID251"]     # FastAPI is the HTTP entry point
+"src/my_app/cli/**" = ["TID251"]     # Typer and uvicorn are the CLI entry point
+"src/my_app/adapters/**" = ["TID251"] # adapters wrap sqlite3 and other I/O
 "tests/**" = [
+    "TID251",  # tests drive the API (TestClient/httpx) and the CLI (CliRunner)
     "S101",    # assert is fine in tests
     "ARG001",  # unused arguments (fixtures)
     "PLR2004", # magic numbers in tests

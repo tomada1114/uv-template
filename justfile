@@ -32,6 +32,17 @@ test:
 test-durations:
     uv run --locked pytest --store-durations
 
+# Never ends on its own; an agent starts `my-app serve --port <free>` instead and stops it.
+# Human-run: serve the HTTP API on http://127.0.0.1:8000, reloading on source changes
+dev:
+    uv run --locked uvicorn my_app.api.app:create_app --factory --reload
+
+# Each argument is passed through as-is, so `just run todo add "buy milk"` keeps the quotes.
+# Run the my-app CLI, e.g. `just run todo list`
+[positional-arguments]
+run *ARGS:
+    uv run --locked my-app "$@"
+
 # Update uv.lock after changing dependency declarations
 lock:
     uv lock

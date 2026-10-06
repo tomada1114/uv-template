@@ -6,7 +6,17 @@ This is a Python application built with [uv](https://docs.astral.sh/uv/) and
 [hatchling](https://hatch.pypa.io/). It uses a strict `src/` layout with
 comprehensive type checking and linting.
 
+It ships a framework-free core with two entry points over it: a FastAPI HTTP
+API and a Typer CLI (`my-app`). The sample domain is a to-do list — replace it
+with your own, and delete whichever entry point you do not need.
+
 ## Quick Reference
+
+The recipes are grouped by who runs them: finite checks an agent runs to
+verify its own work, a server that never ends on its own, and the recipes that
+write to GitHub.
+
+### Checks and tasks an agent runs
 
 ```bash
 just install         # Install dependencies and git hooks when .git/ is present
@@ -19,11 +29,29 @@ just check           # Mutating dev check: fmt → lint → test
 just lock            # Update uv.lock after dependency changes
 just verify          # Non-mutating gate: lock-check → agents-check → lint → test-skills → test
 just test-skills     # Run the unittest suites bundled under .agents/skills/*/scripts/tests
+just run *ARGS       # Run the CLI, e.g. `just run todo list` (uv run --locked my-app ...)
 just worktree-clean  # Remove agent worktrees under .claude/worktrees with a merged PR
 just agents-sync     # Regenerate the .claude/skills mirror from .agents/skills
 just agents-check    # Fail when the skills mirror has drifted
-just labels          # Create/update GitHub labels from .github/labels.yml (writes to GitHub; ask first)
 just clean           # Remove build artifacts and caches
+```
+
+### Long-running — human-run
+
+```bash
+just dev             # Serve the API on http://127.0.0.1:8000 with auto-reload; runs until stopped
+```
+
+`just dev` is the developer's server: never start, stop, or restart it, and
+never bind its port. To see something only a running server shows, prefer a
+`TestClient` test; failing that, start `uv run --locked my-app serve --port
+<free port>`, verify against it, and stop it before your turn ends. Never
+leave a server you started running.
+
+### Writes to GitHub
+
+```bash
+just labels          # Create/update GitHub labels from .github/labels.yml (ask first)
 ```
 
 Without Just: replace `just <cmd>` with the corresponding `uv run` commands
@@ -42,7 +70,9 @@ being run at all.
 
 | What you changed | The narrowest check that can fail |
 |---|---|
-| A module under `src/` | `uv run --locked pytest tests/test_<module>.py` |
+| A module under `src/my_app/<layer>/` | `uv run --locked pytest tests/<layer>/` |
+| `settings.py` or `composition.py` | `uv run --locked pytest tests/test_settings.py tests/test_composition.py` |
+| A repository adapter | `uv run --locked pytest tests/adapters/test_repository_contract.py` |
 | One test | `uv run --locked pytest tests/test_<module>.py::test_<name>` |
 | Any Python file's lint or types | `uv run --locked ruff check <file>`, then `uv run --locked mypy src scripts tests` |
 | A script under `scripts/` | `uv run --locked pytest tests/test_<script>.py` |
@@ -54,11 +84,30 @@ being run at all.
 ## Architecture
 
 ```
-src/my_package/
-├── __init__.py   # Package root — keep it thin
-└── core.py       # Placeholder module — replace and re-export via __init__.py
+src/my_app/
+├── core/            # Framework-free: domain model, ports (Protocols), services, errors
+├── adapters/        # Port implementations: in-memory and SQLite (stdlib sqlite3) repositories
+├── api/             # FastAPI: create_app(settings) factory, routers, Pydantic schemas
+├── cli/             # Typer: `my-app todo add|list|complete|delete`, `my-app serve`
+├── settings.py      # pydantic-settings, read from MY_APP_* environment variables
+└── composition.py   # Composition root: wires adapters into services for both entry points
 ```
 
+- Dependencies point inward: `api/` and `cli/` call `core/` services and get
+  them only from `composition.build_container`; `adapters/` implement
+  `core/ports.py`; `core/` imports nothing outside the stdlib and itself.
+  Ruff's `TID251` (banned-api in `pyproject.toml`) and
+  `tests/core/test_imports.py` fail the build when `core/` imports fastapi,
+  typer, uvicorn, sqlite3, or httpx.
+- Domain errors derive from `core.errors.AppError`; each entry point maps
+  them in one place (API: 404 / 422 handlers in `api/app.py`; CLI: stderr and
+  exit code 1 in `cli/todo.py`).
+- A new repository implements `core.ports.TodoRepository` and joins the one
+  contract suite in `tests/adapters/test_repository_contract.py`.
+- Pydantic stays at the boundaries (`api/schemas.py`, `settings.py`); the core
+  uses frozen dataclasses.
+- Tests mirror the layers: `tests/core/`, `tests/adapters/`, `tests/api/`,
+  `tests/cli/`, plus `tests/test_settings.py` and `tests/test_composition.py`.
 - Internal modules can use a leading underscore (`_internal.py`)
 - Separate concerns: one module per logical unit
 - Update README.md when a command, setting, or behavior it documents changes
@@ -68,6 +117,9 @@ src/my_package/
 | Concern | Canonical source |
 |---|---|
 | Tooling and quality commands | `justfile`, `pyproject.toml`, CI workflows |
+| Layer boundaries | `[tool.ruff.lint.flake8-tidy-imports.banned-api]` and its per-file-ignores in `pyproject.toml` |
+| HTTP routes and CLI commands | `src/my_app/api/routers/`, `src/my_app/cli/` |
+| Configuration keys | `src/my_app/settings.py` (`Settings`, prefix `MY_APP_`) |
 | Current execution status | Git, fresh test output, and CI — never prose or test counts in a prompt |
 
 ## Skills
