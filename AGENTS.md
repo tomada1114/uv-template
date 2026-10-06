@@ -92,9 +92,11 @@ some clones and makes Codex register a nested `references/SKILL.md` as a skill.
 | `authoring-skills` | adding, editing, or reviewing a skill under `.agents/skills/`, or a skill never fires |
 | `create-pr` | opening or updating a pull request |
 | `merging-dependency-prs` | landing open Dependabot pull requests (GitHub Actions bumps) |
+| `recording-architecture-decisions` | a change owes an ADR, or an ADR under `docs/architecture/` is proposed, accepted, or superseded |
 | `release-workflow` | cutting a release |
 | `shipping-issues` | shipping the next issue or the whole backlog: rank, implement, review, PR, CI, merge |
 | `smart-commit` | grouping working-tree changes into commits |
+| `steering-the-roadmap` | asked what to work on next, or the Now / Next / Later roadmap moves |
 | `triaging-issues` | filing, labelling, or prioritizing an issue, or recording a problem found outside the task |
 
 ## Sub-agents
