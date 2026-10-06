@@ -13,7 +13,9 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Only superseded PR runs are cancelled; main pushes and scheduled or
+  # dispatched scans always finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   analyze:
@@ -21,6 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
+      actions: read
       contents: read
       security-events: write
     strategy:
@@ -37,14 +40,15 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: none
           # List the trees explicitly so the skill scripts under the hidden
-          # .agents/ directory are analyzed alongside src/ and scripts/.
+          # .agents/ directory are analyzed alongside src/ and scripts/. The
+          # .claude/skills mirror is left out on purpose to avoid duplicate
+          # alerts. Add any new top-level code directory here.
           config: |
             paths:
               - src
               - scripts
               - tests
               - .agents/skills
-              - .agents/hooks
               - .github
 
       - uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1

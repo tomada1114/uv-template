@@ -4,11 +4,12 @@
 
 **Do NOT open a public issue for security vulnerabilities.**
 
-Report it privately through GitHub's private vulnerability reporting:
-open the repository's **Security** tab and choose **Report a vulnerability**,
-or go straight to
-[the new advisory form](https://github.com/your-username/uv-template/security/advisories/new).
-Only the maintainers can see the report.
+Report it privately through GitHub's private vulnerability reporting: open
+the repository's **Security** tab and choose **Report a vulnerability**, or
+go straight to [the new advisory form][advisory]. The report is visible only
+to you, the maintainers, and collaborators they invite.
+
+[advisory]: https://github.com/your-username/uv-template/security/advisories/new
 
 Include:
 

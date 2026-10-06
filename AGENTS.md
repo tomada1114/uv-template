@@ -183,18 +183,23 @@ dependency is proposed and the agent stops for sign-off.
 
 ## GitHub security settings
 
-The security workflows report into GitHub, so turn on, under the repository's
-**Settings → Advanced Security** (public repositories get all of these free):
+Of the security workflows, only CodeQL (`codeql.yml`) uploads results, to code
+scanning; OSV-Scanner (`osv-scanner.yml`) and gitleaks (`security-audit.yml`)
+just fail the job. These are separate repository settings to turn on:
 
 - Secret scanning, and its push protection
 - Private vulnerability reporting (the route `SECURITY.md` gives)
 - Dependabot alerts
+- The dependency graph, which Dependency Review (`dependency-review.yml`) needs
 
-CodeQL (`codeql.yml`) and Dependency Review (`dependency-review.yml`) need
-GitHub Advanced Security on a private repository. For a private repository
-without it, delete those two workflow files rather than guarding them with an
-`if:` on visibility; `osv-scanner.yml`, `security-audit.yml` (gitleaks), and
-`ci.yml`'s zizmor job run anywhere.
+On a private repository, CodeQL and Dependency Review need GitHub Code
+Security, and secret scanning needs GitHub Secret Protection. Without them,
+delete `codeql.yml` and `dependency-review.yml` rather than guarding them with
+an `if:` on visibility; `osv-scanner.yml`, `security-audit.yml`, and `ci.yml`'s
+zizmor job run anywhere. Private vulnerability reporting works only on public
+repositories, so a private repository must replace the reporting route in
+`SECURITY.md` and the security contact link in
+`.github/ISSUE_TEMPLATE/config.yml` with another contact.
 
 ## Conventions: tests/**/*.py
 
