@@ -106,7 +106,11 @@ DEP_PATTERNS = [
 #     which issues might collide into a set intersection.
 SHIP_CONTRACT_RE = re.compile(r"<!--\s*ship\s*:(.*?)-->", re.DOTALL | re.IGNORECASE)
 # Fields are `key=value`, whitespace-separated, values never contain spaces.
-CONTRACT_FIELD_RE = re.compile(r"([A-Za-z][\w-]*)\s*=\s*(\S+)")
+# An empty value (`blocked-by= blocks=#9`) leaves group 2 unmatched: the value
+# may never itself be a `key=` token, or the empty field would swallow the next
+# one and turn a `blocks` edge into a `blocked-by` edge.
+CONTRACT_FIELD_RE = re.compile(
+    r"([A-Za-z][\w-]*)\s*=(?:\s*(?![A-Za-z][\w-]*\s*=)(\S+))?")
 CONTRACT_KNOWN_FIELDS = ("tier", "area", "blocked-by", "blocks", "touches", "design")
 # A contract is "complete enough to plan from" when it settles the three things
 # the startup would otherwise have to derive: the tier, what it waits on, and

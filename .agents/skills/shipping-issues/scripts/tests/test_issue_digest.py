@@ -706,6 +706,24 @@ class ShipContractTest(unittest.TestCase):
         c = idg.parse_ship_contract("<!-- ship: blocked-by=12,#13 -->")
         self.assertEqual(c["depends_on"], [12, 13])
 
+    def test_an_empty_field_does_not_swallow_the_next_field(self):
+        c = idg.parse_ship_contract(
+            "<!-- ship: tier=P0 blocked-by= blocks=#93,#94 touches=* -->")
+        self.assertEqual(c["depends_on"], [])
+        self.assertEqual(c["blocks"], [93, 94])
+        self.assertEqual(c["missing_fields"], [])
+
+    def test_an_empty_last_field_parses_as_empty(self):
+        c = idg.parse_ship_contract("<!-- ship: tier=P2 blocks=#5 blocked-by= -->")
+        self.assertEqual(c["depends_on"], [])
+        self.assertEqual(c["blocks"], [5])
+        self.assertIn("blocked-by", c["fields"])
+
+    def test_spaces_around_the_equals_sign_still_parse(self):
+        c = idg.parse_ship_contract("<!-- ship: tier = P1 blocked-by = #7 -->")
+        self.assertEqual(c["tier"], "P1")
+        self.assertEqual(c["depends_on"], [7])
+
 
 class ShipContractInCodeTest(unittest.TestCase):
     """A ship block quoted inside a fenced code block or inline code is an

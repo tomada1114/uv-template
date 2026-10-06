@@ -225,6 +225,14 @@ class SettleContractDesignTest(unittest.TestCase):
     def test_rewrites_only_the_contract_field(self):
         self.assertEqual(apl.settle_contract_design(OPEN_BODY), SETTLED_BODY)
 
+    def test_an_empty_field_beside_design_open_is_kept_byte_for_byte(self):
+        body = "<!-- ship: tier=P2 blocked-by= blocks=#4 design=open -->"
+        self.assertEqual(apl.settle_contract_design(body),
+                         "<!-- ship: tier=P2 blocked-by= blocks=#4 design=settled -->")
+
+    def test_an_empty_design_field_is_not_settled(self):
+        self.assertIsNone(apl.settle_contract_design("<!-- ship: tier=P2 design= -->"))
+
     def test_keeps_the_keys_spelling_and_spacing(self):
         body = "<!-- SHIP: Design = OPEN tier=P1 -->"
         self.assertEqual(apl.settle_contract_design(body),
