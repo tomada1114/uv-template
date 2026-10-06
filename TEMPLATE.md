@@ -1,8 +1,8 @@
 # About This Template
 
 This file documents the template itself: why it is built the way it is, and
-how to turn a copy of it into a real library. `scripts/bootstrap.py` deletes
-it from the spawned repo, so nothing here ships to your library's users.
+how to turn a copy of it into a real application. `scripts/bootstrap.py` deletes
+it from the spawned repo, so nothing here ships with your application.
 
 ## Using This Template
 
@@ -13,7 +13,7 @@ it from the spawned repo, so nothing here ships to your library's users.
    uv run --locked python scripts/bootstrap.py my-cool-lib \
      --author "Jane Doe" --email jane@example.com --github-user janedoe \
      --github-repository my-cool-lib-repo \
-     --description "One line about what this library does."
+     --description "One line about what this application does."
    ```
 
    This renames `src/my_package` to `src/my_cool_lib` and replaces
@@ -21,7 +21,7 @@ it from the spawned repo, so nothing here ships to your library's users.
    and `you@example.com` across all eligible tracked files. The distribution name and
    GitHub repository name may differ; omit `--github-repository` when they are
    the same. Metadata values are validated before any files are changed, and
-   quoted author and description values are escaped for TOML and YAML. The
+   quoted author and description values are escaped for TOML. The
    script also writes the current year into `LICENSE`, moves `[tool.uv]
    exclude-newer` to two weeks before today, resets `CHANGELOG.md` to an empty
    skeleton, and runs `uv lock` (a lock file still naming the template would
@@ -41,24 +41,8 @@ it from the spawned repo, so nothing here ships to your library's users.
 4. Update `README.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `LICENSE`, and
    `AGENTS.md`; update `CLAUDE.md` only when the new project has
    Claude-specific settings or workflow notes
-5. Replace the placeholder implementation and keep `src/<your_package>/__init__.py`,
-   `docs/reference.md`, and the usage examples in sync with your public API
-6. **Register PyPI Trusted Publishing** for the new repository before the
-   first release. `.github/workflows/release.yml` publishes with
-   `uv publish --trusted-publishing always` from the `release` environment
-   and fails without it. On PyPI, add a pending publisher with:
-
-   | Field | Value |
-   |---|---|
-   | Owner | your GitHub user or org |
-   | Repository name | the new repository |
-   | Workflow name | `release.yml` |
-   | Environment name | `release` |
-
-7. **Enable GitHub Pages** for the new repository, serving from the
-   `gh-pages` branch (Settings -> Pages -> Source: *Deploy from a branch*).
-   `.github/workflows/docs.yml` only pushes that branch; the Documentation
-   URL in `README.md` returns 404 until Pages is turned on.
+5. Replace the placeholder implementation and keep the README usage examples
+   in sync with it
 
 To find any placeholders the script left untouched (e.g. because an
 optional argument was omitted):
@@ -79,7 +63,7 @@ rg -n "your-username|my-package|my_package|uv-template|Your Name|you@example" .
 - Python dependencies are updated manually; see
   the `pyproject.toml` convention in `AGENTS.md` for the `exclude-newer`
   procedure.
-- `just verify` (lock check, lint, strict docs build, distribution smoke, tests) is the
+- `just verify` (lock check, skills mirror, lint, skill tests, tests) is the
   non-mutating gate for a PR or a completion claim; `just check` mutates the
   tree first (`fmt`) and is for local iteration only.
 
@@ -92,7 +76,8 @@ you know exactly what to change and why it was there in the first place.
 
 The `src/` layout prevents accidental imports of the local package during
 development and testing. It ensures that tests always run against the
-*installed* version, catching packaging errors before they reach users.
+*installed* package rather than the working tree, so a missing module or a
+broken package configuration fails the test run instead of the deployed app.
 
 ### Why strict mypy + comprehensive Ruff rules?
 
@@ -103,9 +88,9 @@ strict rules: they produce higher-quality output when constraints are clear.
 
 ### Why zero runtime dependencies?
 
-A library template should not impose opinions about logging, HTTP clients, or
-data validation. You add what you need. Starting from zero keeps the dependency
-tree small and avoids conflicts with downstream users.
+The template should not impose opinions about logging, HTTP clients, or data
+validation. You add what your application needs. Starting from zero keeps the
+dependency tree small and every dependency a deliberate choice.
 
 ### Why Just over Make?
 
