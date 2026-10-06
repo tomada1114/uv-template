@@ -64,8 +64,6 @@ On success, the following checklist items are verified:
 - Tests pass (`just test`)
 - Type checks pass (`just lint`)
 - Code is formatted (`just fmt`, already committed above)
-- Docs build strictly (`just docs-check`)
-- The wheel installs cleanly (`just smoke`)
 
 ## Step 3: Additional Verification
 
@@ -74,7 +72,7 @@ Analyze `git diff main..HEAD` to determine:
 **Public API changes:**
 - Check if `__init__.py`'s `__all__` was modified
 - Check if public function signatures changed
-- If changes found: verify `docs/reference.md` or README was updated
+- If changes found: verify README was updated
   - If not updated: mark "Documentation updated" as unchecked and warn
 
 **Breaking changes:**

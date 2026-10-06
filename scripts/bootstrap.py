@@ -23,7 +23,7 @@ OLD_AUTHOR_EMAIL = "you@example.com"
 # The same idea is worded differently per file, so both spellings are replaced.
 OLD_DESCRIPTIONS = (
     "A short description of the project.",
-    "A short description of what this library does.",
+    "A short description of what this application does.",
 )
 
 # `uv lock`/`uv sync` refuse anything published after this cutoff, so a fresh
@@ -81,9 +81,6 @@ _TOML_AUTHOR_PATTERN = re.compile(
     r'(?P<prefix>\bname\s*=\s*)"[^"]*"(?P<suffix>\s*,\s*email\s*=)'
 )
 _TOML_EMAIL_PATTERN = re.compile(r'(?P<prefix>\bemail\s*=\s*)"[^"]*"')
-_MKDOCS_DESCRIPTION_PATTERN = re.compile(
-    r'(?m)^(?P<prefix>\s*site_description:\s*)"[^"]*"'
-)
 
 
 def _normalize_module_name(package_name: str) -> str:
@@ -321,7 +318,7 @@ def _rewrite_project_metadata(
     email: str | None,
     description: str | None,
 ) -> None:
-    """Write user-provided metadata with syntax-safe TOML and YAML quoting."""
+    """Write user-provided metadata with syntax-safe TOML quoting."""
     pyproject = repo_root / "pyproject.toml"
     if pyproject.is_file():
         text = pyproject.read_text(encoding="utf-8")
@@ -347,16 +344,6 @@ def _rewrite_project_metadata(
                 count=1,
             )
         pyproject.write_text(text, encoding="utf-8")
-
-    mkdocs = repo_root / "mkdocs.yml"
-    if description and mkdocs.is_file():
-        text = mkdocs.read_text(encoding="utf-8")
-        text = _MKDOCS_DESCRIPTION_PATTERN.sub(
-            lambda match: f"{match.group('prefix')}{_quoted_string(description)}",
-            text,
-            count=1,
-        )
-        mkdocs.write_text(text, encoding="utf-8")
 
 
 def _rewrite_exclude_newer(repo_root: Path, today: dt.date) -> None:
@@ -444,7 +431,6 @@ def bootstrap(  # noqa: PLR0913
 
     project_files = _iter_project_files(repo_root)
     pyproject = repo_root / "pyproject.toml"
-    mkdocs = repo_root / "mkdocs.yml"
     for path in project_files:
         _replace_placeholders_in_file(path, replacements)
         file_replacements: dict[str, str] = {}
@@ -453,7 +439,7 @@ def bootstrap(  # noqa: PLR0913
                 file_replacements[OLD_AUTHOR_NAME] = author
             if email:
                 file_replacements[OLD_AUTHOR_EMAIL] = email
-        if path not in (pyproject, mkdocs) and description:
+        if path != pyproject and description:
             for old_description in OLD_DESCRIPTIONS:
                 file_replacements[old_description] = description
         if file_replacements:

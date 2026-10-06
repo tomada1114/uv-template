@@ -25,9 +25,6 @@ coverage.xml
 # uv
 # uv.lock is tracked — do not ignore it
 
-# Docs
-site/
-
 # IDE
 .vscode/
 .idea/

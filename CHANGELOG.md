@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **Breaking:** library publishing. The template now targets applications:
+  the tag-triggered PyPI release workflow, `.github/release.yml`, the
+  distribution smoke test (`scripts/smoke_test.py`, `just build`,
+  `just smoke`), the mkdocs site (`mkdocs.yml`, the docs workflow, the `docs`
+  dependency group, `just docs`, `just docs-check`), `py.typed`, the
+  `Typing :: Typed` classifier, the Documentation and Changelog URLs, and the
+  `release-workflow` skill are gone. `just verify` now runs
+  `lock-check agents-check lint test-skills test`
+
 ### Added
 
 - A safer bootstrap flow with validated package/repository names, collision
