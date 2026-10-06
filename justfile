@@ -57,11 +57,23 @@ smoke:
     uv run --locked python scripts/smoke_test.py
 
 # Non-mutating local release/PR gate (fail-fast: cheap gates before the suite)
-verify: lock-check lint docs-check smoke test
+verify: lock-check agents-check lint docs-check smoke test
 
 # Confirm the lockfile is current without changing it.
 lock-check:
     uv lock --check
+
+# Regenerate the .claude/skills mirror from .agents/skills (the authored copy)
+agents-sync:
+    uv run --locked python scripts/sync_agents.py
+
+# Fail when .claude/skills disagrees with .agents/skills
+agents-check:
+    uv run --locked python scripts/sync_agents.py --check
+
+# Create or update the GitHub labels declared in .github/labels.yml (writes to GitHub)
+labels *ARGS:
+    uv run --locked python scripts/sync_labels.py {{ARGS}}
 
 # Remove build artifacts
 clean:

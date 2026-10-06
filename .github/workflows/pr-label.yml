@@ -27,16 +27,24 @@ jobs:
           set -euo pipefail
           type="${PR_TITLE%%:*}"
           type="${type%%(*}"
+          type="${type%!}"
+          # Every label below is declared in .github/labels.yml and created
+          # ahead of time by `just labels`; tests/test_sync_labels.py fails if
+          # this mapping names an undeclared one.
           case "$type" in
             feat) label=enhancement ;;
             fix) label=bug ;;
             docs) label=documentation ;;
             ci) label=ci ;;
+            deps) label=dependencies ;;
+            chore) label=chore ;;
+            refactor) label=chore ;;
+            build) label=chore ;;
+            test) label=chore ;;
+            perf) label=chore ;;
+            style) label=chore ;;
             *) echo "No label mapping for type: $type"; exit 0 ;;
           esac
-          # Ensure the label exists — a default repo has no "ci" label, and
-          # `--add-label` fails on a missing one. `create` no-ops if present.
-          gh label create "$label" >/dev/null 2>&1 || true
           # Best-effort: PRs from forks get a read-only GITHUB_TOKEN, so the
           # write below is rejected there. Never fail the check over it.
           gh pr edit "$PR_NUMBER" --add-label "$label" \

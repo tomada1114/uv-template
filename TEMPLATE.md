@@ -118,15 +118,15 @@ which is exactly what a Python project needs.
 AI-assisted development is the norm, not the exception. `AGENTS.md` gives any
 coding agent (Claude Code, Codex, Cursor, Gemini CLI, ...) the context it
 needs to match your project's standards; `CLAUDE.md` imports it and adds
-Claude Code specifics. The committed `.claude/` directory stores the canonical
-skills and host-specific settings; `.agents/hooks/` contains the shared hooks,
-`.agents/skills/` contains generated Codex symlinks, and `.codex/` contains
-Codex settings and hook wiring. The shared hooks deterministically auto-format
+Claude Code specifics. Skills are authored once in `.agents/skills/` and
+mirrored into `.claude/skills/` (`just agents-sync`); `.claude/agents/` and
+`.codex/agents/` define the same three sub-agent tiers for each host;
+`.agents/hooks/` contains the shared hooks, wired by `.claude/settings.json`
+and `.codex/hooks.json`. The shared hooks deterministically auto-format
 edited files, block edits to `uv.lock`/`.env*`/`secrets/**` as well as
 `--no-verify`, force-push, and `gh pr merge --admin` commands, and run ruff +
-mypy before the agent ends a turn. A reviewed permission allowlist covers local
-development commands — commit, push, and PR creation always stay behind human
-approval.
+mypy before the agent ends a turn. Permission allowlists, model choices, and
+plugin marketplaces are personal and are never committed.
 
 ### Why 80% coverage minimum?
 

@@ -30,6 +30,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev --locked
 
+      - name: Skills mirror
+        run: uv run --locked python scripts/sync_agents.py --check
+
       - name: Ruff check
         run: uv run --locked ruff check .
 

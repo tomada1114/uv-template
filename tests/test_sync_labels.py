@@ -1,0 +1,134 @@
+"""Tests for scripts/sync_labels.py."""
+
+from __future__ import annotations
+
+import importlib.util
+import re
+import subprocess
+import sys
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import pytest
+
+if TYPE_CHECKING:
+    from types import ModuleType
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _load_module() -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        "sync_labels", REPO_ROOT / "scripts" / "sync_labels.py"
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    # dataclasses resolve their module through sys.modules while the class body runs.
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+sync_labels = _load_module()
+
+VALID = """\
+# comment
+- name: bug
+  color: d73a4a
+  description: "Reproducible incorrect behavior."
+
+- name: "priority: P0"
+  color: b60205
+  description: 'Ship now.'
+"""
+
+
+def test_committed_labels_file_parses() -> None:
+    labels = sync_labels.parse_labels(sync_labels.LABELS_FILE.read_text("utf-8"))
+
+    assert {"bug", "chore", "tracking", "priority: P0"} <= {lbl.name for lbl in labels}
+
+
+def test_pr_label_workflow_only_applies_declared_labels() -> None:
+    declared = {
+        lbl.name
+        for lbl in sync_labels.parse_labels(sync_labels.LABELS_FILE.read_text("utf-8"))
+    }
+    workflow = (REPO_ROOT / ".github" / "workflows" / "pr-label.yml").read_text("utf-8")
+
+    applied = set(re.findall(r"\)\s*label=([\w-]+)\s*;;", workflow))
+
+    assert applied
+    assert applied <= declared
+
+
+def test_parse_labels_reads_quoted_and_bare_values() -> None:
+    labels = sync_labels.parse_labels(VALID)
+
+    assert labels == [
+        sync_labels.Label("bug", "d73a4a", "Reproducible incorrect behavior."),
+        sync_labels.Label("priority: P0", "b60205", "Ship now."),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("text", "pattern"),
+    [
+        ("- name: a\n  color: ffffff\n", r"lacks \['description'\]"),
+        ("- name: a\n  color: FFF\n  description: x\n", r"6 lowercase hex"),
+        ("  name: a\n", r"outside a list item"),
+        ("labels:\n", r"unexpected content"),
+        (
+            "- name: a\n  color: ffffff\n  description: x\n"
+            "- name: a\n  color: ffffff\n  description: y\n",
+            r"duplicated label names: \['a'\]",
+        ),
+    ],
+    ids=["missing-field", "bad-color", "orphan-field", "unknown-line", "duplicate"],
+)
+def test_parse_labels_rejects_malformed_file(text: str, pattern: str) -> None:
+    with pytest.raises(sync_labels.LabelsFileError, match=pattern):
+        sync_labels.parse_labels(text)
+
+
+def test_main_dry_run_prints_one_command_per_label(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    labels_file = tmp_path / "labels.yml"
+    labels_file.write_text(VALID, encoding="utf-8")
+
+    assert sync_labels.main(["--dry-run"], labels_file=labels_file) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert len(out) == 2
+    assert out[0].startswith("gh label create bug --color d73a4a")
+
+
+def test_main_reports_unreadable_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert sync_labels.main([], labels_file=tmp_path / "absent.yml") == 1
+    assert "ERR_LABELS_FILE" in capsys.readouterr().err
+
+
+def test_main_counts_gh_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    labels_file = tmp_path / "labels.yml"
+    labels_file.write_text(VALID, encoding="utf-8")
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        code = 1 if command[3] == "bug" else 0
+        return subprocess.CompletedProcess(command, code, "", "boom")
+
+    monkeypatch.setattr(sync_labels.subprocess, "run", fake_run)
+
+    assert sync_labels.main([], labels_file=labels_file) == 1
+    assert [c[3] for c in calls] == ["bug", "priority: P0"]
+    captured = capsys.readouterr()
+    assert "synced: priority: P0" in captured.out
+    assert "ERR_LABELS_SYNC: 1 label(s) failed" in captured.err

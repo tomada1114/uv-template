@@ -62,6 +62,8 @@ packages = ["src/my_package"]
 target-version = "py314"
 line-length = 88
 src = ["src", "tests", "scripts"]
+# The generated skills mirror is linted through its source, .agents/skills.
+extend-exclude = [".claude/skills"]
 
 # Agent hook scripts declare their own `requires-python = ">=3.12"` (PEP 723)
 # and run via `uv run --script`, which may resolve an older interpreter than
@@ -70,7 +72,7 @@ src = ["src", "tests", "scripts"]
 # (e.g. PEP 758 unparenthesized `except`) that would be a SyntaxError there.
 [tool.ruff.per-file-target-version]
 ".agents/hooks/*.py" = "py312"
-".claude/skills/merge-dependabot/scripts/*.py" = "py312"
+".agents/skills/*/scripts/*.py" = "py312"
 
 [tool.ruff.lint]
 select = [

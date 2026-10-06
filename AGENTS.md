@@ -18,11 +18,14 @@ just test-durations  # Regenerate the pytest-split duration file used by CI shar
 just smoke           # Build and verify wheel and sdist in temp environments
 just check           # Mutating dev check: fmt → lint → test
 just lock            # Update uv.lock after dependency changes
-just verify          # Non-mutating gate: lock-check → lint → docs → smoke → test
+just verify          # Non-mutating gate: lock-check → agents-check → lint → docs → smoke → test
 just docs            # Serve docs locally
 just docs-check      # Build docs and fail on warnings
 just build           # Build distribution packages
 just worktree-clean  # Remove agent worktrees under .claude/worktrees with a merged PR
+just agents-sync     # Regenerate the .claude/skills mirror from .agents/skills
+just agents-check    # Fail when the skills mirror has drifted
+just labels          # Create/update GitHub labels from .github/labels.yml (writes to GitHub; ask first)
 just clean           # Remove build artifacts and caches
 ```
 
@@ -55,6 +58,55 @@ src/my_package/
 | Tooling and quality commands | `justfile`, `pyproject.toml`, CI workflows |
 | Current public API shape | `src/my_package/__init__.py` `__all__` and public signatures |
 | Current execution status | Git, fresh test output, and CI — never prose or test counts in a prompt |
+
+## Skills
+
+Skills are authored under `.agents/skills/` — the path Codex CLI reads — and
+mirrored byte for byte into `.claude/skills/`, the only path Claude Code reads.
+Edit `.agents/skills/` only, then run `just agents-sync` and commit both trees;
+drift fails `just agents-check`, `tests/test_sync_agents.py`, the pre-commit
+hook, and CI. Both copies are real files, never symlinks: a symlink breaks on
+some clones and makes Codex register a nested `references/SKILL.md` as a skill.
+
+| Skill | Load it when |
+|---|---|
+| `create-pr` | opening or updating a pull request |
+| `smart-commit` | grouping working-tree changes into commits |
+| `merge-dependabot` | landing Dependabot pull requests |
+| `release-workflow` | cutting a release |
+
+## Sub-agents
+
+A skill runs every step inline by default. On a host that can hand a step to a
+named sub-agent, a step marked for a tier may go to one of three:
+
+| Tier | Effort | Takes |
+|---|---|---|
+| `executor` | low | a settled spec with a clear pass/fail: implementing it, adding tests, getting a check green, bulk edits, research that only collects |
+| `architect` | high | design judgment, review and bug finding, multi-file work, synthesis, a spec that still has holes |
+| `worker` | medium | single-shot, tool-free writing or checking from a complete brief |
+
+Each tier is defined once per host, and both hosts describe the same three:
+`.claude/agents/<tier>.md` for Claude Code pins a model alias (`opus` for
+`executor` and `architect`, `sonnet` for `worker` — never a dated model ID) and
+an `effort`; `.codex/agents/<tier>.toml` for Codex CLI sets only
+`model_reasoning_effort` and omits `model`, so the session's model is
+inherited. The instructions are the same text in both files, and
+`tests/test_agent_tiers.py` holds the two directories to that.
+
+- Neither file declares a permission — no `sandbox_mode`, no tool list.
+- Codex CLI loads `.codex/` only for a trusted project; in an untrusted
+  checkout a step marked for a tier runs inline.
+- Codex CLI ships a built-in `worker`; `.codex/agents/worker.toml` replaces it
+  inside this repository on purpose.
+
+## Personal settings
+
+No permission rule, model choice, or plugin marketplace is committed. Keep them
+in your own `~/.claude/settings.json` / `~/.codex/config.toml`, or in the
+gitignored `.claude/settings.local.json` and `.codex/rules/local.rules`. A
+committed allowlist would force one person's trust decisions on every
+repository created from this template.
 
 ## Review Checklist
 
@@ -185,7 +237,7 @@ Do not optimize preemptively; profile measured hotspots and note the measurement
 
 The project hook configuration runs the scripts in `.agents/hooks/` for tool
 calls made in this repository. The wiring files are `.claude/settings.json`
-and `.codex/hooks.json`.
+(which holds nothing but this wiring) and `.codex/hooks.json`.
 
 - `guard.py` (PreToolUse) blocks writes to `uv.lock`, `.env*`, and `secrets/**`,
   plus `git commit --no-verify`, plain force-pushes, and `gh pr merge --admin`.
