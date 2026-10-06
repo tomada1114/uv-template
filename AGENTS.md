@@ -152,13 +152,19 @@ some clones and makes Codex register a nested `references/SKILL.md` as a skill.
 | Skill | Load it when |
 |---|---|
 | `authoring-skills` | adding, editing, or reviewing a skill under `.agents/skills/`, or a skill never fires |
+| `building-api-routes` | adding or changing an HTTP route, request or response model, or API dependency, and the TestClient tests for it |
 | `create-pr` | opening or updating a pull request |
+| `designing-clis` | adding or changing a `my-app` command, its arguments, or its output, and the CliRunner tests for it |
+| `designing-core-logic` | adding a use case, domain rule, port, adapter, or `MY_APP_*` setting, or wiring the composition root |
+| `designing-errors` | adding a failure mode, or choosing the HTTP status or exit code a domain error becomes |
 | `merging-dependency-prs` | landing open Dependabot pull requests (GitHub Actions bumps) |
 | `recording-architecture-decisions` | a change owes an ADR, or an ADR under `docs/architecture/` is proposed, accepted, or superseded |
+| `running-the-app` | running the CLI or a server of your own to observe a change, and stopping that server afterwards |
 | `shipping-issues` | shipping the next issue or the whole backlog: rank, implement, review, PR, CI, merge |
 | `smart-commit` | grouping working-tree changes into commits |
 | `steering-the-roadmap` | asked what to work on next, or the Now / Next / Later roadmap moves |
 | `triaging-issues` | filing, labelling, or prioritizing an issue, or recording a problem found outside the task |
+| `writing-python` | writing or reviewing any Python module, class, or function: typing, imports, docstrings, idioms |
 
 ## Sub-agents
 

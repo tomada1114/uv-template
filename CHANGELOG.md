@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Six code-writing skills for the application layers, under `.agents/skills/`
+  and mirrored to `.claude/skills/`: `writing-python` (module and function
+  style, condensing AGENTS.md's `src/**` conventions), `designing-errors` (the
+  `AppError` hierarchy, its HTTP status and CLI exit-code mappings),
+  `designing-core-logic` (core, ports, adapters, settings, composition root),
+  `building-api-routes` and `designing-clis` (each deleted along with its entry
+  point), and `running-the-app` (a server of the agent's own on a free port,
+  curl evidence, stopped before the turn ends, never the developer's)
 - An application skeleton in `src/my_app/` (distribution and console script
   `my-app`): a framework-free `core` (frozen-dataclass domain model,
   `typing.Protocol` ports, services, an `AppError` base with
