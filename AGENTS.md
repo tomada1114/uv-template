@@ -190,6 +190,21 @@ None of them covers a force-push or other history rewrite, `--no-verify` or
 any other hook bypass, weakening a gate, or adding a dependency — a new
 dependency is proposed and the agent stops for sign-off.
 
+## GitHub security settings
+
+The security workflows report into GitHub, so turn on, under the repository's
+**Settings → Advanced Security** (public repositories get all of these free):
+
+- Secret scanning, and its push protection
+- Private vulnerability reporting (the route `SECURITY.md` gives)
+- Dependabot alerts
+
+CodeQL (`codeql.yml`) and Dependency Review (`dependency-review.yml`) need
+GitHub Advanced Security on a private repository. For a private repository
+without it, delete those two workflow files rather than guarding them with an
+`if:` on visibility; `osv-scanner.yml`, `security-audit.yml` (gitleaks), and
+`ci.yml`'s zizmor job run anywhere.
+
 ## Conventions: tests/**/*.py
 
 - Mirror the source layout with `tests/test_<module>.py`; use descriptive names such as `test_<what>_<scenario>_<expected_result>`.
