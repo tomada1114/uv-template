@@ -1,3 +1,9 @@
+# A merge that completes without conflicts commits through git's
+# pre-merge-commit hook, never pre-commit, so both are installed for the
+# secret gate below. Every other hook keeps running at pre-commit only.
+default_install_hook_types: [pre-commit, pre-merge-commit]
+default_stages: [pre-commit]
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -35,6 +41,16 @@ repos:
 
   - repo: local
     hooks:
+      # Reads the index itself (scripts/check_staged.py), so it takes no
+      # filenames and runs on every commit -- ordinary, merge, and a
+      # `git commit` at a rebase stop -- whatever pre-commit would pass it.
+      - id: check-staged
+        name: refuse staged secrets
+        entry: uv run --locked python scripts/check_staged.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit, pre-merge-commit]
       # Judges the working tree, so a commit that stages only one of the two
       # skills trees still passes here; CI and `just verify` judge the commit.
       - id: agents-check
