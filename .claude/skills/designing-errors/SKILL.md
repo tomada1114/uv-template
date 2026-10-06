@@ -157,9 +157,10 @@ the first request (`designing-core-logic`).
 
 ## Logging
 
-An `AppError` is mapped at the boundary and not logged, per AGENTS.md's "Conventions:
-src/**/*.py, scripts/**/*.py". An unexpected error keeps its traceback; code that
-catches one to add context logs it with `logging.exception()` and re-raises.
+An `AppError` is expected, so it is mapped at the entry-point boundary — an HTTP status,
+or an exit code plus one line on stderr — and not logged with `logging.exception()`. An
+unexpected error keeps its traceback; code that catches one to add context logs it with
+`logging.exception()` and re-raises.
 
 ## Adding a failure mode
 

@@ -65,8 +65,9 @@ PR like this is a security update the repository settings enabled. CI installs w
 `exclude-newer` cutoff may not admit the proposed version at all.
 
 **This is not a regression, and not this skill's to land.** Hold the PR and report the
-advisory. The update goes through `AGENTS.md` › "`[tool.uv] exclude-newer`" as its own
-reviewed change; close the bot PR only after that change lands, with a pointer to it.
+advisory. The update goes through `managing-dependencies`' `exclude-newer` procedure as
+its own reviewed change; close the bot PR only after that change lands, with a pointer
+to it.
 
 ## F5 — Test or coverage failure
 

@@ -18,7 +18,8 @@ and route docstrings, and never shadowing a builtin. **Does not own:** which lay
 belongs in, and the shape of models, ports, services, and adapters
 (`designing-core-logic`); the `AppError` hierarchy, how an entry point reports it, and
 whether an error is logged (`designing-errors`); a route (`building-api-routes`); a
-command (`designing-clis`); how a test is written (`tests/AGENTS.md`).
+command (`designing-clis`); how a test is written (`writing-tests`); the contract a
+repository script keeps — imports, `main()`, `ERR_*` reports (`writing-repo-scripts`).
 
 ## Gates first
 

@@ -20,18 +20,28 @@ by hand (`running-the-app`); module-level Python style (`writing-python`).
 
 ## A project without the CLI
 
-This skill describes the command-line entry point only. A project that drops the CLI
-deletes `.agents/skills/designing-clis/` with it, runs `just agents-sync`, and removes
-the skill's row from AGENTS.md's Skills table, alongside the files and configuration
-AGENTS.md's "Architecture" lists for that removal. Then it prunes what sibling skills
-say about the CLI:
+This skill describes the command-line entry point only. Dropping the CLI is a deletion,
+never a core change:
+
+- delete `src/my_app/cli/` and `tests/cli/`, and `[project.scripts]` in
+  `pyproject.toml`;
+- remove the `typer` runtime dependency, then run `uv lock`. Keep `uvicorn`: `just dev`
+  serves the API with it;
+- remove the `just run` recipe, and in `pyproject.toml`'s ruff config the `typer.*`
+  entries and the `src/my_app/cli/**` per-file-ignore;
+- delete `.agents/skills/designing-clis/`, remove its row from AGENTS.md's Skills
+  table, and run `just agents-sync`.
+
+Then prune what sibling skills say about the CLI:
 
 - `designing-errors`: "The CLI mapping", step 5 of "Adding a failure mode", and the
   CLI half of "Two kinds of failure" and "Configuration errors";
 - `designing-core-logic`: the `designing-clis` pointer in "Adding a use case";
 - `running-the-app`: "Running the CLI" and the CLI tier of "Evidence, cheapest first";
   its server script switches to the `uvicorn ... --factory` command it names;
-- `writing-python`: the examples that quote `cli/` files.
+- `writing-python`: the examples that quote `cli/` files;
+- `writing-tests`, `tdd`, and `updating-docs`: their mentions of `CliRunner`, a
+  command, or an exit code.
 
 ## The command tree
 
