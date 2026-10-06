@@ -85,7 +85,8 @@ therefore be removed by deleting files, without touching the core:
   `.agents/skills/designing-clis/` skill and its row in `AGENTS.md`'s Skills
   table, then run `just agents-sync`.
 
-`AGENTS.md`'s Architecture section lists the matching ruff config lines.
+The `building-api-routes` and `designing-clis` skills list the matching ruff
+config lines.
 
 ## Development
 
