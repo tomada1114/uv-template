@@ -22,7 +22,7 @@ This section is about the application rather than the harness: without it, an
 agent implementing an issue has no in-repo answer to "is this in scope?". The owner
 decides every entry; an agent drafts one only from what the owner has said. Once the
 bootstrap has run (`.template-origin` exists), `tests/test_product_section.py` — and
-so `just verify` — fails while a `TODO:` is left here.
+so `just verify` — fails while any entry below is still a placeholder.
 
 - **What it is, and who it is for** — TODO: one paragraph: the problem it solves,
   and whose problem that is.

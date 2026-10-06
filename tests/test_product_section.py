@@ -11,6 +11,7 @@ marker is the whole signal.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -76,6 +77,24 @@ def product_section_problems(root: Path) -> list[str]:
 
 def test_product_section_in_this_repository_has_no_problem() -> None:
     assert product_section_problems(REPO_ROOT) == []
+
+
+def test_product_section_filling_only_its_entries_satisfies_the_app_check(tmp_path):
+    # What an app's owner does, and what CI's bootstrap smoke job does: replace
+    # each entry's marker, in the text the bootstrap leaves (no template-only
+    # block). Any other marker in the section, in its prose say, would leave
+    # the check failing after every entry is written.
+    text = re.sub(
+        r"^<!-- template-only -->$.*?^<!-- /template-only -->$\n",
+        "",
+        (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8"),
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    filled = re.sub(rf"(\*\*[^*]+\*\* — ){MARKER} ", r"\1", text)
+    (tmp_path / "AGENTS.md").write_text(filled, encoding="utf-8")
+    (tmp_path / ORIGIN_FILE).write_text("commit: unknown\n", encoding="utf-8")
+
+    assert product_section_problems(tmp_path) == []
 
 
 def _entries(*, is_filled: bool) -> str:
