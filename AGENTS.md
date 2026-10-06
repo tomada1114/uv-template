@@ -23,6 +23,7 @@ just worktree-clean  # Remove agent worktrees under .claude/worktrees with a mer
 just agents-sync     # Regenerate the .claude/skills mirror from .agents/skills
 just agents-check    # Fail when the skills mirror has drifted
 just labels          # Create/update GitHub labels from .github/labels.yml (writes to GitHub; ask first)
+just ruleset         # Apply .github/rulesets/main.json to GitHub (admin-only human step; writes to GitHub)
 just clean           # Remove build artifacts and caches
 ```
 
@@ -181,7 +182,23 @@ None of them covers a force-push or other history rewrite, `--no-verify` or
 any other hook bypass, weakening a gate, or adding a dependency — a new
 dependency is proposed and the agent stops for sign-off.
 
-## GitHub security settings
+## GitHub settings a new repository must enable
+
+### Main branch ruleset
+
+`.github/rulesets/main.json` protects the default branch: no deletion, no
+force-push, a pull request for every change (0 approvals), and the required
+status checks. `just ruleset` creates it, or updates it by name, through
+`gh api`; it never deletes a ruleset. Writing rulesets needs repository admin
+rights, so **`just ruleset` is a human (admin) step** — an agent never runs it.
+Rerun it after editing `main.json`.
+
+A required check must be a job that runs on every pull request: never a job in
+a workflow whose `pull_request` trigger has `paths` or `paths-ignore` (it
+would leave other pull requests waiting forever), and the aggregate `Coverage`
+job rather than the test shards. `tests/test_apply_ruleset.py` enforces this.
+
+### Security settings
 
 Of the security workflows, only CodeQL (`codeql.yml`) uploads results, to code
 scanning; OSV-Scanner (`osv-scanner.yml`) and gitleaks (`security-audit.yml`)

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The main branch ruleset as code (`.github/rulesets/main.json`) and
+  `just ruleset` (`scripts/apply_ruleset.py`), an admin-run upsert that never
+  deletes
 - Security scanning workflows: CodeQL (`python`, `actions`), OSV-Scanner
   on `uv.lock`, Dependency Review with a license allow-list, and a weekly
   full-history gitleaks audit with a checksum-verified binary
