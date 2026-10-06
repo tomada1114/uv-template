@@ -18,7 +18,8 @@ just test-durations  # Regenerate the pytest-split duration file used by CI shar
 just smoke           # Build and verify wheel and sdist in temp environments
 just check           # Mutating dev check: fmt → lint → test
 just lock            # Update uv.lock after dependency changes
-just verify          # Non-mutating gate: lock-check → agents-check → lint → docs → smoke → test
+just verify          # Non-mutating gate: lock-check → agents-check → lint → test-skills → docs → smoke → test
+just test-skills     # Run the unittest suites bundled under .agents/skills/*/scripts/tests
 just docs            # Serve docs locally
 just docs-check      # Build docs and fail on warnings
 just build           # Build distribution packages
@@ -36,6 +37,24 @@ in the `justfile`. Run a single test with
 `just check` mutates the tree (it runs `fmt` first), so it never proves the
 *committed* tree is green. `just verify` does not mutate anything — it is the
 gate for a PR or a completion claim.
+
+## Validating a change
+
+Run the narrowest check that can fail while iterating, then `just verify` before
+a completion claim. `just verify` on every edit is slow enough that it stops
+being run at all.
+
+| What you changed | The narrowest check that can fail |
+|---|---|
+| A module under `src/` | `uv run --locked pytest tests/test_<module>.py` |
+| One test | `uv run --locked pytest tests/test_<module>.py::test_<name>` |
+| Any Python file's lint or types | `uv run --locked ruff check <file>`, then `uv run --locked mypy src scripts tests` |
+| A script under `scripts/` | `uv run --locked pytest tests/test_<script>.py` |
+| A skill under `.agents/skills/` | `just agents-sync && just agents-check && just test-skills` |
+| Dependencies in `pyproject.toml` | `uv lock`, `uv sync --all-groups --locked`, then `just verify` |
+| `docs/` or `mkdocs.yml` | `just docs-check` |
+| A workflow under `.github/workflows/` | `uv run --locked pre-commit run zizmor --all-files` |
+| Markdown or other prose | `uv run --locked pre-commit run typos --files <file>` |
 
 ## Architecture
 
@@ -71,9 +90,11 @@ some clones and makes Codex register a nested `references/SKILL.md` as a skill.
 | Skill | Load it when |
 |---|---|
 | `create-pr` | opening or updating a pull request |
-| `smart-commit` | grouping working-tree changes into commits |
 | `merge-dependabot` | landing Dependabot pull requests |
 | `release-workflow` | cutting a release |
+| `shipping-issues` | shipping the next issue or the whole backlog: rank, implement, review, PR, CI, merge |
+| `smart-commit` | grouping working-tree changes into commits |
+| `triaging-issues` | filing, labelling, or prioritizing an issue, or recording a problem found outside the task |
 
 ## Sub-agents
 
@@ -125,6 +146,47 @@ Before submitting a PR:
   the same logical commit.
 - Run `just verify` before a completion claim, on any code change.
 
+## Security and human approval
+
+- **Commit, push, and pull request need a human's sign-off** — given per
+  request, or by one of the [standing exceptions](#standing-exceptions) below.
+  The `guard.py` hook (see "Agent hooks") blocks the most dangerous spellings,
+  but its inspection is best-effort; this instruction is the rule itself.
+- Never weaken a gate to make a run pass: no lowered coverage threshold, no
+  removed ruff rule, no `noqa`, `type: ignore`, or per-file ignore without a
+  written reason, no skipped or deleted test, no removed `--locked`. If a gate
+  is wrong, say so and let a human decide.
+- When a command is denied — by a permission setting, a hook, or a human —
+  re-spelling it (`bash -c '…'`, an alias, a wrapper script) is forbidden. Stop
+  and ask.
+
+### Standing exceptions
+
+Invoking a skill that lists the commits or remote writes it makes is the
+sign-off for exactly those, for that invocation only:
+
+- `shipping-issues`: the writes its `SKILL.md` lists — priority and status
+  labels, syncing label definitions from `.github/labels.yml` with
+  `just labels`, pushing its own branches, creating the pull request, merging
+  it once CI passes, filing and labelling follow-up issues and the comments it
+  posts, and deleting the branches it created.
+- `create-pr`: pushing the current branch, `gh pr create` for it, and
+  `gh pr edit` on its own open pull request — never a force-push and never a
+  merge.
+- `smart-commit`: the commits it makes on the current branch, and pushing that
+  branch only when the request asked for a push — never a force-push and never
+  `main`.
+
+One request is a standing exception too: the owner explicitly asking for an
+issue ("file an issue for this") is the sign-off for the `gh issue create` of
+each issue that request asks for, with the labels `triaging-issues` gives it.
+An issue the agent would file from a friction it noticed on its own is drafted
+in the reply and waits for a yes.
+
+None of them covers a force-push or other history rewrite, `--no-verify` or
+any other hook bypass, weakening a gate, or adding a dependency — a new
+dependency is proposed and the agent stops for sign-off.
+
 ## Conventions: tests/**/*.py
 
 - Mirror the source layout with `tests/test_<module>.py`; use descriptive names such as `test_<what>_<scenario>_<expected_result>`.
@@ -140,6 +202,7 @@ Before submitting a PR:
 
 - All code, docs, commits, and PRs must be written in English
 - Do what has been asked; nothing more, nothing less
+- Note improvements you spot outside the current scope instead of making them (`triaging-issues` says how)
 - NEVER create files unless absolutely necessary
 - ALWAYS prefer editing an existing file to creating a new one
 - NEVER proactively create documentation files unless explicitly requested

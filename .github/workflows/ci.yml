@@ -42,6 +42,18 @@ jobs:
       - name: mypy
         run: uv run --locked mypy src scripts tests
 
+      # Mirrors `just test-skills`; the .claude/skills mirror is not run twice.
+      - name: Skill script tests
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          status=0
+          for dir in .agents/skills/*/scripts/tests; do
+            echo "== $dir"
+            uv run --locked python -m unittest discover -s "$dir" -t "$dir" -p 'test_*.py' || status=1
+          done
+          exit "$status"
+
   test:
     name: Test (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest

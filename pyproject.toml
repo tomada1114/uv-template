@@ -72,7 +72,9 @@ extend-exclude = [".claude/skills"]
 # (e.g. PEP 758 unparenthesized `except`) that would be a SyntaxError there.
 [tool.ruff.per-file-target-version]
 ".agents/hooks/*.py" = "py312"
-".agents/skills/*/scripts/*.py" = "py312"
+# `**` so a skill's bundled `scripts/tests/` is pinned too: those tests import
+# the scripts and run under the same interpreters.
+".agents/skills/*/scripts/**/*.py" = "py312"
 
 [tool.ruff.lint]
 select = [
@@ -147,11 +149,62 @@ convention = "google"
     "D1",  # missing docstrings — scripts are not a public API
     "T20", # print is the expected output channel for CLI scripts
 ]
+# Skill scripts are ported from the sibling templates (nextjs-app-template and
+# others) and kept close to that source, so a later sync stays a small diff
+# rather than a rewrite. They are stdlib-only CLI tools run with the system
+# `python3` and tested with unittest, never part of the package's public API.
+# The ignores below name only the style differences that follow from that;
+# they waive nothing for src/, scripts/ or tests/.
+".agents/skills/**/scripts/**" = [
+    "D1",      # missing docstrings — CLI helpers, not a public API
+    "D2",      # docstring layout (D205/D209) — kept as authored upstream
+    "T20",     # print is the CLI's output channel
+    "S603",    # subprocess with an argv list built from fixed commands (gh, git)
+    "S607",    # `gh`/`git` resolved from PATH on purpose, like a shell would
+    "PLW1510", # subprocess.run callers check returncode themselves
+    "B904",    # re-raised SystemExit carries the user-facing message on its own
+    "E402",    # sys.path set up before a sibling-script import
+    "I001",    # import order kept as authored upstream
+    "ISC003",  # explicit concatenation kept as authored upstream
+    "PLR0911", # long dispatch functions mirror the documented exit codes
+    "PLR0912",
+    "PLR0915",
+    "PLR2004", # exit codes and limits are documented in each script's header
+    "PLW0603", # module-level CLI state set once from argv
+    "RUF001",  # deliberate typographic characters in user-facing output
+    "TC003",   # runtime imports kept simple in stdlib-only scripts
+    "DTZ011",  # an issue's age in local days is approximate by design
+    "UP017",   # timezone.utc spelling kept as authored upstream
+    "UP031",   # printf-style formatting kept as authored upstream
+]
+".agents/skills/**/scripts/tests/**" = [
+    "D",       # test names are self-documenting
+    "PT",      # unittest.TestCase style: the tests run without pytest
+    "S108",    # fixture paths under /tmp are never written
+    "SLF001",  # tests reach a script's private helpers on purpose
+    "N802",    # unittest's setUp/tearDown-style method names
+    "E741",
+    "EM102",
+    "TRY003",
+    "F401",
+    "C420",
+    "PLC0415", # imports inside a test keep a fixture's module load local
+    "PLR0913",
+    "PLW2901",
+    "RUF005",
+    "RUF059",  # unpacked-but-unused results document the call's shape
+    "RUF100",  # `noqa: E402` kept from upstream, where E402 is not ignored
+    "SIM117",
+    "UP037",
+]
 
 [tool.ruff.lint.isort]
 required-imports = ["from __future__ import annotations"]
 
 [tool.ruff.format]
+# Ported skill scripts keep their upstream layout (see the per-file-ignores
+# above); reformatting them would turn every later sync into a full rewrite.
+exclude = [".agents/skills/*/scripts/**"]
 quote-style = "double"
 indent-style = "space"
 
