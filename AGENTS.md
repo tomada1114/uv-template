@@ -184,6 +184,26 @@ None of them covers a force-push or other history rewrite, `--no-verify` or
 any other hook bypass, weakening a gate, or adding a dependency — a new
 dependency is proposed and the agent stops for sign-off.
 
+## GitHub security settings
+
+Of the security workflows, only CodeQL (`codeql.yml`) uploads results, to code
+scanning; OSV-Scanner (`osv-scanner.yml`) and gitleaks (`security-audit.yml`)
+just fail the job. These are separate repository settings to turn on:
+
+- Secret scanning, and its push protection
+- Private vulnerability reporting (the route `SECURITY.md` gives)
+- Dependabot alerts
+- The dependency graph, which Dependency Review (`dependency-review.yml`) needs
+
+On a private repository, CodeQL and Dependency Review need GitHub Code
+Security, and secret scanning needs GitHub Secret Protection. Without them,
+delete `codeql.yml` and `dependency-review.yml` rather than guarding them with
+an `if:` on visibility; `osv-scanner.yml`, `security-audit.yml`, and `ci.yml`'s
+zizmor job run anywhere. Private vulnerability reporting works only on public
+repositories, so a private repository must replace the reporting route in
+`SECURITY.md` and the security contact link in
+`.github/ISSUE_TEMPLATE/config.yml` with another contact.
+
 ## Conventions: tests/**/*.py
 
 - Mirror the source layout with `tests/test_<module>.py`; use descriptive names such as `test_<what>_<scenario>_<expected_result>`.

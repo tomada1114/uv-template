@@ -42,6 +42,10 @@ dev = [
 
 [tool.uv]
 exclude-newer = "2026-07-21T00:00:00Z"
+# virtualenv (dev, via pre-commit) 21.6.1 has PYSEC-2026-4011..4014; 21.7.13
+# fixes them (it needs python-discovery>=1.6) and both are past the 14-day
+# cooldown. Drop this override once the global cutoff passes 2026-09-18.
+exclude-newer-package = { virtualenv = "2026-09-22T00:00:00Z", python-discovery = "2026-09-22T00:00:00Z" }
 
 # --------------------------------------------------------------------------- #
 #  Build

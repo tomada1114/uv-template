@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hooks are missing (opt-out: `ALLOW_MISSING_GIT_HOOKS=1`; `CI=true` only
   warns). **Existing checkouts: re-run `just install`** to add the new
   `pre-merge-commit` hook
+- Security scanning workflows: CodeQL (`python`, `actions`), OSV-Scanner
+  on `uv.lock`, Dependency Review with a license allow-list, and a weekly
+  full-history gitleaks audit with a checksum-verified binary
 - A safer bootstrap flow with validated package/repository names, collision
   checks, syntax-safe metadata quoting, and protection against rewriting
   untracked, symlinked, or secret files after a Git failure
