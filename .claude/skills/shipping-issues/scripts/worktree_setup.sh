@@ -226,10 +226,18 @@ if [[ -f "$repo_root/uv.lock" ]]; then
   deps_cmd=(uv sync --all-groups --locked)
 fi
 
-# A pre-commit config means commits are meant to run its hook. The hook file
-# itself lives in the shared hooks directory, so it is checked, not installed.
+# A pre-commit config means commits are meant to run its hooks. The hook files
+# themselves live in the shared hooks directory, so they are checked, not
+# installed. pre-commit is always expected; pre-merge-commit too when the
+# config's default_install_hook_types asks for it (merge commits run only that).
 hooks_expected=0
-[[ -f "$repo_root/.pre-commit-config.yaml" ]] && hooks_expected=1
+expected_hooks=(pre-commit)
+if [[ -f "$repo_root/.pre-commit-config.yaml" ]]; then
+  hooks_expected=1
+  if grep -Eq '^default_install_hook_types:.*pre-merge-commit' "$repo_root/.pre-commit-config.yaml"; then
+    expected_hooks+=(pre-merge-commit)
+  fi
+fi
 hooks_dir="$(git -C "$repo_root" rev-parse --path-format=absolute --git-path hooks)"
 
 # Runs "$@" with cwd = the worktree. On a non-zero exit (including "command
@@ -347,10 +355,16 @@ provision_one() {
 
   # --- 5. shared pre-commit hook (checked, never installed here) ----------
   if [[ $hooks_expected -eq 1 ]]; then
-    if [[ -f "$hooks_dir/pre-commit" ]] && grep -q "pre-commit" "$hooks_dir/pre-commit" 2>/dev/null; then
+    local hook missing_hooks=()
+    for hook in "${expected_hooks[@]}"; do
+      if ! { [[ -f "$hooks_dir/$hook" ]] && grep -q "pre-commit" "$hooks_dir/$hook" 2>/dev/null; }; then
+        missing_hooks+=("$hook")
+      fi
+    done
+    if [[ ${#missing_hooks[@]} -eq 0 ]]; then
       emit hooks "shared pre-commit hook installed"
     else
-      emit hooks "MISSING (commits here would skip the hook; run \`just install\` in the main checkout)"
+      emit hooks "MISSING ${missing_hooks[*]} (commits here would skip the hook; run \`just install\` in the main checkout)"
       warn=1
     fi
   fi

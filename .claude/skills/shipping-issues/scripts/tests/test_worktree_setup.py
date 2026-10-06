@@ -295,6 +295,51 @@ class WorktreeSetupTest(unittest.TestCase):
         self.assertIn("hooks: shared pre-commit hook installed\n", proc.stdout)
         self.assertIn("verdict: READY\n", proc.stdout)
 
+    def _repo_expecting_merge_hook(self, td):
+        repo = td / "repo"
+        repo.mkdir()
+        make_repo(repo)
+        (repo / ".pre-commit-config.yaml").write_text(
+            "default_install_hook_types: [pre-commit, pre-merge-commit]\nrepos: []\n",
+            encoding="utf-8",
+        )
+        git(repo, "add", ".pre-commit-config.yaml")
+        git(repo, "commit", "-qm", "add pre-commit config")
+        return repo
+
+    def test_missing_pre_merge_commit_hook_the_config_asks_for_warns(self):
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            repo = self._repo_expecting_merge_hook(td)
+            hook = repo / ".git" / "hooks" / "pre-commit"
+            hook.write_text("#!/usr/bin/env bash\n# installed by pre-commit\n", encoding="utf-8")
+
+            proc = run_script(
+                ["--issue", "7", "--branch", "feat/7", "--base", "main", "--root", str(td / "worktrees")],
+                repo,
+            )
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("hooks: MISSING pre-merge-commit (", proc.stdout)
+        self.assertIn("verdict: READY_WITH_WARNINGS\n", proc.stdout)
+
+    def test_both_hooks_the_config_asks_for_installed_is_ready(self):
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            repo = self._repo_expecting_merge_hook(td)
+            for name in ("pre-commit", "pre-merge-commit"):
+                hook = repo / ".git" / "hooks" / name
+                hook.write_text("#!/usr/bin/env bash\n# installed by pre-commit\n", encoding="utf-8")
+
+            proc = run_script(
+                ["--issue", "8", "--branch", "feat/8", "--base", "main", "--root", str(td / "worktrees")],
+                repo,
+            )
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("hooks: shared pre-commit hook installed\n", proc.stdout)
+        self.assertIn("verdict: READY\n", proc.stdout)
+
     def test_verify_failure_is_a_warning_not_a_blocker(self):
         with tempfile.TemporaryDirectory() as td:
             td = Path(td)

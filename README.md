@@ -68,17 +68,20 @@ See [CONTRIBUTING.md](https://github.com/your-username/uv-template/blob/main/CON
 for full setup instructions.
 
 ```bash
-uv sync --all-groups --locked
-# Optional but recommended when working in a Git checkout
-uv run --locked pre-commit install --install-hooks
+just install   # dependencies + git hooks, then checks the hooks are in place
 just check
 just dev        # API with auto-reload on http://127.0.0.1:8000
 just run --help # the CLI, through uv
 ```
 
-`just install` installs pre-commit hooks automatically when the project lives in
-a Git repository and skips that step for "Use this template" bootstrap copies
-before Git is initialized.
+The git hooks are not optional: they carry the secret gate that refuses a
+commit staging a secret, for every author. `just install` installs the
+dependencies and the `pre-commit` and `pre-merge-commit` hooks, then fails if
+either hook is missing. `ALLOW_MISSING_GIT_HOOKS=1 just install` still tries
+to install them but only warns when that fails (`CI=true` does the same).
+Outside a Git repository — a "Use this template" copy before `git init` — it
+skips the hooks. Without Just, run `uv sync --all-groups --locked` and then
+`uv run --locked pre-commit install --install-hooks`.
 
 ## License
 
