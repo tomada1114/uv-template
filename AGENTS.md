@@ -89,6 +89,7 @@ some clones and makes Codex register a nested `references/SKILL.md` as a skill.
 
 | Skill | Load it when |
 |---|---|
+| `authoring-skills` | adding, editing, or reviewing a skill under `.agents/skills/`, or a skill never fires |
 | `create-pr` | opening or updating a pull request |
 | `merging-dependency-prs` | landing open Dependabot pull requests (GitHub Actions bumps) |
 | `release-workflow` | cutting a release |
