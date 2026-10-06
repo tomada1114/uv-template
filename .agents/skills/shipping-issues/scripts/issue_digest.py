@@ -106,7 +106,14 @@ DEP_PATTERNS = [
 #     which issues might collide into a set intersection.
 SHIP_CONTRACT_RE = re.compile(r"<!--\s*ship\s*:(.*?)-->", re.DOTALL | re.IGNORECASE)
 # Fields are `key=value`, whitespace-separated, values never contain spaces.
-CONTRACT_FIELD_RE = re.compile(r"([A-Za-z][\w-]*)\s*=\s*(\S+)")
+# An empty value (`blocked-by= blocks=#9`) leaves group 2 unmatched: a value
+# may never itself start like a `key=` token, or the empty field would swallow
+# the next one and turn a `blocks` edge into a `blocked-by` edge. The price is
+# that a value such as `touches=a=b.py` no longer parses; `key = value` with
+# spaces still does, so `key= value` reads `value` too.
+_CONTRACT_KEY = r"[A-Za-z][\w-]*"
+CONTRACT_FIELD_RE = re.compile(
+    rf"({_CONTRACT_KEY})\s*=(?:\s*(?!{_CONTRACT_KEY}\s*=)(\S+))?")
 CONTRACT_KNOWN_FIELDS = ("tier", "area", "blocked-by", "blocks", "touches", "design")
 # A contract is "complete enough to plan from" when it settles the three things
 # the startup would otherwise have to derive: the tier, what it waits on, and
@@ -243,7 +250,10 @@ def parse_ship_contract(body: str) -> dict[str, Any] | None:
     return {
         "fields": sorted(raw),
         "unknown_fields": sorted(k for k in raw if k not in CONTRACT_KNOWN_FIELDS),
-        "missing_fields": [k for k in CONTRACT_REQUIRED_FIELDS if k not in raw],
+        # An empty `blocked-by=` is a natural "none"; an empty `tier=` or
+        # `touches=` settles nothing, so it still counts as missing.
+        "missing_fields": [k for k in CONTRACT_REQUIRED_FIELDS
+                           if k not in raw or (not raw[k] and k != "blocked-by")],
         "tier": tier if tier in TIER_ORDER else None,
         "area": raw.get("area"),
         "depends_on": numbers("blocked-by"),
