@@ -1,4 +1,8 @@
-"""Tests for scripts/apply_ruleset.py and .github/rulesets/main.json."""
+"""Tests for scripts/apply_ruleset.py and .github/rulesets/main.json.
+
+That every required context is a job each pull request runs, and cannot skip,
+is the harness check in tests/harness/test_ruleset_contexts.py.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +11,6 @@ import json
 import re
 import subprocess
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -19,7 +22,6 @@ if TYPE_CHECKING:
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RULESET = REPO_ROOT / ".github" / "rulesets" / "main.json"
-WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 
 
 def _load_module() -> ModuleType:
@@ -48,154 +50,6 @@ def _required_contexts() -> list[str]:
     ruleset = json.loads(RULESET.read_text(encoding="utf-8"))
     checks = _rule(ruleset, "required_status_checks")["parameters"]
     return [check["context"] for check in checks["required_status_checks"]]
-
-
-# --- workflow scanning (no YAML dependency) ---
-#
-# The scanner reads only what the cross-check needs and fails closed: any
-# layout it cannot read raises UnreadableWorkflowError, so a workflow is never
-# classified as running on every pull request by accident.
-
-_KEY = re.compile(
-    r"^(?P<indent> *)(?P<key>[\"']?[A-Za-z0-9_-]+[\"']?):(?:\s+(?P<value>.*?))?\s*$"
-)
-_MATRIX_REF = re.compile(r"\$\{\{\s*matrix\.(?P<key>[A-Za-z0-9_-]+)\s*\}\}")
-_EXPR = re.compile(r"^\$\{\{\s*(?P<body>.*?)\s*\}\}$")
-_GUARDS = {"!cancelled()", "always()"}
-
-
-class UnreadableWorkflowError(AssertionError):
-    """A workflow uses a layout the scanner does not understand."""
-
-
-@dataclass(frozen=True, slots=True)
-class Check:
-    """One check run a workflow job produces."""
-
-    name: str
-    if_expr: str | None
-    has_needs: bool
-
-
-def _content(text: str) -> list[str]:
-    return [
-        line.rstrip()
-        for line in text.splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    ]
-
-
-def _children(lines: list[str], start: int, path: Path) -> tuple[int, list[str]]:
-    """Return the indentation of the block below ``lines[start]`` and its lines."""
-    parent = len(lines[start]) - len(lines[start].lstrip())
-    block: list[str] = []
-    for line in lines[start + 1 :]:
-        if len(line) - len(line.lstrip()) <= parent:
-            break
-        block.append(line)
-    if not block:
-        return parent + 1, []
-    indent = len(block[0]) - len(block[0].lstrip())
-    if any(len(line) - len(line.lstrip()) < indent for line in block):
-        msg = f"{path.name}: inconsistent indentation under {lines[start]!r}"
-        raise UnreadableWorkflowError(msg)
-    return indent, block
-
-
-def _mapping(lines: list[str], path: Path) -> dict[str, tuple[str, list[str]]]:
-    """Split a block into ``key -> (inline value, child lines)`` at its own indent."""
-    if not lines:
-        return {}
-    indent = len(lines[0]) - len(lines[0].lstrip())
-    result: dict[str, tuple[str, list[str]]] = {}
-    for index, line in enumerate(lines):
-        if len(line) - len(line.lstrip()) != indent:
-            continue
-        match = _KEY.match(line)
-        if match is None:
-            msg = f"{path.name}: cannot read {line!r}"
-            raise UnreadableWorkflowError(msg)
-        _, block = _children(lines, index, path)
-        result[match["key"].strip("\"'")] = (match["value"] or "", block)
-    return result
-
-
-def _flow_list(value: str) -> list[str] | None:
-    if value.startswith("[") and value.endswith("]"):
-        return [item.strip().strip("\"'") for item in value[1:-1].split(",")]
-    return None
-
-
-def _unfiltered_pull_request(on: tuple[str, list[str]], path: Path) -> bool:
-    value, block = on
-    if value:
-        events = _flow_list(value)
-        if events is None:
-            events = [value.strip("\"'")]
-        return "pull_request" in events
-    events_map = _mapping(block, path)
-    if "pull_request" not in events_map:
-        return False
-    pr_value, pr_block = events_map["pull_request"]
-    if pr_value not in {"", "{}"}:
-        msg = f"{path.name}: cannot read pull_request: {pr_value!r}"
-        raise UnreadableWorkflowError(msg)
-    return not {"paths", "paths-ignore"} & _mapping(pr_block, path).keys()
-
-
-def _matrix_values(
-    job: dict[str, tuple[str, list[str]]], key: str, path: Path
-) -> list[str]:
-    strategy = _mapping(job.get("strategy", ("", []))[1], path)
-    matrix = _mapping(strategy.get("matrix", ("", []))[1], path)
-    if key not in matrix:
-        msg = f"{path.name}: matrix.{key} is not declared in the job's matrix"
-        raise UnreadableWorkflowError(msg)
-    values = _flow_list(matrix[key][0])
-    if values is None:
-        msg = f"{path.name}: matrix.{key} must be a one-line [a, b] list"
-        raise UnreadableWorkflowError(msg)
-    return values
-
-
-def _checks(path: Path) -> list[Check] | None:
-    """Return the checks of a workflow that runs on every PR, else ``None``."""
-    top = _mapping(_content(path.read_text(encoding="utf-8")), path)
-    on = top.get("on") or top.get("true")
-    if on is None or not _unfiltered_pull_request(on, path):
-        return None
-    checks: list[Check] = []
-    for job_id, (_, job_lines) in _mapping(top.get("jobs", ("", []))[1], path).items():
-        job = _mapping(job_lines, path)
-        names = [job.get("name", (job_id, []))[0].strip("\"'") or job_id]
-        for key in _MATRIX_REF.findall(names[0]):
-            pattern = re.compile(rf"\$\{{\{{\s*matrix\.{key}\s*\}}\}}")
-            names = [
-                pattern.sub(value, name)
-                for name in names
-                for value in _matrix_values(job, key, path)
-            ]
-        if_expr = job["if"][0] if "if" in job else None
-        checks.extend(Check(name, if_expr, "needs" in job) for name in names)
-    return checks
-
-
-def every_pr_checks(workflows_dir: Path) -> dict[str, Check]:
-    """Return checks from workflows whose pull_request trigger is unfiltered."""
-    found: dict[str, Check] = {}
-    for path in sorted(workflows_dir.glob("*.y*ml")):
-        for check in _checks(path) or []:
-            found[check.name] = check
-    return found
-
-
-def can_skip(check: Check) -> bool:
-    """Whether a job's ``if:`` (or a failed ``needs:``) could skip its check."""
-    if check.if_expr is None:
-        return check.has_needs
-    match = _EXPR.match(check.if_expr.strip("\"'"))
-    body = match["body"] if match else check.if_expr
-    return body not in _GUARDS
 
 
 # --- the JSON ---
@@ -244,135 +98,6 @@ def test_required_contexts_are_pinned_to_github_actions() -> None:
     assert [c["integration_id"] for c in checks["required_status_checks"]] == [
         GITHUB_ACTIONS_APP_ID
     ] * len(checks["required_status_checks"])
-
-
-def test_required_contexts_run_on_every_pull_request_and_cannot_skip() -> None:
-    available = every_pr_checks(WORKFLOWS)
-
-    missing = sorted(set(_required_contexts()) - available.keys())
-    skippable = sorted(
-        c for c in _required_contexts() if c in available and can_skip(available[c])
-    )
-
-    assert missing == [], f"required contexts not run on every PR: {missing}"
-    assert skippable == [], f"required contexts whose job can be skipped: {skippable}"
-
-
-def test_path_filtered_workflow_jobs_are_not_every_pr_checks() -> None:
-    available = every_pr_checks(WORKFLOWS)
-
-    assert "Scan uv.lock" not in available
-    assert "Secret Scan (full history)" not in available
-    assert {
-        "Analyze (python)",
-        "Analyze (actions)",
-        "Test (shard 1/4)",
-    } <= available.keys()
-
-
-def _workflow(tmp_path: Path, text: str) -> Path:
-    (tmp_path / "w.yml").write_text(text, encoding="utf-8")
-    return tmp_path
-
-
-@pytest.mark.parametrize(
-    ("trigger", "expected"),
-    [
-        ("on:\n  pull_request:\n", True),
-        ("on:\n  pull_request:\n    types: [opened]\n", True),
-        ("on:\n  pull_request:\n    paths: [uv.lock]\n", False),
-        ("on:\n  pull_request:\n    paths-ignore: [docs/**]\n", False),
-        ("on:\n  push:\n    paths: [a]\n  pull_request:\n", True),
-        ("on:\n  schedule:\n    - cron: '0 0 * * 0'\n", False),
-        ("on: pull_request\n", True),
-        ("on: [push, pull_request]\n", True),
-        ("on: push\n", False),
-        ("on:\n    pull_request:\n        paths:\n            - a\n", False),
-        ('"on":\n  pull_request:\n', True),
-    ],
-    ids=[
-        "bare",
-        "types",
-        "paths",
-        "paths-ignore",
-        "push-paths-only",
-        "no-pr",
-        "inline-scalar",
-        "inline-list",
-        "inline-push",
-        "four-space-indent",
-        "quoted-on",
-    ],
-)
-def test_every_pr_checks_honours_trigger_filters(
-    tmp_path: Path, trigger: str, *, expected: bool
-) -> None:
-    root = _workflow(tmp_path, f"name: W\n{trigger}jobs:\n  job:\n    name: Job\n")
-
-    assert ("Job" in every_pr_checks(root)) is expected
-
-
-def test_every_pr_checks_expands_matrix_names(tmp_path: Path) -> None:
-    root = _workflow(
-        tmp_path,
-        "on: pull_request\njobs:\n    a:\n        name: A (${{ matrix.x }})\n"
-        "        strategy:\n            matrix:\n                x: [one, two]\n",
-    )
-
-    assert set(every_pr_checks(root)) == {"A (one)", "A (two)"}
-
-
-@pytest.mark.parametrize(
-    ("job", "message"),
-    [
-        (
-            "    name: A (${{ matrix.x }})\n    strategy:\n      matrix:\n        x:\n          - one\n",
-            r"matrix\.x must be a one-line",
-        ),
-        ("    name: A (${{ matrix.x }})\n", r"matrix\.x is not declared"),
-        ("    name: A\n   if: odd\n", r"inconsistent indentation"),
-    ],
-    ids=["block-list-matrix", "undeclared-matrix", "bad-indent"],
-)
-def test_every_pr_checks_fails_closed_on_unreadable_layout(
-    tmp_path: Path, job: str, message: str
-) -> None:
-    root = _workflow(tmp_path, f"on: pull_request\njobs:\n  a:\n{job}")
-
-    with pytest.raises(UnreadableWorkflowError, match=message):
-        every_pr_checks(root)
-
-
-def test_every_pr_checks_rejects_inline_pull_request_mapping(tmp_path: Path) -> None:
-    root = _workflow(
-        tmp_path, "on:\n  pull_request: {paths: [a]}\njobs:\n  a:\n    name: A\n"
-    )
-
-    with pytest.raises(UnreadableWorkflowError, match=r"cannot read pull_request"):
-        every_pr_checks(root)
-
-
-@pytest.mark.parametrize(
-    ("if_expr", "has_needs", "expected"),
-    [
-        (None, False, False),
-        (None, True, True),
-        ("${{ !cancelled() }}", True, False),
-        ("always()", True, False),
-        ("${{ needs.test.result == 'success' }}", True, True),
-        ("github.event_name == 'push'", False, True),
-    ],
-    ids=[
-        "plain",
-        "needs-unguarded",
-        "not-cancelled",
-        "always",
-        "success-only",
-        "event-if",
-    ],
-)
-def test_can_skip(if_expr: str | None, *, has_needs: bool, expected: bool) -> None:
-    assert can_skip(Check("J", if_expr, has_needs)) is expected
 
 
 # --- the script ---

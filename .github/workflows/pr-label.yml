@@ -29,7 +29,7 @@ jobs:
           type="${type%%(*}"
           type="${type%!}"
           # Every label below is declared in .github/labels.yml and created
-          # ahead of time by `just labels`; tests/test_sync_labels.py fails if
+          # ahead of time by `just labels`; tests/harness/test_labels.py fails if
           # this mapping names an undeclared one.
           case "$type" in
             feat) label=enhancement ;;

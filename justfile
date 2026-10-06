@@ -85,7 +85,14 @@ lock:
 check: fmt lint test
 
 # Non-mutating local PR gate (fail-fast: cheap gates before the suite)
-verify: lock-check agents-check lint test-skills test
+verify: lock-check agents-check check-harness lint test-skills test
+
+# tests/harness checks skills, AGENTS.md, recipes, the ruleset, labels, and
+# workflows against each other; tests/test_product_section.py is the Product
+# section check. `just test` runs both again as part of the whole suite.
+# Fail on cross-file drift in the agent harness (tests/harness)
+check-harness:
+    uv run --locked pytest tests/harness tests/test_product_section.py
 
 # Each suite is stdlib unittest so it needs no project dependency; the
 # .claude/skills mirror is the same bytes, so only the authored tree runs.

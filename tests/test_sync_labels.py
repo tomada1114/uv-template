@@ -1,9 +1,12 @@
-"""Tests for scripts/sync_labels.py."""
+"""Tests for scripts/sync_labels.py.
+
+That every label the repository applies is declared is the harness check in
+tests/harness/test_labels.py.
+"""
 
 from __future__ import annotations
 
 import importlib.util
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -48,19 +51,6 @@ def test_committed_labels_file_parses() -> None:
     labels = sync_labels.parse_labels(sync_labels.LABELS_FILE.read_text("utf-8"))
 
     assert {"bug", "chore", "tracking", "priority: P0"} <= {lbl.name for lbl in labels}
-
-
-def test_pr_label_workflow_only_applies_declared_labels() -> None:
-    declared = {
-        lbl.name
-        for lbl in sync_labels.parse_labels(sync_labels.LABELS_FILE.read_text("utf-8"))
-    }
-    workflow = (REPO_ROOT / ".github" / "workflows" / "pr-label.yml").read_text("utf-8")
-
-    applied = set(re.findall(r"\)\s*label=([\w-]+)\s*;;", workflow))
-
-    assert applied
-    assert applied <= declared
 
 
 def test_parse_labels_reads_quoted_and_bare_values() -> None:

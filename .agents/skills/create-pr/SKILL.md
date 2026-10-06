@@ -6,9 +6,6 @@ description: >
   summary/test plan/checklist, and verifies all checklist items pass before
   creating via gh CLI. Use PROACTIVELY when: PR creation, pull request,
   create PR, open PR, submit PR, PR update, review request.
-allowed-tools: Bash(cat:*), Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git rev-parse:*)
-metadata:
-  platforms: claude-code, codex
 ---
 
 # PR Creation Workflow

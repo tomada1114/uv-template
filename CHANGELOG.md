@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `just check-harness`, part of `just verify` (CI's test shards run it too): a
+  pytest suite in `tests/harness/` that fails on cross-file drift in the agent
+  harness — a skill frontmatter with a key other than `name`/`description`, a
+  `name` that is not its directory, a description that is not ASCII or is over
+  600 characters, a body over 200 lines, or a nested `SKILL.md`; an `AGENTS.md`
+  Skills table that disagrees with `.agents/skills/`; a `just <recipe>` that
+  AGENTS.md, CLAUDE.md, a skill, or `.github/**` names but the justfile lacks; a
+  required ruleset context that is not an unskippable every-PR job (moved from
+  `tests/test_apply_ruleset.py`, its workflow scanner now shared in
+  `tests/harness/_workflows.py`); and a label pr-label.yml, an issue form, or
+  dependabot.yml applies that `.github/labels.yml` does not declare exactly once
+  (moved from `tests/test_sync_labels.py`). The Product check stays
+  `tests/test_product_section.py`, which the recipe also runs
 - The `starting-an-app` skill: the order of work from "Use this template" to the
   first feature, which steps are a human's (ruleset, security settings, secrets),
   `just labels`, choosing the API, the CLI, or both, removing the sample to-do
@@ -107,6 +120,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `create-pr` and `smart-commit` drop their `allowed-tools` and `metadata`
+  frontmatter keys, which `tests/harness/test_skills.py` now rejects, and
+  `authoring-skills` names the harness wherever it said no check enforced a rule
 - **Breaking:** `scripts/bootstrap.py` is rebuilt for the application template.
   It replaces `my-app`, `my_app`, `My App` (the new display-name placeholder),
   `MY_APP_`, `your-username/uv-template`, and `Your Name`; validates every value

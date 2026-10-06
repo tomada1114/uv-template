@@ -6,9 +6,6 @@ description: >
   exclusion, and uv.lock bundling automatically. Use PROACTIVELY when:
   commit, git commit, save changes, commit and push, stage changes,
   push my changes, commit this work, ship it.
-allowed-tools: Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git rev-parse:*)
-metadata:
-  platforms: claude-code, codex
 ---
 
 # Smart Commit Workflow
