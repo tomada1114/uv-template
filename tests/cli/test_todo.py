@@ -5,14 +5,11 @@ from typing import TYPE_CHECKING
 import pytest
 from typer.testing import CliRunner
 
+from my_app.cli.errors import ExitCode
 from my_app.cli.main import app
 
 if TYPE_CHECKING:
     from typer.testing import Result
-
-EXIT_OK = 0
-EXIT_DOMAIN_ERROR = 1
-EXIT_USAGE_ERROR = 2
 
 
 @pytest.fixture
@@ -35,16 +32,16 @@ def test_todo_add_then_list_shows_the_todo(run):
     added = run("todo", "add", "buy milk")
     listed = run("todo", "list")
 
-    assert added.exit_code == EXIT_OK
+    assert added.exit_code == ExitCode.OK
     assert added.stdout == "Added 1 [ ] buy milk\n"
-    assert listed.exit_code == EXIT_OK
+    assert listed.exit_code == ExitCode.OK
     assert listed.stdout == "1 [ ] buy milk\n"
 
 
 def test_todo_list_empty_store_says_so(run):
     result = run("todo", "list")
 
-    assert result.exit_code == EXIT_OK
+    assert result.exit_code == ExitCode.OK
     assert result.stdout == "No to-dos yet.\n"
 
 
@@ -55,7 +52,7 @@ def test_todo_list_empty_store_says_so(run):
 def test_todo_add_empty_title_exits_1_with_error_on_stderr(run, title):
     result = run("todo", "add", title)
 
-    assert result.exit_code == EXIT_DOMAIN_ERROR
+    assert result.exit_code == ExitCode.DOMAIN_ERROR
     assert result.stdout == ""
     assert result.stderr.startswith("Error: Title must be 1-200 characters")
     assert run("todo", "list").stdout == "No to-dos yet.\n"
@@ -66,7 +63,7 @@ def test_todo_complete_existing_id_marks_it_completed(run):
 
     result = run("todo", "complete", "1")
 
-    assert result.exit_code == EXIT_OK
+    assert result.exit_code == ExitCode.OK
     assert result.stdout == "Completed 1 [x] buy milk\n"
     assert run("todo", "list").stdout == "1 [x] buy milk\n"
 
@@ -76,7 +73,7 @@ def test_todo_delete_existing_id_removes_it(run):
 
     result = run("todo", "delete", "1")
 
-    assert result.exit_code == EXIT_OK
+    assert result.exit_code == ExitCode.OK
     assert result.stdout == "Deleted to-do 1\n"
     assert run("todo", "list").stdout == "No to-dos yet.\n"
 
@@ -85,7 +82,7 @@ def test_todo_delete_existing_id_removes_it(run):
 def test_todo_command_unknown_id_exits_1_with_error_on_stderr(run, command):
     result = run("todo", command, "999")
 
-    assert result.exit_code == EXIT_DOMAIN_ERROR
+    assert result.exit_code == ExitCode.DOMAIN_ERROR
     assert result.stdout == ""
     assert result.stderr == "Error: To-do 999 not found\n"
 
@@ -94,7 +91,7 @@ def test_todo_command_unknown_id_exits_1_with_error_on_stderr(run, command):
 def test_todo_command_non_integer_id_exits_with_usage_error(run, command):
     result = run("todo", command, "abc")
 
-    assert result.exit_code == EXIT_USAGE_ERROR
+    assert result.exit_code == ExitCode.USAGE_ERROR
 
 
 def test_todo_without_supplied_container_reads_settings_from_env(tmp_path, monkeypatch):
@@ -104,5 +101,5 @@ def test_todo_without_supplied_container_reads_settings_from_env(tmp_path, monke
     runner.invoke(app, ["todo", "add", "buy milk"])
     result = runner.invoke(app, ["todo", "list"])
 
-    assert result.exit_code == EXIT_OK
+    assert result.exit_code == ExitCode.OK
     assert result.stdout == "1 [ ] buy milk\n"

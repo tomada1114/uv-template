@@ -3,17 +3,20 @@ from __future__ import annotations
 from http import HTTPStatus
 from importlib.metadata import version
 
-import pytest
 from fastapi.testclient import TestClient
 
 from my_app.api.app import create_app
+from my_app.core.errors import AppError
 from my_app.settings import Settings
 
+UNMAPPED_MESSAGE = "a rule with no status of its own"
 
-@pytest.fixture
-def client():
-    with TestClient(create_app(Settings(database_url=None))) as test_client:
-        yield test_client
+
+class _UnmappedError(AppError):
+    """A domain error ``create_app`` has no specific status for."""
+
+    def __init__(self) -> None:
+        super().__init__(UNMAPPED_MESSAGE)
 
 
 def test_healthz_returns_ok(client):
@@ -29,14 +32,30 @@ def test_openapi_reports_the_installed_version(client):
     assert response.json()["info"]["version"] == version("my-app")
 
 
+def test_unmapped_app_error_returns_400_not_500(make_container):
+    app = create_app(container=make_container())
+
+    @app.get("/unmapped")
+    def _raise_unmapped() -> None:
+        raise _UnmappedError
+
+    with TestClient(app) as client:
+        response = client.get("/unmapped")
+
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.json() == {"detail": UNMAPPED_MESSAGE}
+
+
 def test_create_app_without_settings_reads_the_environment(tmp_path, monkeypatch):
-    path = tmp_path / "env.db"
-    monkeypatch.setenv("MY_APP_DATABASE_URL", f"sqlite:///{path}")
+    monkeypatch.setenv("MY_APP_DATABASE_URL", f"sqlite:///{tmp_path / 'env.db'}")
 
-    with TestClient(create_app()) as client:
-        client.post("/todos", json={"title": "from env"})
+    with TestClient(create_app()) as writer:
+        created = writer.post("/todos", json={"title": "from env"})
+    with TestClient(create_app()) as reader:
+        titles = [todo["title"] for todo in reader.get("/todos").json()]
 
-    assert path.is_file()
+    assert created.status_code == HTTPStatus.CREATED
+    assert titles == ["from env"]
 
 
 def test_create_app_each_call_owns_an_independent_store():

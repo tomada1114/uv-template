@@ -11,7 +11,7 @@
 
 - Test *behavior and contracts*, not implementation details
 - Test through each layer's public modules (`from my_app.core.services import TodoService`), never private helpers directly
-- Drive the API with `fastapi.testclient.TestClient(create_app(settings))` and the CLI with `typer.testing.CliRunner`; build services through the composition root (the `make_container` fixture), never by hand-wiring adapters in an entry-point test
+- Drive the API with the `client` fixture (`tests/api/conftest.py`: `TestClient(create_app(container=...))`) and the CLI with `typer.testing.CliRunner` passing `obj=` a container; build both containers through the composition root (the `make_container` fixture, fixed clock), never by hand-wiring adapters in an entry-point test
 - Every repository adapter runs the one contract suite in `tests/adapters/test_repository_contract.py`; add a `pytest.param` there rather than a separate suite
 - Always test the happy path AND the error path for every public function
 

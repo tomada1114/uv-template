@@ -149,8 +149,8 @@ ignore = [
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
-# Pydantic and FastAPI read annotations at run time, so the types they name must
-# stay real imports rather than move under `if TYPE_CHECKING:`.
+# Pydantic, FastAPI, and Typer read annotations at run time, so the types they
+# name must stay real imports rather than move under `if TYPE_CHECKING:`.
 [tool.ruff.lint.flake8-type-checking]
 runtime-evaluated-base-classes = [
     "pydantic.BaseModel",
@@ -162,6 +162,14 @@ runtime-evaluated-decorators = [
     "fastapi.APIRouter.put",
     "fastapi.APIRouter.patch",
     "fastapi.APIRouter.delete",
+    "fastapi.FastAPI.get",
+    "fastapi.FastAPI.post",
+    "fastapi.FastAPI.put",
+    "fastapi.FastAPI.patch",
+    "fastapi.FastAPI.delete",
+    "fastapi.FastAPI.exception_handler",
+    "typer.Typer.command",
+    "typer.Typer.callback",
 ]
 
 # The core (src/my_app/core) must stay framework- and I/O-free so every entry

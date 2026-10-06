@@ -15,6 +15,17 @@ if TYPE_CHECKING:
     from my_app.core.models import Todo
 
 
+class ErrorResponse(BaseModel):
+    """Body of every error a domain rule produces (404, 422, and 400).
+
+    ``detail`` is a single message here. FastAPI's own 422 for a request that
+    does not parse (a missing field, a non-integer id) keeps its list-shaped
+    ``detail`` instead, so a client tells the two apart by type.
+    """
+
+    detail: str
+
+
 class HealthResponse(BaseModel):
     """Body of ``GET /healthz``."""
 

@@ -15,13 +15,17 @@ if TYPE_CHECKING:
 
 
 class Clock(Protocol):
-    """Return the current time as a timezone-aware UTC ``datetime``.
+    """A source of the current time; any zero-argument callable fits.
 
     Injected rather than read from ``datetime.now`` so tests can fix the time.
     """
 
     def __call__(self) -> datetime:
-        """Return the current UTC time."""
+        """Return the current time.
+
+        Returns:
+            A timezone-aware ``datetime``; ``Todo`` rejects a naive one.
+        """
 
 
 @runtime_checkable
@@ -34,27 +38,54 @@ class TodoRepository(Protocol):
     """
 
     def add(self, draft: TodoDraft) -> Todo:
-        """Store a draft and return it with its newly assigned id."""
+        """Store a draft under a new id.
+
+        Args:
+            draft: The validated to-do to store.
+
+        Returns:
+            The stored to-do. Ids increase and are never reused, even after a
+            delete, so a stale id can never name a different to-do.
+        """
 
     def get(self, todo_id: int) -> Todo:
-        """Return the to-do with this id.
+        """Fetch one to-do.
+
+        Args:
+            todo_id: Any integer; one never assigned is simply not found.
+
+        Returns:
+            The stored to-do.
 
         Raises:
             TodoNotFoundError: If no to-do has this id.
         """
 
     def list_all(self) -> list[Todo]:
-        """Return every stored to-do in ascending id order."""
+        """Fetch every to-do.
+
+        Returns:
+            The to-dos in ascending id order, which is creation order.
+        """
 
     def update(self, todo: Todo) -> Todo:
-        """Replace the stored to-do that has ``todo.id`` and return it.
+        """Replace the stored to-do that has ``todo.id``.
+
+        Args:
+            todo: The new value; its id selects what it replaces.
+
+        Returns:
+            ``todo``, now stored.
 
         Raises:
             TodoNotFoundError: If no to-do has this id.
         """
 
     def delete(self, todo_id: int) -> None:
-        """Remove the to-do with this id.
+        """Remove one to-do.
+
+        Args:
+            todo_id: Any integer; one never assigned is simply not found.
 
         Raises:
             TodoNotFoundError: If no to-do has this id.

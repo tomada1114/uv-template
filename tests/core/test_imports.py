@@ -2,7 +2,8 @@
 
 Ruff's TID251 rule bans the same modules at lint time; this test backs it up
 and is stricter, since it also rejects any third-party import (Pydantic
-included) and any reach out of ``my_app.core`` into another layer.
+included) and any reach out of ``my_app.core`` into another layer. It walks
+``core/`` recursively, so a subpackage added later is checked too.
 """
 
 from __future__ import annotations
@@ -18,10 +19,16 @@ import my_app.core
 CORE_PACKAGE = "my_app.core"
 CORE_DIR = Path(my_app.core.__file__).parent
 BANNED_MODULES = frozenset({"fastapi", "typer", "uvicorn", "sqlite3", "httpx"})
-CORE_MODULE_PATHS = sorted(CORE_DIR.glob("*.py"))
+CORE_MODULE_PATHS = sorted(CORE_DIR.rglob("*.py"))
 
 
-def _imported_modules(source: str) -> set[str]:
+def _package_of(path: Path) -> str:
+    """Return the package a core file's relative imports are resolved against."""
+    subpackages = path.relative_to(CORE_DIR).parent.parts
+    return ".".join([CORE_PACKAGE, *subpackages])
+
+
+def _imported_modules(source: str, package: str = CORE_PACKAGE) -> set[str]:
     """Return every module a core file imports, relative imports resolved."""
     modules: set[str] = set()
     for node in ast.walk(ast.parse(source)):
@@ -31,9 +38,8 @@ def _imported_modules(source: str) -> set[str]:
             case ast.ImportFrom(module=module, level=0) if module is not None:
                 modules.add(module)
             case ast.ImportFrom(module=module, level=level) if level > 0:
-                parent = CORE_PACKAGE.split(".")[
-                    : len(CORE_PACKAGE.split(".")) - level + 1
-                ]
+                parts = package.split(".")
+                parent = parts[: len(parts) - level + 1]
                 modules.add(".".join([*parent, module] if module else parent))
     return modules
 
@@ -47,12 +53,16 @@ def _is_allowed(module: str) -> bool:
 
 
 def test_core_package_has_modules_to_check():
-    assert CORE_MODULE_PATHS
+    assert CORE_DIR / "__init__.py" in CORE_MODULE_PATHS
 
 
-@pytest.mark.parametrize("path", CORE_MODULE_PATHS, ids=lambda path: path.name)
+@pytest.mark.parametrize(
+    "path",
+    CORE_MODULE_PATHS,
+    ids=lambda path: path.relative_to(CORE_DIR).as_posix(),
+)
 def test_core_module_imports_only_stdlib_and_core(path):
-    modules = _imported_modules(path.read_text(encoding="utf-8"))
+    modules = _imported_modules(path.read_text(encoding="utf-8"), _package_of(path))
 
     disallowed = sorted(module for module in modules if not _is_allowed(module))
 
@@ -81,13 +91,31 @@ def test_import_check_forbidden_import_is_rejected(source, module):
     assert not _is_allowed(module)
 
 
+def test_import_check_subpackage_relative_escape_is_rejected():
+    subpackage_file = CORE_DIR / "billing" / "invoices.py"
+
+    modules = _imported_modules(
+        "from ...adapters import sqlite", _package_of(subpackage_file)
+    )
+
+    assert modules == {"my_app.adapters"}
+    assert not _is_allowed("my_app.adapters")
+
+
 @pytest.mark.parametrize(
-    "source",
+    ("source", "package"),
     [
-        pytest.param("from datetime import datetime", id="stdlib"),
-        pytest.param("from my_app.core.errors import AppError", id="core-absolute"),
-        pytest.param("from .errors import AppError", id="core-relative"),
+        pytest.param("from datetime import datetime", CORE_PACKAGE, id="stdlib"),
+        pytest.param(
+            "from my_app.core.errors import AppError", CORE_PACKAGE, id="core-absolute"
+        ),
+        pytest.param("from .errors import AppError", CORE_PACKAGE, id="core-relative"),
+        pytest.param(
+            "from ..errors import AppError",
+            f"{CORE_PACKAGE}.billing",
+            id="subpackage-relative",
+        ),
     ],
 )
-def test_import_check_allowed_import_is_accepted(source):
-    assert all(_is_allowed(module) for module in _imported_modules(source))
+def test_import_check_allowed_import_is_accepted(source, package):
+    assert all(_is_allowed(module) for module in _imported_modules(source, package))

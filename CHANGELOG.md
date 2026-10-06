@@ -18,7 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   add|list|complete|delete`, `my-app serve`), `MY_APP_*` settings via
   pydantic-settings, and one composition root for both entry points. Ruff's
   `TID251` banned-api rule and a test keep fastapi, typer, uvicorn, sqlite3,
-  and httpx out of the core. Runtime dependencies: fastapi, uvicorn, typer,
+  and httpx out of the core. The API answers domain errors with an
+  `ErrorResponse` body (404 / 422, 400 for any other `AppError`); the CLI
+  exits 1 for a domain error, 2 for a usage error, and 3 for an invalid
+  `MY_APP_*` setting, with one line on stderr. `my-app todo` never imports
+  FastAPI or uvicorn. Runtime dependencies: fastapi, uvicorn, typer,
   pydantic-settings; dev: httpx
 - `just dev` (human-run API server with auto-reload) and `just run *ARGS`
   (the CLI through `uv run --locked my-app`)

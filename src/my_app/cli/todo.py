@@ -1,24 +1,21 @@
-"""The ``my-app todo`` commands: thin wrappers around ``TodoService``."""
+"""The ``my-app todo`` commands: thin wrappers around ``TodoService``.
+
+Command docstrings stay one line because Typer prints them as ``--help``.
+"""
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 from typing import TYPE_CHECKING, Annotated
 
 import typer
 
+from my_app.cli.errors import exit_on_domain_error, load_settings
 from my_app.composition import build_container
-from my_app.core.errors import AppError
-from my_app.settings import Settings
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
-
     from my_app.composition import Container
     from my_app.core.models import Todo
 
-# 2 stays Typer's own code for a usage error, so a domain failure is told apart.
-EXIT_DOMAIN_ERROR = 1
 COMPLETED_MARK = "x"
 OPEN_MARK = " "
 
@@ -29,13 +26,11 @@ app = typer.Typer(
 
 @app.callback()
 def load_services(ctx: typer.Context) -> None:
-    """Build the services once, unless the caller already supplied them.
-
-    A caller passing ``obj=`` (tests, through ``CliRunner.invoke``) keeps one
-    container across invocations; a real run builds it from the environment.
-    """
+    """Create, list, complete, and delete to-dos."""
+    # A caller passing `obj=` (tests, through CliRunner.invoke) keeps one
+    # container across invocations; a real run builds it from the environment.
     if ctx.obj is None:
-        ctx.obj = build_container(Settings())
+        ctx.obj = build_container(load_settings())
 
 
 @app.command("add")
@@ -44,7 +39,7 @@ def add_todo(
     title: Annotated[str, typer.Argument(help="What needs doing.")],
 ) -> None:
     """Add a to-do."""
-    with _exit_on_domain_error():
+    with exit_on_domain_error():
         todo = _container(ctx).todos.create(title)
     typer.echo(f"Added {_describe(todo)}")
 
@@ -65,7 +60,7 @@ def complete_todo(
     todo_id: Annotated[int, typer.Argument(metavar="ID", help="The to-do's id.")],
 ) -> None:
     """Mark a to-do as completed."""
-    with _exit_on_domain_error():
+    with exit_on_domain_error():
         todo = _container(ctx).todos.complete(todo_id)
     typer.echo(f"Completed {_describe(todo)}")
 
@@ -76,7 +71,7 @@ def delete_todo(
     todo_id: Annotated[int, typer.Argument(metavar="ID", help="The to-do's id.")],
 ) -> None:
     """Delete a to-do."""
-    with _exit_on_domain_error():
+    with exit_on_domain_error():
         _container(ctx).todos.delete(todo_id)
     typer.echo(f"Deleted to-do {todo_id}")
 
@@ -85,24 +80,6 @@ def _container(ctx: typer.Context) -> Container:
     """Return the container ``load_services`` put on the context."""
     container: Container = ctx.obj
     return container
-
-
-@contextmanager
-def _exit_on_domain_error() -> Iterator[None]:
-    """Turn an expected domain error into a message on stderr and exit code 1.
-
-    Only ``AppError`` is caught: anything else is a bug and keeps its
-    traceback.
-
-    Raises:
-        typer.Exit: With ``EXIT_DOMAIN_ERROR`` when the block raised an
-            ``AppError``.
-    """
-    try:
-        yield
-    except AppError as error:
-        typer.echo(f"Error: {error}", err=True)
-        raise typer.Exit(code=EXIT_DOMAIN_ERROR) from error
 
 
 def _describe(todo: Todo) -> str:

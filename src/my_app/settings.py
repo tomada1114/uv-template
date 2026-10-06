@@ -9,6 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ENV_PREFIX = "MY_APP_"
 SQLITE_URL_PREFIX = "sqlite:///"
+SQLITE_MEMORY_PATH = ":memory:"
 
 
 class Settings(BaseSettings):
@@ -20,8 +21,9 @@ class Settings(BaseSettings):
 
     Attributes:
         database_url: ``sqlite:///<path>`` selects the SQLite repository at
-            that path; unset keeps to-dos in memory for the life of the
-            process. Read from ``MY_APP_DATABASE_URL``.
+            that file; unset (or set to an empty string) keeps to-dos in
+            memory for the life of the process. Read from
+            ``MY_APP_DATABASE_URL``.
     """
 
     model_config = SettingsConfigDict(env_prefix=ENV_PREFIX)
@@ -30,15 +32,31 @@ class Settings(BaseSettings):
 
     @field_validator("database_url")
     @classmethod
-    def _require_sqlite_url(cls, value: str | None) -> str | None:
-        """Reject any URL the composition root could not open.
+    def _require_sqlite_file_url(cls, value: str | None) -> str | None:
+        """Reject any URL the SQLite repository could not use as a file.
 
-        Failing here, at startup, beats failing on the first request.
+        Failing here, at startup, beats failing on the first request. An empty
+        value counts as unset: ``MY_APP_DATABASE_URL=`` in a shell or an env
+        file usually means "no database", not a malformed one.
+
+        Raises:
+            ValueError: If the URL is not ``sqlite:///<file path>``.
         """
-        if value is None:
+        if not value:
             return None
-        if not value.startswith(SQLITE_URL_PREFIX) or value == SQLITE_URL_PREFIX:
-            msg = f"database_url must look like '{SQLITE_URL_PREFIX}<path>', got {value!r}"
+        path = value.removeprefix(SQLITE_URL_PREFIX)
+        if path == value or not path:
+            msg = f"must look like '{SQLITE_URL_PREFIX}<path>', got {value!r}"
+            raise ValueError(msg)
+        if path == SQLITE_MEMORY_PATH:
+            msg = (
+                f"{value!r} is not supported: the repository opens a new "
+                "connection per call, so an in-memory SQLite database would be "
+                "empty every time. Unset the variable to use the in-memory store."
+            )
+            raise ValueError(msg)
+        if path.endswith("/"):
+            msg = f"must name a file, not a directory, got {value!r}"
             raise ValueError(msg)
         return value
 

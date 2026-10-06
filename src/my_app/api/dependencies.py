@@ -13,10 +13,16 @@ if TYPE_CHECKING:
 
 
 def get_todo_service(request: Request) -> TodoService:
-    """Return the to-do service from the container ``create_app`` stored.
+    """Hand a route the to-do service from the container ``create_app`` stored.
 
     Reading it from the app, not a module global, lets every ``create_app``
     call — one per test — own an independent store.
+
+    Args:
+        request: The current request, which carries its application.
+
+    Returns:
+        The application's ``TodoService``.
     """
     container: Container = request.app.state.container
     return container.todos

@@ -4,17 +4,8 @@ from datetime import datetime
 from http import HTTPStatus
 
 import pytest
-from fastapi.testclient import TestClient
 
-from my_app.api.app import create_app
 from my_app.core.models import MAX_TITLE_LENGTH
-from my_app.settings import Settings
-
-
-@pytest.fixture
-def client():
-    with TestClient(create_app(Settings(database_url=None))) as test_client:
-        yield test_client
 
 
 @pytest.fixture
@@ -37,15 +28,18 @@ def test_list_todos_empty_store_returns_empty_list(client):
     assert response.json() == []
 
 
-def test_create_todo_valid_title_returns_201_with_open_todo(client):
+def test_create_todo_valid_title_returns_201_with_open_todo(client, fixed_now):
     response = client.post("/todos", json={"title": "  buy milk "})
 
     assert response.status_code == HTTPStatus.CREATED
     body = response.json()
-    assert body["title"] == "buy milk"
-    assert body["completed"] is False
-    assert isinstance(body["id"], int)
-    assert datetime.fromisoformat(body["created_at"]).utcoffset() is not None
+    assert body == {
+        "id": 1,
+        "title": "buy milk",
+        "completed": False,
+        "created_at": body["created_at"],
+    }
+    assert datetime.fromisoformat(body["created_at"]) == fixed_now
 
 
 @pytest.mark.parametrize(
@@ -64,10 +58,11 @@ def test_create_todo_invalid_title_returns_422_and_stores_nothing(client, title)
     assert client.get("/todos").json() == []
 
 
-def test_create_todo_missing_title_returns_422(client):
+def test_create_todo_missing_title_returns_422_with_fastapi_list_detail(client):
     response = client.post("/todos", json={})
 
     assert response.status_code == HTTPStatus.UNPROCESSABLE_CONTENT
+    assert isinstance(response.json()["detail"], list)
 
 
 def test_list_todos_after_creates_returns_them_oldest_first(client, make_todo):
@@ -88,11 +83,15 @@ def test_complete_todo_existing_id_returns_completed_todo(client, make_todo):
     assert response.json() == {**todo, "completed": True}
 
 
-def test_complete_todo_unknown_id_returns_404(client):
-    response = client.post("/todos/999/complete")
+@pytest.mark.parametrize(
+    "todo_id",
+    [pytest.param(999, id="never-assigned"), pytest.param(2**63, id="above-int64")],
+)
+def test_complete_todo_unknown_id_returns_404(client, todo_id):
+    response = client.post(f"/todos/{todo_id}/complete")
 
     assert response.status_code == HTTPStatus.NOT_FOUND
-    assert response.json() == {"detail": "To-do 999 not found"}
+    assert response.json() == {"detail": f"To-do {todo_id} not found"}
 
 
 def test_delete_todo_existing_id_returns_204_and_removes_it(client, make_todo):
@@ -123,3 +122,22 @@ def test_todo_route_non_integer_id_returns_422(client, method, path):
     response = client.request(method, path)
 
     assert response.status_code == HTTPStatus.UNPROCESSABLE_CONTENT
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "status"),
+    [
+        pytest.param("post", "/todos", "422", id="create-invalid-title"),
+        pytest.param(
+            "post", "/todos/{todo_id}/complete", "404", id="complete-not-found"
+        ),
+        pytest.param("delete", "/todos/{todo_id}", "404", id="delete-not-found"),
+    ],
+)
+def test_openapi_documents_domain_errors_with_error_response(
+    client, method, path, status
+):
+    operation = client.get("/openapi.json").json()["paths"][path][method]
+
+    schema = operation["responses"][status]["content"]["application/json"]["schema"]
+    assert schema == {"$ref": "#/components/schemas/ErrorResponse"}

@@ -26,7 +26,15 @@ class InMemoryTodoRepository:
         self._lock = threading.Lock()
 
     def add(self, draft: TodoDraft) -> Todo:
-        """Store a draft under the next id."""
+        """Store a draft under the next id.
+
+        Args:
+            draft: The validated to-do to store.
+
+        Returns:
+            The stored to-do. The counter never goes back, so a deleted id is
+            never reused.
+        """
         with self._lock:
             self._last_id += 1
             todo = Todo(
@@ -36,42 +44,62 @@ class InMemoryTodoRepository:
             return todo
 
     def get(self, todo_id: int) -> Todo:
-        """Return a stored to-do.
+        """Fetch one to-do.
+
+        Args:
+            todo_id: The to-do to fetch.
+
+        Returns:
+            The stored to-do.
 
         Raises:
             TodoNotFoundError: If no to-do has this id.
         """
         with self._lock:
-            try:
-                return self._todos[todo_id]
-            except KeyError:
-                raise TodoNotFoundError(todo_id) from None
+            return self._require(todo_id)
 
     def list_all(self) -> list[Todo]:
-        """Return every to-do in ascending id order."""
+        """Fetch every to-do.
+
+        Returns:
+            The to-dos in ascending id order.
+        """
         with self._lock:
             return [self._todos[todo_id] for todo_id in sorted(self._todos)]
 
     def update(self, todo: Todo) -> Todo:
-        """Replace a stored to-do.
+        """Replace the stored to-do that has ``todo.id``.
+
+        Args:
+            todo: The new value.
+
+        Returns:
+            ``todo``, now stored.
 
         Raises:
             TodoNotFoundError: If no to-do has this id.
         """
         with self._lock:
-            if todo.id not in self._todos:
-                raise TodoNotFoundError(todo.id)
+            self._require(todo.id)
             self._todos[todo.id] = todo
             return todo
 
     def delete(self, todo_id: int) -> None:
-        """Remove a stored to-do.
+        """Remove one to-do.
+
+        Args:
+            todo_id: The to-do to remove.
 
         Raises:
             TodoNotFoundError: If no to-do has this id.
         """
         with self._lock:
-            try:
-                del self._todos[todo_id]
-            except KeyError:
-                raise TodoNotFoundError(todo_id) from None
+            self._require(todo_id)
+            del self._todos[todo_id]
+
+    def _require(self, todo_id: int) -> Todo:
+        """Return the stored to-do or raise; the caller must hold the lock."""
+        try:
+            return self._todos[todo_id]
+        except KeyError:
+            raise TodoNotFoundError(todo_id) from None

@@ -33,10 +33,14 @@ REPOSITORY_FACTORIES = [
     pytest.param(_in_memory, id="in-memory"),
     pytest.param(_sqlite, id="sqlite"),
 ]
+# Beyond 64 bits SQLite cannot even bind the id; every adapter must still
+# answer "not found", never a driver error.
 UNKNOWN_IDS = [
     pytest.param(0, id="zero"),
     pytest.param(-1, id="negative"),
     pytest.param(999, id="never-assigned"),
+    pytest.param(2**63, id="above-int64"),
+    pytest.param(-(2**63) - 1, id="below-int64"),
 ]
 
 

@@ -88,7 +88,7 @@ src/my_app/
 ├── core/            # Framework-free: domain model, ports (Protocols), services, errors
 ├── adapters/        # Port implementations: in-memory and SQLite (stdlib sqlite3) repositories
 ├── api/             # FastAPI: create_app(settings) factory, routers, Pydantic schemas
-├── cli/             # Typer: `my-app todo add|list|complete|delete`, `my-app serve`
+├── cli/             # Typer: `my-app todo add|list|complete|delete`; serve.py holds `my-app serve`
 ├── settings.py      # pydantic-settings, read from MY_APP_* environment variables
 └── composition.py   # Composition root: wires adapters into services for both entry points
 ```
@@ -100,8 +100,25 @@ src/my_app/
   `tests/core/test_imports.py` fail the build when `core/` imports fastapi,
   typer, uvicorn, sqlite3, or httpx.
 - Domain errors derive from `core.errors.AppError`; each entry point maps
-  them in one place (API: 404 / 422 handlers in `api/app.py`; CLI: stderr and
-  exit code 1 in `cli/todo.py`).
+  them in one place. The API's one `AppError` handler in `api/app.py` answers
+  404 (not found), 422 (invalid input), or 400 (any other `AppError`) with an
+  `ErrorResponse` body. The CLI's `cli/errors.py` owns every exit code:
+  0 success, 1 domain error, 2 usage error (Typer's own), 3 invalid
+  `MY_APP_*` setting — each failure is one line on stderr, no traceback.
+- The CLI never imports the API at import time: `cli/serve.py` is the only
+  bridge, and it imports FastAPI and uvicorn inside the command.
+- Removing an entry point is a deletion, never a core change:
+  - Without the API: delete `src/my_app/api/`, `src/my_app/cli/serve.py` and
+    its `app.command()(serve)` line in `cli/main.py`, `tests/api/`,
+    `tests/cli/test_serve.py`, the `fastapi` and `uvicorn` runtime
+    dependencies and the `httpx` dev dependency (then `uv lock`), the
+    `just dev` recipe, and the `fastapi.*` entries and the `api/**`
+    per-file-ignore in `pyproject.toml`'s ruff config.
+  - Without the CLI: delete `src/my_app/cli/`, `tests/cli/`,
+    `[project.scripts]`, the `typer` runtime dependency (then `uv lock`), the
+    `just run` recipe, and the `typer.*` entries and the `cli/**`
+    per-file-ignore in the ruff config. Keep `uvicorn`: `just dev` serves the
+    API with it.
 - A new repository implements `core.ports.TodoRepository` and joins the one
   contract suite in `tests/adapters/test_repository_contract.py`.
 - Pydantic stays at the boundaries (`api/schemas.py`, `settings.py`); the core
@@ -258,7 +275,7 @@ repositories, so a private repository must replace the reporting route in
 
 ## Conventions: tests/**/*.py
 
-- Mirror the source layout with `tests/test_<module>.py`; use descriptive names such as `test_<what>_<scenario>_<expected_result>`.
+- Mirror the source layout: `tests/<layer>/test_<module>.py` for `src/my_app/<layer>/<module>.py`, `tests/test_<module>.py` for a top-level module; use descriptive names such as `test_<what>_<scenario>_<expected_result>`.
 - Test behavior through the public API, using Arrange-Act-Assert and covering both happy and error paths for each public function.
 - Verify exception messages with `pytest.raises(..., match=r"...")`; also test cleanup and recovery after failures.
 - Consider empty, boundary, type, collection, concurrent, and state-transition cases; use parametrization with readable ids for related inputs.
@@ -322,6 +339,7 @@ even if no dependency changed, so the cutoff does not drift too far behind:
 - Treat 300-line modules and 40-line functions as review triggers, not absolute correctness rules; split only when doing so improves a real responsibility boundary. One logical concern per module.
 - Prefer 3 or fewer parameters (group related params with dataclass or TypedDict)
 - Google-style docstrings (Args/Returns/Raises) on all public functions; document *why*, not what the type signature already says; don't document obvious code
+- Exception: a Typer command's or a FastAPI route's docstring stays one plain-text line, because it is published as `--help` or OpenAPI text; put the reasoning in a comment or the module docstring
 
 ### Error Handling
 
@@ -329,6 +347,7 @@ even if no dependency changed, so the cutoff does not drift too far behind:
 - Catch the most specific exception possible
 - Use `logging.exception()` in catch blocks (auto-includes traceback), never `logger.error(str(e))`
 - Never swallow exceptions silently; if catching, handle meaningfully or re-raise
+- Expected domain errors (`AppError`) are mapped at the entry-point boundary — an HTTP status, or an exit code plus one line on stderr — and not logged with `logging.exception()`; unexpected errors keep their traceback
 - Never use exceptions for control flow
 - Return `None` or a sentinel only when the caller expects it; prefer raising for true errors
 

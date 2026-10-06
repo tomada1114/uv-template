@@ -30,20 +30,39 @@ class TodoService:
         self._clock = clock
 
     def create(self, raw_title: str) -> Todo:
-        """Validate a title and store a new, open to-do.
+        """Store a new, open to-do.
+
+        Args:
+            raw_title: The title as the user typed it; surrounding whitespace
+                is stripped before the length rule applies.
+
+        Returns:
+            The stored to-do, with its id and ``created_at`` set.
 
         Raises:
-            InvalidTodoError: If the title breaks the length rule.
+            InvalidTodoError: If the stripped title is empty or too long.
         """
         draft = TodoDraft(title=normalize_title(raw_title), created_at=self._clock())
         return self._repository.add(draft)
 
     def list_todos(self) -> list[Todo]:
-        """Return every to-do, oldest first."""
+        """List every to-do.
+
+        Returns:
+            The to-dos oldest first; an empty list when there are none.
+        """
         return self._repository.list_all()
 
     def complete(self, todo_id: int) -> Todo:
-        """Mark a to-do as completed; completing it again changes nothing.
+        """Mark a to-do as completed.
+
+        Completing it again changes nothing, so a retried request is safe.
+
+        Args:
+            todo_id: The to-do to complete.
+
+        Returns:
+            The completed to-do.
 
         Raises:
             TodoNotFoundError: If no to-do has this id.
@@ -55,6 +74,9 @@ class TodoService:
 
     def delete(self, todo_id: int) -> None:
         """Remove a to-do.
+
+        Args:
+            todo_id: The to-do to remove.
 
         Raises:
             TodoNotFoundError: If no to-do has this id.
