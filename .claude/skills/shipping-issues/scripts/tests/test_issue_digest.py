@@ -719,6 +719,15 @@ class ShipContractTest(unittest.TestCase):
         self.assertEqual(c["blocks"], [5])
         self.assertIn("blocked-by", c["fields"])
 
+    def test_an_empty_tier_or_touches_still_counts_as_missing(self):
+        c = idg.parse_ship_contract("<!-- ship: tier= blocked-by=none touches= -->")
+        self.assertEqual(c["missing_fields"], ["tier", "touches"])
+
+    def test_a_space_only_after_the_equals_sign_still_reads_the_value(self):
+        c = idg.parse_ship_contract("<!-- ship: blocked-by= #12 blocks=#4 -->")
+        self.assertEqual(c["depends_on"], [12])
+        self.assertEqual(c["blocks"], [4])
+
     def test_spaces_around_the_equals_sign_still_parse(self):
         c = idg.parse_ship_contract("<!-- ship: tier = P1 blocked-by = #7 -->")
         self.assertEqual(c["tier"], "P1")

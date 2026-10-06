@@ -230,6 +230,11 @@ class SettleContractDesignTest(unittest.TestCase):
         self.assertEqual(apl.settle_contract_design(body),
                          "<!-- ship: tier=P2 blocked-by= blocks=#4 design=settled -->")
 
+    def test_an_empty_design_field_beside_an_open_one_does_not_crash(self):
+        body = "<!-- ship: design= blocks=#3 design=open -->"
+        self.assertEqual(apl.settle_contract_design(body),
+                         "<!-- ship: design= blocks=#3 design=settled -->")
+
     def test_an_empty_design_field_is_not_settled(self):
         self.assertIsNone(apl.settle_contract_design("<!-- ship: tier=P2 design= -->"))
 
