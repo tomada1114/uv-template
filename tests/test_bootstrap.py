@@ -24,6 +24,8 @@ LEFTOVER = re.compile(
     r"my-app|my_app|my app|uv-template|your-username|your name|you@example",
     re.IGNORECASE,
 )
+# A line the bootstrap treats as a template-only marker.
+MARKER_LINE = re.compile(r"^\s*(?:#\s*)?<!-- /?template-only -->\s*$", re.MULTILINE)
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 # The issue's sample values.
 SAMPLE = {
@@ -538,7 +540,7 @@ def test_bootstrap_existing_destination_package_is_refused(clone):
 
 def test_bootstrap_removes_every_template_only_block_and_the_smoke_job(sample_app):
     texts = _text_files(sample_app)
-    markers = [path for path, text in texts.items() if "template-only -->" in text]
+    markers = [path for path, text in texts.items() if MARKER_LINE.search(text)]
     assert markers == []
     ci = texts[".github/workflows/ci.yml"]
     assert "Template Bootstrap Smoke" not in ci

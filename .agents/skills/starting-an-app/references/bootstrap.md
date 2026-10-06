@@ -32,7 +32,7 @@ uv run --locked python scripts/bootstrap.py todo-api \
 | `--github-repository` | no | the repository in `your-username/uv-template` | `NAME` or `OWNER/NAME`; the owner must equal `--github-user`; defaults to the slug |
 | `--display-name` | no | `My App` (README's title, the API's OpenAPI title, the devcontainer) | one line, at most 60 characters; defaults to the slug |
 | `--contact-url` | no | the contact sentences in `SECURITY.md` and `CODE_OF_CONDUCT.md` | a public `https://` URL without credentials, such as a profile page |
-| `--keep-bootstrap` | no | — | keeps `TEMPLATE.md`, the script, and its test, untouched, for debugging |
+| `--keep-bootstrap` | no | — | keeps `TEMPLATE.md`, the script, and its test, untouched, for debugging; the kept test exercises the template, so `just verify` fails until they are deleted |
 
 Without `--contact-url`, the contact sentences keep pointing at the repository itself:
 `SECURITY.md`'s fallback route at the issue tracker (ask for a private contact, give no
