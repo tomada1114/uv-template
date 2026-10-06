@@ -30,7 +30,8 @@ repository.
 
 ## 4. Replace the public contact routes
 
-Private vulnerability reporting does not exist on a private repository, so every route
+Private vulnerability reporting works only on a public repository (`AGENTS.md`'s
+"GitHub settings a new repository must enable" › "Security settings"), so every route
 that points at it leads nowhere:
 
 - `SECURITY.md`: replace the "Report it privately through GitHub's private

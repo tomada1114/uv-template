@@ -190,7 +190,7 @@ some clones and makes Codex register a nested `references/SKILL.md` as a skill.
 | `running-the-app` | running the CLI or a server of your own to observe a change, and stopping that server afterwards |
 | `shipping-issues` | shipping the next issue or the whole backlog: rank, implement, review, PR, CI, merge |
 | `smart-commit` | grouping working-tree changes into commits |
-| `starting-an-app` | turning this template into an app, or setting up a repository cut from it: the bootstrap, the Product section, labels, ruleset, security settings, removing the sample |
+| `starting-an-app` | setting up an app cut from this template: the Product section, the bootstrap pull request, labels, ruleset, security settings, dropping an entry point or the sample domain, the first ADRs; in the template, the bootstrap itself |
 | `steering-the-roadmap` | asked what to work on next, or the Now / Next / Later roadmap moves |
 | `triaging-issues` | filing, labelling, or prioritizing an issue, or recording a problem found outside the task |
 | `writing-python` | writing or reviewing any Python module, class, or function: typing, imports, docstrings, idioms |
@@ -331,8 +331,8 @@ an `if:` on visibility — but first remove "Analyze (python)", "Analyze
 re-run `just ruleset`, or every pull request waits forever on them; `osv-scanner.yml`, `security-audit.yml`, and `ci.yml`'s
 zizmor job run anywhere. Private vulnerability reporting works only on public
 repositories, so a private repository must replace the reporting route in
-`SECURITY.md` and the security contact link in
-`.github/ISSUE_TEMPLATE/config.yml` with another contact.
+`SECURITY.md`, the reporting route in `CODE_OF_CONDUCT.md`'s "Enforcement", and the
+security contact link in `.github/ISSUE_TEMPLATE/config.yml` with another contact.
 
 ## Conventions: tests/**/*.py
 

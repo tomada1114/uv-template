@@ -1,13 +1,13 @@
 ---
 name: starting-an-app
 description: >
-  Covers turning this template into a new app and its first steps: scripts/bootstrap.py
-  (flags, refusals, .template-origin, its CI smoke job), AGENTS.md's Product section
-  and tests/test_product_section.py, the roadmap, keeping the HTTP API, the CLI, or
-  both, removing the sample to-do domain, the first ADRs (app shape, persistence), just
-  labels, just ruleset, GitHub security settings, secrets, and a private repository.
-  Use when starting an app from this repository, running or changing the bootstrap, a
-  placeholder survived the rename, or setting up the new repository.
+  Covers setting up an app cut from this template, from the first commit to its first
+  feature: AGENTS.md's Product section and tests/test_product_section.py, the bootstrap
+  pull request, the roadmap, just labels, GitHub security settings and secrets, just
+  ruleset and a private repository, keeping the HTTP API, the CLI, or both, removing the
+  sample to-do domain, and the first ADRs (app shape, persistence). In the template it
+  also covers scripts/bootstrap.py, .template-origin, and its CI smoke job. Use when
+  starting an app, setting up the new repository, or a placeholder survived the rename.
 ---
 
 # Starting an App
@@ -23,52 +23,66 @@ repository must enable"); which files go with each entry point (`AGENTS.md`'s
 
 Steps marked **human** are a person's: an agent never runs them, and only drafts or
 lists them for the owner. Steps that write to GitHub run only with the owner's sign-off
-(`AGENTS.md`'s "Security and human approval").
+(`AGENTS.md`'s "Security and human approval"). A caller that drives these steps (for
+example an agent skill that cuts repositories from templates) follows the same order.
 
 ## The order
 
-1. **Create and clone.** "Use this template" on GitHub (the user-level
-   `bootstrapping-from-templates` skill does this and drives the steps below), clone
-   the new repository, then `just install`.
-2. **Rename.** `scripts/bootstrap.py` renames the template into the app, records the
-   template commit it was cut from in `.template-origin`, and deletes itself, so in an
-   app this step is already done.
+1. **Create and clone.** "Use this template" on GitHub, clone the new repository, run
+   `just install`, then `git switch -c chore/bootstrap`. The `no-commit-to-branch` hook
+   that `just install` installs refuses a commit on `main`, and bypassing a hook is
+   forbidden (`AGENTS.md`'s "Security and human approval"), so the first commit is made
+   on a branch like every later one.
+2. **Rename.** `scripts/bootstrap.py` renames the template into the app, writes
+   `.template-origin`, and deletes itself, so in an app this step is already done.
+   `.template-origin` names the template repository and, when the clone's history
+   starts at the template's first commit, the template commit. GitHub's "Use this
+   template" starts the new repository with a single commit
+   (https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template,
+   checked 2026-10-06), so there it records `commit: unknown` and the tree, and its
+   header gives the `git log … | grep <tree>` search that finds the template commit
+   with the same files.
    <!-- template-only -->
    It rewrites the whole repository, so run it only on the owner's request, on a fresh
    clone with a clean work tree. **REQUIRED:**
    [references/bootstrap.md](references/bootstrap.md), for its flags, what it refuses,
-   and what it removes, before running it, changing it, or chasing a leftover
-   placeholder.
+   what it removes, and how to recover from a failed write, before running it, changing
+   it, or chasing a leftover placeholder.
    <!-- /template-only -->
-3. **Commit the rewrite** as one commit, before editing anything, so the rename stays
-   one reviewable diff: review `git status` and `git diff` first.
-4. **Write `AGENTS.md`'s Product section**: what the app is and for whom, the core
+3. **Write `AGENTS.md`'s Product section**: what the app is and for whom, the core
    interaction, the non-goals, and where those decisions are recorded
-   (`docs/product/requirements.md`). The owner decides every entry; an agent drafts one
-   only from what the owner has said. `tests/test_product_section.py`, and so
-   `just verify`, fails while a `TODO:` is left there. Write it before any feature: a
-   non-goal nobody wrote down is one an eager implementer reads as a feature.
-5. **Fill `docs/architecture/roadmap.md`** with the Now, Next, and Later outcomes that
-   follow from the Product section, per `steering-the-roadmap`.
-6. **Verify and push.** `just verify`, commit the Product section and roadmap, and push
-   to `main`, which takes a direct push until step 10's ruleset exists. Pushing is a
-   remote write.
-7. **Labels.** `just labels` creates `.github/labels.yml`'s labels on the new
-   repository (`triaging-issues`). Run it before the first issue is filed: an issue
-   form or a planning tool applying a missing label loses it silently. It writes to
-   GitHub.
-8. **Security settings and secrets** (**human**, the repository's admin): turn on what
+   (`docs/product/requirements.md`). It is the one home of the app's non-goals. The
+   owner decides every entry; an agent drafts one only from what the owner has said.
+   `tests/test_product_section.py`, and so `just verify`, fails while an entry is still
+   a placeholder. Write it before any feature: a non-goal nobody wrote down is one an
+   eager implementer reads as a feature.
+4. **Commit and open the bootstrap pull request.** Review `git status` and `git diff`,
+   run `just verify`, and commit the rewrite and the Product section as one
+   `chore: bootstrap <app> from the template` commit, so the rename stays one reviewable
+   diff. Push the branch and open a pull request; merge it once CI is green. A pull
+   request rather than a push to `main`, because it is how every change lands here
+   (`AGENTS.md`'s "Git Workflow"), CI checks the bootstrap before `main` holds it, and
+   it works the same before and after step 9's ruleset. Pushing, opening, and merging
+   are remote writes.
+5. **Fill `docs/architecture/roadmap.md`** in its own pull request, with the Now, Next,
+   and Later outcomes that follow from the Product section. **REQUIRED:**
+   `steering-the-roadmap`.
+6. **Labels.** `just labels` creates `.github/labels.yml`'s labels on the new
+   repository. Run it before the first issue is filed: an issue form or a planning tool
+   applying a missing label loses it silently. It writes to GitHub. **BACKGROUND:**
+   `triaging-issues`, for what each label means.
+7. **Security settings and secrets** (**human**, the repository's admin): turn on what
    `AGENTS.md`'s "GitHub settings a new repository must enable" › "Security settings"
    lists. The template's workflows need no secret beyond the `GITHUB_TOKEN` GitHub
    provides; a secret the app adds later (a deploy key, an API key) is set by a person
    in the repository's settings and never committed — `check-staged` refuses one.
-9. **Replace the sample**, in the order of the sections below: the app's shape, the
+8. **Replace the sample**, in the order of the sections below: the app's shape, the
    first ADRs, then the to-do domain.
-10. **Ruleset, last** (**human**, an admin): `just ruleset` applies
-    `.github/rulesets/main.json`. From then on every change needs a pull request with
-    the required checks green, so the ruleset must name only jobs the app still runs.
-    On a **private repository**, first **REQUIRED:**
-    [references/private-repository.md](references/private-repository.md).
+9. **Ruleset, last** (**human**, an admin): `just ruleset` applies
+   `.github/rulesets/main.json`. From then on every change needs a pull request with
+   the required checks green, so the ruleset must name only jobs the app still runs.
+   On a **private repository**, first **REQUIRED:**
+   [references/private-repository.md](references/private-repository.md).
 
 ## Choose the app's shape
 
@@ -80,8 +94,9 @@ the answer into the Product section's core interaction:
 - **API only**, for a service. **CLI only**, for a tool run by hand or by a scheduler.
 
 Dropping an entry point is a list of deletions, never a core change: `AGENTS.md`'s
-"Architecture" names every file, dependency, recipe, and ruff entry that goes with
-each, and README's "Architecture" holds the same list for readers. Run `uv lock` after
+"Architecture" names every file, dependency, recipe, ruff entry, and skill
+(`building-api-routes` or `designing-clis`) that goes with each, and README's
+"Architecture" holds the same list for readers. Run `uv lock` after
 removing a dependency, then `just verify`.
 
 ## Record the first ADRs
@@ -114,7 +129,11 @@ code:
   and the contract suite's parameters in `tests/adapters/test_repository_contract.py`;
 - README's Quickstart, the CLI/HTTP table, and the Configuration section, the `just run`
   example in the `justfile`, and the command line in
-  `.github/ISSUE_TEMPLATE/bug_report.yml`.
+  `.github/ISSUE_TEMPLATE/bug_report.yml`;
+- the examples the code-writing skills quote from the sample (`writing-python`,
+  `designing-errors`, `designing-core-logic`, `building-api-routes`, `designing-clis`,
+  `running-the-app`): rewrite each with the app's own code, keeping the rule around it,
+  then `just agents-sync`.
 
 Keep what is general: `core.errors.AppError` and the one place each entry point maps it
 (the API's handler in `api/app.py`, the CLI's exit codes in `cli/errors.py`), the
