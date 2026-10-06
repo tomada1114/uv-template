@@ -171,3 +171,89 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: uvx zizmor .github/workflows/
+
+  # <!-- template-only -->
+  # Bootstraps a scratch clone of the commit under test as a sample app, so the
+  # bootstrap cannot rot unnoticed. scripts/bootstrap.py removes this job from the
+  # app it creates, so it is deliberately not a required check.
+  bootstrap-smoke:
+    name: Template Bootstrap Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Full history, so the bootstrap finds the template's first commit and
+          # records this commit in .template-origin.
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      # The bootstrap needs a git work tree (its clean-tree check, `git ls-files`).
+      - name: Bootstrap a scratch clone with sample values
+        run: |
+          git clone --quiet "$GITHUB_WORKSPACE" "$RUNNER_TEMP/app"
+          cd "$RUNNER_TEMP/app"
+          uv run --locked python scripts/bootstrap.py todo-api \
+            --author "Jane Doe" --github-user jdoe --github-repository jdoe/todo-api \
+            --description "Todo API" --contact-url https://github.com/jdoe
+
+      - name: Assert no placeholder survived
+        run: |
+          cd "$RUNNER_TEMP/app"
+          # Stage everything (ignored files stay out) so git grep sees new files.
+          git add --all
+          # .template-origin names the template repository on purpose. The
+          # tokens never occur inside ordinary words, so any case is a leftover;
+          # the display placeholders are matched as whole words, as the
+          # template's sites spell them.
+          status=0
+          if git grep --cached -n -I -i -E 'my-app|my_app|uv-template|your-username|you@example' -- . ':!.template-origin'; then
+            echo "::error::the bootstrap left a placeholder token on the lines above"; status=1
+          fi
+          if git grep --cached -n -I -w -E 'My App|Your Name' -- . ':!.template-origin'; then
+            echo "::error::the bootstrap left a display placeholder on the lines above"; status=1
+          fi
+          for path in TEMPLATE.md scripts/bootstrap.py tests/test_bootstrap.py src/my_app \
+            .agents/skills/starting-an-app/references/bootstrap.md; do
+            if [ -e "$path" ]; then echo "::error::$path survived the bootstrap"; status=1; fi
+          done
+          grep -qx 'ENV_PREFIX = "TODO_API_"' src/todo_api/settings.py || { echo "::error::env prefix not renamed"; status=1; }
+          grep -qE '^commit: [0-9a-f]{40}$' .template-origin || { echo "::error::.template-origin lacks the template commit"; status=1; }
+          if grep -rn -e 'template-only' -e 'Template Bootstrap Smoke' .github .agents .claude AGENTS.md README.md; then
+            echo "::error::template-only material survived"; status=1
+          fi
+          exit "$status"
+
+      - name: Assert the Product check fails on the unfilled section
+        run: |
+          cd "$RUNNER_TEMP/app"
+          if uv run --locked pytest -q tests/test_product_section.py >"$RUNNER_TEMP/product.log" 2>&1; then
+            cat "$RUNNER_TEMP/product.log"
+            echo "::error::tests/test_product_section.py passed on an app whose Product section is still TODO"
+            exit 1
+          fi
+          if ! grep -qF 'TODO: left in the Product section' "$RUNNER_TEMP/product.log"; then
+            cat "$RUNNER_TEMP/product.log"
+            echo "::error::tests/test_product_section.py failed, but not for the unfilled Product section"
+            exit 1
+          fi
+
+      - name: Fill the Product section
+        run: |
+          cd "$RUNNER_TEMP/app"
+          sed -i '/^## Product$/,/^## [A-Z]/ s/TODO: /Filled in by the smoke job: /' AGENTS.md
+          if sed -n '/^## Product$/,/^## [A-Z]/p' AGENTS.md | grep -F 'TODO:'; then
+            echo "::error::a TODO: survived in the Product section"
+            exit 1
+          fi
+
+      - name: just verify
+        run: |
+          cd "$RUNNER_TEMP/app"
+          uvx --from rust-just==1.47.1 just verify
+  # <!-- /template-only -->

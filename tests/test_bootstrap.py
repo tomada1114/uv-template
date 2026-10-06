@@ -1,11 +1,15 @@
-"""Tests for scripts/bootstrap.py."""
+"""Tests for scripts/bootstrap.py, run against git clones of the working tree."""
 
 from __future__ import annotations
 
 import datetime as dt
 import importlib.util
+import os
+import re
 import shutil
+import stat
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -13,24 +17,65 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from types import ModuleType
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-PLACEHOLDERS = (
-    "my-app",
-    "my_app",
-    "your-username",
-    "Your Name",
-    "you@example.com",
-    "uv-template",
-    "A short description of the project.",
-    "A short description of what this application does.",
+# The same scan as CI's smoke job: placeholder tokens in any case, and the
+# display placeholders as whole words.
+LEFTOVER_TOKENS = re.compile(
+    r"my-app|my_app|uv-template|your-username|you@example", re.IGNORECASE
 )
-SELF_DELETED = (
-    "TEMPLATE.md",
-    "scripts/bootstrap.py",
-    "tests/test_bootstrap.py",
-)
+LEFTOVER_PHRASES = re.compile(r"\b(?:My App|Your Name)\b")
+# A line the bootstrap treats as a template-only marker.
+MARKER_LINE = re.compile(r"^\s*(?:#\s*)?<!-- /?template-only -->\s*$", re.MULTILINE)
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+# The issue's sample values.
+SAMPLE = {
+    "slug": "todo-api",
+    "author": "Jane Doe",
+    "description": "Todo API",
+    "github_user": "jdoe",
+    "github_repository": "jdoe/todo-api",
+    "contact_url": "https://github.com/jdoe",
+}
+SAMPLE_ARGV = [
+    "todo-api",
+    "--author",
+    "Jane Doe",
+    "--github-user",
+    "jdoe",
+    "--github-repository",
+    "jdoe/todo-api",
+    "--description",
+    "Todo API",
+    "--contact-url",
+    "https://github.com/jdoe",
+]
+KEEPABLE = ("TEMPLATE.md", "scripts/bootstrap.py", "tests/test_bootstrap.py")
+SKILL_REFERENCE = "skills/starting-an-app/references/bootstrap.md"
+# Isolates every git call (the fixtures' and the script's) from the
+# developer's own configuration: hooks, signing, default branch, identity.
+GIT_ENV = {
+    "GIT_CONFIG_GLOBAL": os.devnull,
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_AUTHOR_NAME": "Template Test",
+    "GIT_AUTHOR_EMAIL": "template-test@localhost",
+    "GIT_COMMITTER_NAME": "Template Test",
+    "GIT_COMMITTER_EMAIL": "template-test@localhost",
+}
+
+
+def _git(cwd: Path, *args: str) -> str:
+    result = subprocess.run(  # noqa: S603 -- a fixed git argv, no shell
+        ["git", *args],  # noqa: S607 -- git resolved from PATH, as a shell would
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, **GIT_ENV},
+    )
+    return result.stdout
 
 
 def _load_bootstrap_module() -> ModuleType:
@@ -40,305 +85,659 @@ def _load_bootstrap_module() -> ModuleType:
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
 
-def _copy_tracked_files(destination: Path) -> None:
-    result = subprocess.run(
-        ["git", "ls-files"],  # noqa: S607
-        check=True,
-        capture_output=True,
-        cwd=REPO_ROOT,
-        text=True,
+bootstrap = _load_bootstrap_module()
+
+
+@pytest.fixture(scope="session")
+def template_repository(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A one-commit git repository holding the working tree's files.
+
+    Tracked and new untracked files are both copied, so a change to the
+    template is tested before it is committed.
+    """
+    root = tmp_path_factory.mktemp("template")
+    listed = _git(
+        REPO_ROOT, "ls-files", "-z", "--cached", "--others", "--exclude-standard"
     )
-    for relative_path in result.stdout.splitlines():
-        source = REPO_ROOT / relative_path
-        if not source.is_file():
-            continue
-        target = destination / relative_path
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, target)
+    for relative in filter(None, listed.split("\0")):
+        source = REPO_ROOT / relative
+        if source.is_file() and not source.is_symlink():
+            target = root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+    _git(root, "init", "--quiet", "--initial-branch=main")
+    _git(root, "add", "--all")
+    _git(root, "commit", "--quiet", "--message", "template")
+    return root
 
 
 @pytest.fixture
-def template_copy(tmp_path, monkeypatch):
-    """A copy of the tracked template tree, isolated from the real repo.
+def clone(
+    template_repository: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    """A fresh clone of the template; REPO_ROOT points at it for main()."""
+    for name, value in GIT_ENV.items():
+        monkeypatch.setenv(name, value)
+    root = tmp_path / "app"
+    _git(tmp_path, "clone", "--quiet", str(template_repository), str(root))
+    monkeypatch.setattr(bootstrap, "REPO_ROOT", root)
+    monkeypatch.chdir(root)
+    return root
 
-    ``REPO_ROOT`` is repointed at the copy so a test that exercises ``main()``
-    can never rewrite the checkout it runs from.
-    """
-    _copy_tracked_files(tmp_path)
-    module = _load_bootstrap_module()
-    monkeypatch.setattr(module, "REPO_ROOT", tmp_path)
-    return tmp_path, module
+
+@pytest.fixture(scope="session")
+def sample_app(
+    template_repository: Path, tmp_path_factory: pytest.TempPathFactory
+) -> Path:
+    """One clone bootstrapped with the issue's sample values, for read-only tests."""
+    root = tmp_path_factory.mktemp("sample") / "app"
+    with pytest.MonkeyPatch.context() as patch:
+        for name, value in GIT_ENV.items():
+            patch.setenv(name, value)
+        _git(root.parent, "clone", "--quiet", str(template_repository), str(root))
+        bootstrap.bootstrap(root, bootstrap.Identity(**SAMPLE))
+    return root
 
 
-def _bootstrap_into(root, bootstrap, **overrides):
-    """Run a fully specified bootstrap against a copy of the template."""
-    kwargs = {
-        "package_name": "acme-widgets",
-        "author": "Ada Lovelace",
-        "email": "ada@example.com",
-        "github_user": "ada",
-        "description": "Widgets for the acme use case.",
+@pytest.fixture
+def fake_uv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Put a `uv` on PATH that logs its arguments; returns the log file."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "uv.log"
+    script = bin_dir / "uv"
+    script.write_text(
+        f'#!/bin/sh\necho "$(pwd -P) $*" >> "{log}"\nexit "${{FAKE_UV_EXIT:-0}}"\n',
+        encoding="utf-8",
+    )
+    script.chmod(script.stat().st_mode | stat.S_IXUSR)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    return log
+
+
+def _run(root: Path, **overrides: str | None) -> None:
+    bootstrap.bootstrap(root, bootstrap.Identity(**{**SAMPLE, **overrides}))
+
+
+def _snapshot(root: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in root.rglob("*")
+        if path.is_file() and ".git" not in path.relative_to(root).parts
     }
-    kwargs.update(overrides)
-    return bootstrap.bootstrap(root, **kwargs)
 
 
-def test_bootstrap_replaces_all_placeholders(template_copy):
-    root, bootstrap = template_copy
-
-    module_name = _bootstrap_into(root, bootstrap)
-
-    assert module_name == "acme_widgets"
-    assert (root / "src" / "acme_widgets").is_dir()
-    assert not (root / "src" / "my_app").exists()
-
-    for path in root.rglob("*"):
-        if not path.is_file() or path.name == "uv.lock":
-            continue
+def _text_files(root: Path) -> dict[str, str]:
+    texts = {}
+    for relative, data in _snapshot(root).items():
         try:
-            text = path.read_text(encoding="utf-8")
+            texts[relative] = data.decode("utf-8")
         except UnicodeDecodeError:
             continue
-        for placeholder in PLACEHOLDERS:
-            assert placeholder not in text, f"{placeholder!r} still present in {path}"
+    return texts
 
 
-def test_bootstrap_does_not_rewrite_secret_files_in_a_non_git_copy(template_copy):
-    root, bootstrap = template_copy
-    env_file = root / ".env.local"
-    env_example = root / ".env.example"
-    secret_file = root / "secrets" / "credentials.txt"
-    env_file.write_text("my-app\n", encoding="utf-8")
-    env_example.write_text("my-app\n", encoding="utf-8")
-    secret_file.parent.mkdir()
-    secret_file.write_text("my-app\n", encoding="utf-8")
-
-    _bootstrap_into(root, bootstrap)
-
-    assert env_file.read_text(encoding="utf-8") == "my-app\n"
-    assert secret_file.read_text(encoding="utf-8") == "my-app\n"
-    assert env_example.read_text(encoding="utf-8") == "acme-widgets\n"
+# --- REQ-001: every placeholder is replaced --------------------------------
 
 
-def test_bootstrap_writes_the_description_everywhere(template_copy):
-    root, bootstrap = template_copy
-
-    _bootstrap_into(root, bootstrap, description="Widgets that never jam.")
-
-    for relative_path in ("pyproject.toml", "README.md"):
-        text = (root / relative_path).read_text(encoding="utf-8")
-        assert "Widgets that never jam." in text, relative_path
-
-
-def test_bootstrap_uses_a_separate_github_repository_name(template_copy):
-    root, bootstrap = template_copy
-
-    _bootstrap_into(root, bootstrap, github_repository="widgets-library")
-
-    readme = (root / "README.md").read_text(encoding="utf-8")
-    pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
-    assert "github.com/ada/widgets-library" in readme
-    assert "github.com/ada/widgets-library" in pyproject
-    assert readme.startswith("# acme-widgets\n")
-
-
-def test_bootstrap_does_not_rewrite_new_values_as_old_placeholders(template_copy):
-    root, bootstrap = template_copy
-
-    _bootstrap_into(
-        root,
-        bootstrap,
-        package_name="uv-template-lib",
-        github_repository="library",
-    )
-
-    project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
-    assert project["project"]["name"] == "uv-template-lib"
-    readme = (root / "README.md").read_text(encoding="utf-8")
-    assert readme.startswith("# uv-template-lib\n")
-    assert "github.com/ada/library" in readme
-
-
-def test_bootstrap_escapes_metadata_values_for_project_files(template_copy):
-    root, bootstrap = template_copy
-
-    _bootstrap_into(
-        root,
-        bootstrap,
-        author='Ada "The Enchantress" Lovelace',
-        description='Widgets "that" never jam.',
-    )
-
-    project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
-    assert project["project"]["authors"] == [
-        {"name": 'Ada "The Enchantress" Lovelace', "email": "ada@example.com"}
+def test_bootstrap_sample_values_leave_no_placeholder_anywhere(sample_app):
+    hits = [
+        f"{relative}: {match.group(0)}"
+        for relative, text in _text_files(sample_app).items()
+        if relative not in {"uv.lock", bootstrap.ORIGIN_FILE}
+        for pattern in (LEFTOVER_TOKENS, LEFTOVER_PHRASES)
+        for match in pattern.finditer(text)
     ]
-    assert project["project"]["description"] == 'Widgets "that" never jam.'
+    assert hits == []
 
 
-def test_bootstrap_renames_the_devcontainer(template_copy):
-    root, bootstrap = template_copy
-
-    _bootstrap_into(root, bootstrap)
-
-    devcontainer = (root / ".devcontainer" / "devcontainer.json").read_text(
+def test_bootstrap_sample_values_rename_package_and_env_prefix(sample_app):
+    assert not (sample_app / "src" / "my_app").exists()
+    settings = (sample_app / "src" / "todo_api" / "settings.py").read_text(
         encoding="utf-8"
     )
-    assert '"name": "acme-widgets"' in devcontainer
+    assert 'ENV_PREFIX = "TODO_API_"' in settings
+    pyproject = (sample_app / "pyproject.toml").read_text(encoding="utf-8")
+    project = tomllib.loads(pyproject)
+    assert project["project"]["name"] == "todo-api"
+    assert project["project"]["scripts"] == {"todo-api": "todo_api.cli.main:app"}
+    assert (
+        project["project"]["urls"]["Issues"]
+        == "https://github.com/jdoe/todo-api/issues"
+    )
+    assert project["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == [
+        "src/todo_api"
+    ]
 
 
-def test_bootstrap_writes_the_current_year_into_the_license(template_copy):
-    root, bootstrap = template_copy
+def test_bootstrap_display_name_reaches_its_sites(clone):
+    _run(clone, display_name="Todo Service")
 
-    _bootstrap_into(root, bootstrap)
+    assert (
+        (clone / "README.md").read_text(encoding="utf-8").startswith("# Todo Service\n")
+    )
+    app = (clone / "src/todo_api/api/app.py").read_text(encoding="utf-8")
+    assert 'APP_TITLE = "Todo Service"' in app
+    devcontainer = (clone / ".devcontainer/devcontainer.json").read_text(
+        encoding="utf-8"
+    )
+    assert '"name": "Todo Service"' in devcontainer
 
+
+def test_bootstrap_without_display_name_uses_the_slug(sample_app):
+    assert (
+        (sample_app / "README.md")
+        .read_text(encoding="utf-8")
+        .startswith("# todo-api\n")
+    )
+
+
+def test_bootstrap_repository_name_alone_takes_the_github_user_as_owner(clone):
+    _run(clone, github_repository="todo-service")
+
+    readme = (clone / "README.md").read_text(encoding="utf-8")
+    assert "github.com/jdoe/todo-service/actions" in readme
+
+
+def test_bootstrap_quoted_metadata_stays_valid_toml(clone):
+    _run(clone, author="Jane O'Doe", description="Todo API — for teams")
+
+    project = tomllib.loads((clone / "pyproject.toml").read_text(encoding="utf-8"))
+    assert project["project"]["authors"] == [{"name": "Jane O'Doe"}]
+    assert project["project"]["description"] == "Todo API — for teams"
+
+
+def test_bootstrap_writes_the_year_and_author_into_the_license(sample_app):
     year = dt.datetime.now(tz=dt.UTC).year
-    license_text = (root / "LICENSE").read_text(encoding="utf-8")
-    assert f"Copyright (c) {year} Ada Lovelace" in license_text
+    license_text = (sample_app / "LICENSE").read_text(encoding="utf-8")
+    assert f"Copyright (c) {year} Jane Doe\n" in license_text
 
 
-def test_bootstrap_moves_exclude_newer_to_two_weeks_ago(template_copy):
-    root, bootstrap = template_copy
-
-    _bootstrap_into(root, bootstrap)
-
+def test_bootstrap_moves_exclude_newer_to_two_weeks_ago(sample_app):
     cutoff = dt.datetime.now(tz=dt.UTC).date() - dt.timedelta(days=14)
-    pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
+    pyproject = (sample_app / "pyproject.toml").read_text(encoding="utf-8")
     assert f'exclude-newer = "{cutoff.isoformat()}T00:00:00Z"' in pyproject
 
 
-def test_bootstrap_resets_the_changelog(template_copy):
-    root, bootstrap = template_copy
-
-    _bootstrap_into(root, bootstrap)
-
-    changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
-    assert changelog.rstrip().endswith("## [Unreleased]")
-    assert "Keep a Changelog" in changelog
-    assert "Initial project structure" not in changelog
+# --- REQ-002: no email address ---------------------------------------------
 
 
-def test_bootstrap_deletes_its_own_scaffolding(template_copy):
-    root, bootstrap = template_copy
+def test_main_rejects_the_email_flag_without_writing(clone, capsys):
+    before = _snapshot(clone)
 
-    _bootstrap_into(root, bootstrap)
+    with pytest.raises(SystemExit) as raised:
+        bootstrap.main([*SAMPLE_ARGV, "--email", "jane@example.com"])
 
-    for relative_path in SELF_DELETED:
-        assert not (root / relative_path).exists(), relative_path
-
-
-def test_bootstrap_keeps_its_scaffolding_when_asked(template_copy):
-    root, bootstrap = template_copy
-
-    _bootstrap_into(root, bootstrap, keep_bootstrap=True)
-
-    for relative_path in SELF_DELETED:
-        assert (root / relative_path).is_file(), relative_path
+    assert raised.value.code == 2
+    assert "unrecognized arguments: --email" in capsys.readouterr().err
+    assert _snapshot(clone) == before
 
 
-def test_bootstrap_keeps_python_scaffolding_valid_with_quoted_metadata(template_copy):
-    root, bootstrap = template_copy
-
-    _bootstrap_into(
-        root,
-        bootstrap,
-        author='Ada "The Enchantress" Lovelace',
-        description='Widgets "that" never jam.',
-        keep_bootstrap=True,
+def test_bootstrap_writes_no_email_address(sample_app):
+    texts = _text_files(sample_app)
+    metadata = (
+        "pyproject.toml",
+        "LICENSE",
+        "README.md",
+        "SECURITY.md",
+        "CODE_OF_CONDUCT.md",
+        "CHANGELOG.md",
+        bootstrap.ORIGIN_FILE,
     )
-
-    for relative_path in ("scripts/bootstrap.py", "tests/test_bootstrap.py"):
-        source = (root / relative_path).read_text(encoding="utf-8")
-        compile(source, str(root / relative_path), "exec")
+    found = {path: EMAIL.findall(texts[path]) for path in metadata}
+    assert found == {path: [] for path in metadata}
 
 
-def test_bootstrap_requires_a_github_user(template_copy):
-    root, bootstrap = template_copy
+@pytest.mark.parametrize("field", ["author", "description", "display_name"], ids=str)
+def test_resolve_names_rejects_an_email_shaped_value(field):
+    identity = bootstrap.Identity(**{**SAMPLE, field: "Jane jane@example.com"})
 
-    with pytest.raises(SystemExit):
-        bootstrap.main(["acme-widgets"])
-
-    # The run must abort before touching anything.
-    assert (root / "src" / "my_app").is_dir()
-
-
-def test_bootstrap_rejects_invalid_package_name(template_copy):
-    root, bootstrap = template_copy
-
-    with pytest.raises(SystemExit):
-        _bootstrap_into(root, bootstrap, package_name="1-invalid-name")
+    with pytest.raises(
+        bootstrap.BootstrapError, match=r"email address is never written"
+    ):
+        bootstrap.resolve_names(identity)
 
 
-@pytest.mark.parametrize("package_name", ["class", "acme/widgets", ""])
-def test_bootstrap_rejects_non_importable_package_names(template_copy, package_name):
-    root, bootstrap = template_copy
-
-    with pytest.raises(SystemExit):
-        _bootstrap_into(root, bootstrap, package_name=package_name)
-
-    assert (root / "src" / "my_app").is_dir()
+# --- REQ-003: the contact slots --------------------------------------------
 
 
-def test_bootstrap_rejects_existing_source_destination(template_copy):
-    root, bootstrap = template_copy
-    (root / "src" / "acme_widgets").mkdir()
-
-    with pytest.raises(SystemExit, match=r"already exists"):
-        _bootstrap_into(root, bootstrap)
-
-    assert (root / "src" / "my_app").is_dir()
+def test_bootstrap_contact_url_fills_both_contact_slots(sample_app):
+    security = (sample_app / "SECURITY.md").read_text(encoding="utf-8")
+    conduct = (sample_app / "CODE_OF_CONDUCT.md").read_text(encoding="utf-8")
+    assert "private contact through\n<https://github.com/jdoe>" in security
+    assert "community leaders through <https://github.com/jdoe>." in conduct
+    assert "jdoe/todo-api/security/advisories/new" in security
 
 
-def test_bootstrap_rejects_multiline_metadata_before_writing(template_copy):
-    root, bootstrap = template_copy
+def test_bootstrap_without_contact_url_points_at_the_repository(clone):
+    _run(clone, contact_url=None)
 
-    with pytest.raises(SystemExit, match=r"single line"):
-        _bootstrap_into(root, bootstrap, description="first line\nsecond line")
-
-    assert (root / "src" / "my_app").is_dir()
-
-
-def test_bootstrap_rejects_an_empty_explicit_repository_name(template_copy):
-    root, bootstrap = template_copy
-
-    with pytest.raises(SystemExit, match=r"GitHub repository name"):
-        _bootstrap_into(root, bootstrap, github_repository="")
-
-    assert (root / "src" / "my_app").is_dir()
+    security = (clone / "SECURITY.md").read_text(encoding="utf-8")
+    conduct = (clone / "CODE_OF_CONDUCT.md").read_text(encoding="utf-8")
+    assert "[open an issue](https://github.com/jdoe/todo-api/issues)" in security
+    assert "(https://github.com/jdoe/todo-api/security/advisories/new)" in conduct
+    assert "https://github.com/jdoe>" not in security + conduct
 
 
-def test_git_failure_does_not_trigger_an_unsafe_filesystem_fallback(
-    template_copy, monkeypatch
+@pytest.mark.parametrize(
+    "url",
+    [
+        pytest.param("http://example.com/jdoe", id="not-https"),
+        pytest.param("mailto:jane@example.com", id="mailto"),
+        pytest.param("https://jane:pw@example.com", id="credentials"),
+        pytest.param("https://", id="no-host"),
+        pytest.param("https://example.com/a b", id="space"),
+    ],
+)
+def test_resolve_names_rejects_an_unusable_contact_url(url):
+    identity = bootstrap.Identity(**{**SAMPLE, "contact_url": url})
+
+    with pytest.raises(bootstrap.BootstrapError, match=r"invalid --contact-url"):
+        bootstrap.resolve_names(identity)
+
+
+# --- REQ-004: validate and compute everything before writing ---------------
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        pytest.param({"slug": "Todo"}, r"invalid name", id="upper-case-slug"),
+        pytest.param({"slug": "todo--api"}, r"invalid name", id="double-hyphen"),
+        pytest.param({"slug": "a" * 41}, r"invalid name", id="too-long"),
+        pytest.param({"author": ""}, r"invalid author", id="empty-author"),
+        pytest.param(
+            {"description": "first\nsecond"}, r"invalid description", id="multiline"
+        ),
+        pytest.param({"author": 'Jane "J" Doe'}, r"invalid author", id="quote"),
+        pytest.param({"github_user": "-jdoe"}, r"invalid GitHub user", id="user"),
+        pytest.param(
+            {"github_repository": "someone/todo-api"},
+            r"names owner 'someone'",
+            id="owner-mismatch",
+        ),
+        pytest.param(
+            {"github_repository": "jdoe/todo.git"},
+            r"invalid GitHub repository",
+            id="dot-git",
+        ),
+        pytest.param(
+            {"description": "Like uv-template"}, r"placeholder 'uv-template'", id="ph"
+        ),
+        pytest.param(
+            {"author": "you@example.com"}, r"email address", id="placeholder-email"
+        ),
+        pytest.param(
+            {"display_name": "MY APP"}, r"is a placeholder", id="my-app-phrase"
+        ),
+        pytest.param(
+            {"author": "your name"}, r"is a placeholder", id="your-name-phrase"
+        ),
+    ],
+)
+def test_resolve_names_rejects_invalid_input(overrides, message):
+    identity = bootstrap.Identity(**{**SAMPLE, **overrides})
+
+    with pytest.raises(bootstrap.BootstrapError, match=message):
+        bootstrap.resolve_names(identity)
+
+
+@pytest.mark.parametrize(
+    "argv_tail",
+    [
+        pytest.param(["--github-repository", "someone/todo-api"], id="owner-mismatch"),
+        pytest.param(["--contact-url", "mailto:jane@example.com"], id="mailto"),
+    ],
+)
+def test_main_invalid_input_leaves_the_tree_byte_identical(clone, capsys, argv_tail):
+    before = _snapshot(clone)
+
+    assert bootstrap.main([*SAMPLE_ARGV, *argv_tail]) == 1
+
+    assert capsys.readouterr().err.startswith("error: ")
+    assert _snapshot(clone) == before
+
+
+@pytest.mark.parametrize(
+    ("relative", "old", "new", "message"),
+    [
+        pytest.param(
+            "SECURITY.md",
+            "If that form is unavailable",
+            "If the form is unavailable",
+            r"SECURITY\.md: expected exactly one",
+            id="contact-slot-drifted",
+        ),
+        pytest.param(
+            "CHANGELOG.md",
+            "# Changelog\n",
+            "# Changelog\n\n<!-- template-only -->\n",
+            r"CHANGELOG\.md:3: template-only block never closed",
+            id="unclosed-block",
+        ),
+        pytest.param(
+            "CONTRIBUTING.md",
+            "\n",
+            "\n<!-- /template-only -->\n",
+            r"CONTRIBUTING\.md:2: template-only block closed but never opened",
+            id="stray-close",
+        ),
+    ],
+)
+def test_bootstrap_drifted_template_site_writes_nothing(
+    clone, relative, old, new, message
 ):
-    root, bootstrap = template_copy
-    (root / ".git").mkdir()
+    path = clone / relative
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(old, new, 1), encoding="utf-8"
+    )
+    _git(clone, "commit", "--quiet", "--all", "--message", "drift")
+    before = _snapshot(clone)
 
-    def fail_git(*args, **kwargs):
-        return subprocess.CompletedProcess(
-            args=args[0], returncode=128, stdout="", stderr="repository is broken"
-        )
+    with pytest.raises(bootstrap.BootstrapError, match=message):
+        _run(clone)
 
-    monkeypatch.setattr(bootstrap.subprocess, "run", fail_git)
-
-    with pytest.raises(SystemExit, match=r"repository is broken"):
-        _bootstrap_into(root, bootstrap)
+    assert _snapshot(clone) == before
 
 
-def test_nested_git_directory_does_not_trigger_an_unsafe_filesystem_fallback(
-    template_copy, monkeypatch
+# --- REQ-005: dirty tree, reserved names, a second run ---------------------
+
+
+@pytest.mark.parametrize(
+    "make_dirty",
+    [
+        pytest.param(
+            lambda root: (root / "README.md").write_text("changed\n", encoding="utf-8"),
+            id="modified",
+        ),
+        pytest.param(
+            lambda root: (root / "notes.txt").write_text("new\n", encoding="utf-8"),
+            id="untracked",
+        ),
+    ],
+)
+def test_bootstrap_dirty_tree_is_refused_and_left_as_is(clone, make_dirty):
+    make_dirty(clone)
+    before = _snapshot(clone)
+
+    with pytest.raises(bootstrap.BootstrapError, match=r"uncommitted changes"):
+        _run(clone)
+
+    assert _snapshot(clone) == before
+
+
+def test_main_dirty_tree_exits_one_with_an_error_line(clone, capsys):
+    (clone / "README.md").write_text("changed\n", encoding="utf-8")
+
+    assert bootstrap.main(SAMPLE_ARGV) == 1
+    assert capsys.readouterr().err.startswith("error: the working tree has uncommitted")
+
+
+@pytest.mark.parametrize(
+    "slug",
+    [
+        "app",
+        "src",
+        "test",
+        "tests",
+        "core",
+        "api",
+        "cli",
+        "adapters",
+        "settings",
+        "my-app",
+        "class",
+        "json",
+        "email",
+        "pydoc-data",  # its module name, pydoc_data, is a stdlib package
+        "fastapi",
+        "pydantic-settings",
+        "starlette",
+        "mypy",
+        "sync-labels",  # a scripts/*.py stem
+        "bootstrap",
+    ],
+)
+def test_resolve_names_refuses_a_reserved_name(slug):
+    identity = bootstrap.Identity(**{**SAMPLE, "slug": slug, "github_repository": None})
+
+    with pytest.raises(bootstrap.BootstrapError, match=r"reserved name"):
+        bootstrap.resolve_names(identity)
+
+
+def test_main_reserved_name_leaves_the_tree_byte_identical(clone, capsys):
+    before = _snapshot(clone)
+
+    assert bootstrap.main(["core", *SAMPLE_ARGV[1:5], *SAMPLE_ARGV[7:]]) == 1
+
+    assert "reserved name 'core'" in capsys.readouterr().err
+    assert _snapshot(clone) == before
+
+
+def test_bootstrap_second_run_is_refused(clone):
+    bootstrap.bootstrap(clone, bootstrap.Identity(**SAMPLE), keep_bootstrap=True)
+    _git(clone, "add", "--all")
+    _git(clone, "commit", "--quiet", "--message", "bootstrap")
+    before = _snapshot(clone)
+
+    with pytest.raises(bootstrap.BootstrapError, match=r"already bootstrapped"):
+        _run(clone, slug="other-app", github_repository=None)
+
+    assert _snapshot(clone) == before
+
+
+def test_bootstrap_outside_the_git_root_is_refused(clone):
+    with pytest.raises(
+        bootstrap.BootstrapError, match=r"from the root of the git work tree"
+    ):
+        _run(clone / "src")
+
+
+def test_bootstrap_outside_any_git_repository_is_refused(tmp_path):
+    with pytest.raises(
+        bootstrap.BootstrapError, match=r"git rev-parse --show-toplevel"
+    ):
+        _run(tmp_path)
+
+
+def test_bootstrap_existing_destination_package_is_refused(clone):
+    (clone / "src" / "todo_api").mkdir()
+    (clone / "src" / "todo_api" / "__init__.py").write_text("", encoding="utf-8")
+    _git(clone, "add", "--all")
+    _git(clone, "commit", "--quiet", "--message", "collide")
+
+    with pytest.raises(bootstrap.BootstrapError, match=r"already exists"):
+        _run(clone)
+
+
+# --- REQ-006: what a successful run removes and records --------------------
+
+
+def test_bootstrap_removes_every_template_only_block_and_the_smoke_job(sample_app):
+    texts = _text_files(sample_app)
+    markers = [path for path, text in texts.items() if MARKER_LINE.search(text)]
+    assert markers == []
+    ci = texts[".github/workflows/ci.yml"]
+    assert "Template Bootstrap Smoke" not in ci
+    assert "name: Workflow Security Lint" in ci
+    assert ci.endswith("run: uvx zizmor .github/workflows/\n")
+    assert "This is the" not in texts["README.md"]
+    assert "\n\n\n" not in texts["README.md"]
+
+
+def test_bootstrap_deletes_template_only_files_and_keeps_the_mirror_in_sync(sample_app):
+    for relative in (
+        *KEEPABLE,
+        f".agents/{SKILL_REFERENCE}",
+        f".claude/{SKILL_REFERENCE}",
+    ):
+        assert not (sample_app / relative).exists(), relative
+    agents = _snapshot(sample_app / ".agents" / "skills")
+    assert agents == _snapshot(sample_app / ".claude" / "skills")
+    assert "starting-an-app/references/private-repository.md" in agents
+
+
+def test_bootstrap_keep_bootstrap_keeps_its_files_untouched(clone):
+    before = _snapshot(clone)
+
+    bootstrap.bootstrap(clone, bootstrap.Identity(**SAMPLE), keep_bootstrap=True)
+
+    after = _snapshot(clone)
+    kept = (*KEEPABLE, f".agents/{SKILL_REFERENCE}", f".claude/{SKILL_REFERENCE}")
+    for relative in kept:
+        assert after[relative] == before[relative], relative
+
+
+def test_bootstrap_resets_the_changelog(sample_app):
+    changelog = (sample_app / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert changelog == bootstrap.CHANGELOG_SKELETON
+    assert changelog.rstrip().endswith("## [Unreleased]")
+
+
+def test_bootstrap_new_history_records_an_unknown_commit_and_the_tree(
+    sample_app, template_repository
 ):
-    root, bootstrap = template_copy
+    tree = _git(template_repository, "rev-parse", "HEAD^{tree}").strip()
 
-    def report_ancestor_git_root(*args, **kwargs):
-        return subprocess.CompletedProcess(
-            args=args[0], returncode=0, stdout=f"{root.parent}\n", stderr=""
-        )
+    origin = (sample_app / bootstrap.ORIGIN_FILE).read_text(encoding="utf-8")
+    assert f"template: {bootstrap.TEMPLATE_REPOSITORY_URL}\n" in origin
+    assert "commit: unknown\n" in origin
+    assert f"tree: {tree}\n" in origin
 
-    monkeypatch.setattr(bootstrap.subprocess, "run", report_ancestor_git_root)
 
-    with pytest.raises(SystemExit, match=r"Bootstrap must run at the Git root"):
-        _bootstrap_into(root, bootstrap)
+def test_bootstrap_template_history_records_the_commit(clone, monkeypatch):
+    head = _git(clone, "rev-parse", "HEAD").strip()
+    monkeypatch.setattr(bootstrap, "TEMPLATE_ROOT_COMMIT", head)
+
+    _run(clone)
+
+    origin = (clone / bootstrap.ORIGIN_FILE).read_text(encoding="utf-8")
+    assert f"commit: {head}\n" in origin
+
+
+def test_main_runs_uv_lock_then_formats_in_the_app(clone, fake_uv, capsys):
+    assert bootstrap.main(SAMPLE_ARGV) == 0
+
+    root = clone.resolve()
+    calls = fake_uv.read_text(encoding="utf-8").splitlines()
+    assert calls == [
+        f"{root} lock",
+        f"{root} run --locked ruff check --fix --quiet .",
+        f"{root} run --locked ruff format --quiet .",
+    ]
+    assert "Next: write AGENTS.md's Product section" in capsys.readouterr().out
+
+
+def test_main_failed_uv_lock_exits_one_after_writing(
+    clone, fake_uv, monkeypatch, capsys
+):
+    monkeypatch.setenv("FAKE_UV_EXIT", "1")
+
+    assert bootstrap.main(SAMPLE_ARGV) == 1
+
+    assert len(fake_uv.read_text(encoding="utf-8").splitlines()) == 1
+    assert "`uv lock` failed (exit 1)" in capsys.readouterr().err
+    assert (clone / bootstrap.ORIGIN_FILE).is_file()
+
+
+def test_finish_missing_command_reports_and_returns_false(clone, monkeypatch, capsys):
+    monkeypatch.setattr(bootstrap, "FINISHING_COMMANDS", (("uv-is-not-here",),))
+
+    assert bootstrap.finish(clone) is False
+    assert "could not run `uv-is-not-here`" in capsys.readouterr().err
+
+
+# --- review round: prose, invocation, failed writes, files left alone ------
+
+
+@pytest.mark.parametrize(
+    "description",
+    ["Book my appointments", "Sync my apps", "Store your names and dates"],
+)
+def test_resolve_names_accepts_prose_around_a_placeholder_phrase(description):
+    identity = bootstrap.Identity(**{**SAMPLE, "description": description})
+
+    assert bootstrap.resolve_names(identity).description == description
+
+
+def test_main_from_another_checkout_is_refused_without_writing(
+    clone, template_repository, monkeypatch, capsys
+):
+    before = _snapshot(clone)
+    monkeypatch.chdir(template_repository)
+
+    assert bootstrap.main(SAMPLE_ARGV) == 1
+
+    assert "run the bootstrap from inside" in capsys.readouterr().err
+    assert _snapshot(clone) == before
+
+
+def _fail_after(calls: int, original: Callable[..., object]) -> Callable[..., object]:
+    """Wrap a Path method so every call after the first ``calls`` raises OSError."""
+    count = 0
+
+    def method(self: Path, *args: object, **kwargs: object) -> object:
+        nonlocal count
+        count += 1
+        if count > calls:
+            msg = "disk full"
+            raise OSError(msg)
+        return original(self, *args, **kwargs)
+
+    return method
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        pytest.param(("rename", 0, "nothing yet"), id="rename-fails"),
+        pytest.param(
+            ("write_bytes", 5, "renamed src/my_app to src/todo_api"), id="write-fails"
+        ),
+    ],
+)
+def test_main_failed_write_names_progress_and_recovery_restores_template(
+    clone, monkeypatch, capsys, failure
+):
+    method, calls, done = failure
+    before = _snapshot(clone)
+    monkeypatch.setattr(Path, method, _fail_after(calls, getattr(Path, method)))
+
+    assert bootstrap.main(SAMPLE_ARGV) == 1
+
+    monkeypatch.undo()
+    error = capsys.readouterr().err
+    assert error.startswith("error: writing failed: disk full.")
+    assert f"Done before the failure: {done}" in error
+    assert "git restore --staged --worktree :/ && git clean -fd" in error
+    _git(clone, "restore", "--staged", "--worktree", ":/")
+    _git(clone, "clean", "-fd")
+    assert _snapshot(clone) == before
+
+
+def test_bootstrap_leaves_secret_binary_and_symlinked_files_alone(clone, tmp_path):
+    outside = tmp_path / "outside.md"
+    outside.write_text("my-app\n", encoding="utf-8")
+    untouched = {
+        ".env.local": b"my-app\n",
+        "secrets/token.txt": b"my-app\n",
+        "data.bin": b"\xff\xfe my-app\n",
+    }
+    for relative, data in untouched.items():
+        (clone / relative).parent.mkdir(parents=True, exist_ok=True)
+        (clone / relative).write_bytes(data)
+    (clone / "docs" / "outside.md").symlink_to(outside)
+    _git(clone, "add", "--all", "--force", *untouched, "docs/outside.md")
+    _git(clone, "commit", "--quiet", "--message", "edge cases")
+
+    _run(clone)
+
+    for relative, data in untouched.items():
+        assert (clone / relative).read_bytes() == data, relative
+    assert (clone / "docs" / "outside.md").is_symlink()
+    assert outside.read_text(encoding="utf-8") == "my-app\n"

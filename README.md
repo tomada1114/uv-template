@@ -1,7 +1,14 @@
-# my-app
+# My App
 
 [![CI](https://github.com/your-username/uv-template/actions/workflows/ci.yml/badge.svg)](https://github.com/your-username/uv-template/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/your-username/uv-template/blob/main/LICENSE)
+
+<!-- template-only -->
+> [!NOTE]
+> This is the uv-template repository itself. To start an application from it,
+> follow the `starting-an-app` skill (`.agents/skills/starting-an-app/SKILL.md`);
+> `TEMPLATE.md` explains why the template is built the way it is.
+<!-- /template-only -->
 
 A short description of what this application does.
 

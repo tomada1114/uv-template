@@ -122,7 +122,7 @@ an issue, like one you noticed yourself, is drafted in the reply — title, labe
 and waits for a yes. Either way, pick one outcome:
 
 1. **File it** when it stays inside the existing design and is in scope for the project
-   `AGENTS.md` › "Overview" describes. It gets a type label, a tier (`priority: P2`
+   `AGENTS.md` › "Product" describes, outside its non-goals. It gets a type label, a tier (`priority: P2`
    unless the table above says otherwise), and a body that meets "What an issue body
    must contain".
    Several requests in one message get one issue each, unless they are one pull
