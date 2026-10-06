@@ -302,19 +302,27 @@ Code, Codex CLI, or any other tool. No agent-specific hook is committed.
 - `check-staged` (`scripts/check_staged.py`) refuses a commit that stages a
   secret-shaped path — `.env` and `.env.*` except `.env.example`, `.envrc` and
   `.envrc.*`, anything under `secrets/`, `*.pem`, `*.key`, `id_rsa*`,
-  `.claude/settings.local.json`, `.codex/rules/local.rules` — or a file whose
-  staged content holds an AWS access key, a GitHub, Anthropic, OpenAI project,
-  OpenRouter, Slack, or Stripe live token, or a private-key PEM header. It
-  judges the index, not the working tree, names the file and the kind of
-  secret, and never prints the matched value.
-- `check-staged` runs on ordinary commits, on merge commits (git's
-  `pre-merge-commit` hook), and on a `git commit` made at a rebase stop.
-  `git rebase --continue` commits a resolution without running any pre-commit
-  hook, so commit a resolution that could carry a secret with `git commit`
-  before continuing. Every other hook runs on ordinary commits only.
+  `.claude/settings.local.json` at any depth, `.codex/rules/local.rules` — or
+  a file whose staged content holds an AWS access key, a GitHub, Anthropic,
+  OpenAI project, OpenRouter, Slack, or Stripe live token, or a PEM
+  private-key header. It judges the index, not the working tree, names the
+  file and the kind of secret, and never prints the matched value. It is
+  stdlib-only and runs with pre-commit's own interpreter, so it needs no uv.
+- `check-staged` runs on every `git commit` — including the one that
+  concludes a conflicted merge — and on clean merges (git's `pre-merge-commit`
+  hook). In a merge, content identical to what the merged-in branch already
+  has at the same path is not judged again; conflict resolutions and other
+  new content are. It is the only hook that runs at `pre-merge-commit`; every
+  other hook runs on `git commit` only.
+- Commits that git makes itself run no pre-commit hook at all: the commits
+  `git rebase` replays (including after `git rebase --continue`),
+  `git cherry-pick`, and `git revert`. The backstop for those is the weekly
+  full-history scan of the Security Audit workflow (gitleaks).
 - `just install` installs both git hooks and fails when either is missing
-  afterwards. `ALLOW_MISSING_GIT_HOOKS=1` installs without them on purpose; CI
-  (`CI` set) commits nothing and skips the check.
+  afterwards. With `ALLOW_MISSING_GIT_HOOKS=1` or `CI=true` it still attempts
+  the install, but a failed install or a missing hook is only a warning.
+- An existing checkout installed before the `pre-merge-commit` hook existed
+  has only the `pre-commit` hook: re-run `just install` to add it.
 - Git hooks live in the main checkout's `.git/hooks/` and are shared by every
   linked worktree. Run `just install` from the main checkout: run from a
   worktree, it points the shared hooks at that worktree's `.venv`.

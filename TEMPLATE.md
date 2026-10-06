@@ -116,9 +116,11 @@ A guard rail wired into one agent's hook configuration protects nothing when
 a human, or a different tool, makes the commit. So the template commits no
 agent hooks: its guard rails are git hooks run by pre-commit, which fire on
 `git commit` for every author. `scripts/check_staged.py` refuses secret-shaped
-paths and credential-shaped content straight from the index, on ordinary,
-merge, and rebase-stop commits, and `just install` fails when the git hooks
-are missing. What the old agent hooks did and where each behavior went is the
+paths and credential-shaped content straight from the index, on every
+`git commit` and every merge commit, and `just install` fails when the git
+hooks are missing. Commits git makes without running hooks — `git rebase`
+replays, `git cherry-pick`, `git revert` — are left to the weekly full-history
+scan of the Security Audit workflow (gitleaks). What the old agent hooks did and where each behavior went is the
 replacement table under "Pre-commit layer" in `AGENTS.md`.
 
 ### Why 80% coverage minimum?
