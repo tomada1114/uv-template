@@ -81,8 +81,9 @@ Provision the group's **first** worktree and read its `verdict:` line:
   missing resource. See
   [the gitlink case](#the-gitlink-case-a-red-baseline-that-is-not-a-verdict) below:
   fully explained, deterministic, and safe to run parallel through.
-- `hooks: MISSING` → the shared pre-commit hook is not installed, so a commit in any
-  worktree would skip it. Run `just install` once in the main checkout (it installs
+- `hooks: MISSING <hook…>` → a shared git hook the config expects (`pre-commit`, and
+  `pre-merge-commit` when `default_install_hook_types` lists it) is not installed, so
+  a commit or merge in any worktree would skip it. Run `just install` once in the main checkout (it installs
   the hook) and re-run; never install it from inside a worktree.
 
 Not viable → remove that worktree, fall back to serial for the whole run, and say which
