@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `scripts/check_staged.py`, a pre-commit hook (`check-staged`) that refuses
+  a commit staging a secret-shaped path (`.env*` except `.env.example`,
+  `.envrc*`, `secrets/**`, `*.pem`, `*.key`, `id_rsa*`, personal agent
+  settings) or credential-shaped content, read from the index; it also runs on
+  merge commits (`pre-merge-commit`). `just install` now fails when the git
+  hooks are missing (opt-out: `ALLOW_MISSING_GIT_HOOKS=1`; `CI=true` only
+  warns). **Existing checkouts: re-run `just install`** to add the new
+  `pre-merge-commit` hook
 - Security scanning workflows: CodeQL (`python`, `actions`), OSV-Scanner
   on `uv.lock`, Dependency Review with a license allow-list, and a weekly
   full-history gitleaks audit with a checksum-verified binary
@@ -132,6 +140,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- The agent hooks under `.agents/hooks/` (`guard.py`, `format.py`,
+  `stop_check.py`, `hook_payload.py`) and their wiring in
+  `.claude/settings.json` and `.codex/hooks.json`; the guard rails now run as
+  git hooks for every author, and `AGENTS.md` maps each former behavior to its
+  replacement
 - **Breaking:** library publishing — the template now targets applications.
   The PyPI release workflow, the distribution smoke test (`just build`,
   `just smoke`), the mkdocs site (`just docs`, `just docs-check`, the `docs`
