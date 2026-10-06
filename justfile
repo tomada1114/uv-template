@@ -107,6 +107,10 @@ agents-check:
 labels *ARGS:
     uv run --locked python scripts/sync_labels.py {{ARGS}}
 
+# Create or update the main branch ruleset from .github/rulesets/main.json (admin-only; writes to GitHub)
+ruleset *ARGS:
+    uv run --locked python scripts/apply_ruleset.py {{ARGS}}
+
 # Remove build artifacts
 clean:
     rm -rf dist/ build/ .mypy_cache/ .ruff_cache/ .pytest_cache/ htmlcov/ .coverage .coverage.* coverage.xml
