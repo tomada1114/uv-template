@@ -22,8 +22,19 @@ it would block the very commit that removes one. Git runs with the inherited
 environment on purpose: `git commit -a` and `git commit -- <path>` hand the hook
 a temporary index through `GIT_INDEX_FILE`, and that index is what is committed.
 
+During a merge, a staged entry whose blob (and mode) is identical to the one at
+the same path in a commit being merged in is not judged again: that content was
+judged when it entered the other side's history. Re-judging it would refuse
+every later merge of that branch once anything matching had landed on it, and
+the only way out would be to drop the other side's file. Conflict resolutions
+and any other content new to both sides are still judged.
+
+The script is stdlib-only and runs on Python 3.10+, the oldest interpreter
+pre-commit itself supports, because pre-commit runs it (`language: python`)
+with its own interpreter rather than the project's environment.
+
 Usage:
-    uv run --locked python scripts/check_staged.py
+    python scripts/check_staged.py
 
 Exit codes:
     0  nothing staged is refused (including when nothing is staged)
@@ -40,11 +51,11 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Collection, Sequence
 
 # A submodule entry names a commit in another repository; there is no blob here.
 GITLINK_MODE: Final = "160000"
@@ -63,13 +74,36 @@ DIRENV_FILE_NAME: Final = ".envrc"
 SECRETS_DIRECTORY: Final = "secrets"
 KEY_FILE_SUFFIXES: Final = (".pem", ".key")
 SSH_KEY_PREFIX: Final = "id_rsa"
-PERSONAL_SETTINGS_PATHS: Final = frozenset(
-    {".claude/settings.local.json", ".codex/rules/local.rules"},
+
+CLAUDE_DIRECTORY: Final = ".claude"
+CLAUDE_LOCAL_SETTINGS_NAME: Final = "settings.local.json"
+CODEX_LOCAL_RULES_PATH: Final = ".codex/rules/local.rules"
+MERGE_HEAD_REF: Final = "MERGE_HEAD"
+GITHEAD_ENV_PREFIX: Final = "GITHEAD_"
+OBJECT_ID: Final = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+# Shared by every listing so user configuration cannot change its shape:
+# `diff.relative` (paths relative to the current directory), colour, and
+# rename or copy detection (two paths per entry).
+RAW_DIFF_ARGS: Final = (
+    "diff",
+    "--cached",
+    "--raw",
+    "-z",
+    "--no-abbrev",
+    "--no-renames",
+    "--no-relative",
+    "--no-color",
 )
 
 FIX_HINT: Final = (
     "Remove the secret from the file and `git add` it again, or take the path "
     "out of the index with `git rm --cached <path>` and list it in .gitignore. "
+    "Never bypass this check with --no-verify."
+)
+MERGE_FIX_HINT: Final = (
+    "A merge is in progress: remove the secret from each refused file and "
+    "`git add` it again. Do not `git rm --cached` or `git restore --staged` a "
+    "path here -- that would also drop the other side's change to it. "
     "Never bypass this check with --no-verify."
 )
 
@@ -82,7 +116,8 @@ class ExitCode(enum.IntEnum):
     GIT_FAILED = 2
 
 
-class BlockedPath(enum.StrEnum):
+# `str, Enum` rather than StrEnum, which needs 3.11 (see the module docstring).
+class BlockedPath(str, enum.Enum):
     """Why a staged path is refused on its name alone."""
 
     ENV_FILE = "an environment file (.env, .env.*) can hold real values; commit .env.example instead"
@@ -93,7 +128,7 @@ class BlockedPath(enum.StrEnum):
     PERSONAL_SETTINGS = "personal agent settings stay local (they are gitignored)"
 
 
-class SecretKind(enum.StrEnum):
+class SecretKind(str, enum.Enum):
     """A credential shape searched for in staged content."""
 
     AWS_ACCESS_KEY = "AWS access key"
@@ -110,16 +145,41 @@ class SecretKind(enum.StrEnum):
 # Every prefix must be followed by a token body, so a document (or this file)
 # that merely names a prefix such as `ghp_` is not refused. Each minimum body
 # length is at or below the length of the real tokens that issuer hands out.
-# The PEM header covers every key type, including OPENSSH and ENCRYPTED keys.
+# A token prefix must also start a word: without that left boundary, prose such
+# as "risk-or-reward-..." or "desk-proj-overview-..." would read as a key.
+# A Slack token body starts with a digit (a workspace or version number), which
+# keeps a word like "xoxo-gossip-..." from matching even at a word start.
+WORD_START: Final = r"(?<![A-Za-z0-9_-])"
+# The PEM header covers the PEM private-key types (RSA, EC, DSA, OPENSSH,
+# ENCRYPTED, and plain PKCS#8); an armored PGP key ("PRIVATE KEY BLOCK") is
+# not PEM and is not matched.
 SECRET_PATTERNS: Final[tuple[tuple[SecretKind, re.Pattern[str]], ...]] = (
     (SecretKind.AWS_ACCESS_KEY, re.compile(r"AKIA[0-9A-Z]{16}")),
-    (SecretKind.GITHUB_PAT, re.compile(r"ghp_[A-Za-z0-9]{36}")),
-    (SecretKind.GITHUB_FINE_GRAINED_PAT, re.compile(r"github_pat_[A-Za-z0-9_]{22,}")),
-    (SecretKind.ANTHROPIC_API_KEY, re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}")),
-    (SecretKind.OPENAI_PROJECT_KEY, re.compile(r"sk-proj-[A-Za-z0-9_-]{20,}")),
-    (SecretKind.OPENROUTER_API_KEY, re.compile(r"sk-or-[A-Za-z0-9_-]{20,}")),
-    (SecretKind.SLACK_CREDENTIAL, re.compile(r"xox[abposr]-[A-Za-z0-9-]{10,}")),
-    (SecretKind.STRIPE_LIVE_KEY, re.compile(r"sk_live_[A-Za-z0-9]{20,}")),
+    (SecretKind.GITHUB_PAT, re.compile(rf"{WORD_START}ghp_[A-Za-z0-9]{{36}}")),
+    (
+        SecretKind.GITHUB_FINE_GRAINED_PAT,
+        re.compile(rf"{WORD_START}github_pat_[A-Za-z0-9_]{{22,}}"),
+    ),
+    (
+        SecretKind.ANTHROPIC_API_KEY,
+        re.compile(rf"{WORD_START}sk-ant-[A-Za-z0-9_-]{{20,}}"),
+    ),
+    (
+        SecretKind.OPENAI_PROJECT_KEY,
+        re.compile(rf"{WORD_START}sk-proj-[A-Za-z0-9_-]{{20,}}"),
+    ),
+    (
+        SecretKind.OPENROUTER_API_KEY,
+        re.compile(rf"{WORD_START}sk-or-[A-Za-z0-9_-]{{20,}}"),
+    ),
+    (
+        SecretKind.SLACK_CREDENTIAL,
+        re.compile(rf"{WORD_START}xox[abposr]-[0-9][A-Za-z0-9-]{{9,}}"),
+    ),
+    (
+        SecretKind.STRIPE_LIVE_KEY,
+        re.compile(rf"{WORD_START}sk_live_[A-Za-z0-9]{{20,}}"),
+    ),
     (SecretKind.PRIVATE_KEY, re.compile(r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----")),
 )
 
@@ -169,33 +229,13 @@ def _run_git(args: Sequence[str], stdin: bytes | None = None) -> bytes:
     return completed.stdout
 
 
-def staged_entries() -> list[StagedEntry]:
-    """List the staged additions, modifications, and type changes.
-
-    The listing ignores user configuration that would change its shape:
-    `diff.relative` (paths relative to the current directory), colour, and
-    rename or copy detection (two paths per entry).
-
-    Returns:
-        One entry per staged path that has content to commit, in index order.
+def _raw_diff(*args: str) -> list[StagedEntry]:
+    """Run `git diff --cached --raw` with `args` and parse its records.
 
     Raises:
-        GitError: git could not list the index.
+        GitError: git failed or printed a record of an unexpected shape.
     """
-    output = _run_git(
-        [
-            "diff",
-            "--cached",
-            "--raw",
-            "-z",
-            "--no-abbrev",
-            "--no-renames",
-            "--no-relative",
-            "--no-color",
-            f"--diff-filter={STAGED_STATUS_FILTER}",
-        ],
-    )
-    fields = output.split(b"\0")
+    fields = _run_git([*RAW_DIFF_ARGS, *args]).split(b"\0")
     entries = []
     for index in range(0, len(fields) - 1, RAW_FIELDS_PER_ENTRY):
         meta = fields[index].decode("ascii").split()
@@ -213,8 +253,60 @@ def staged_entries() -> list[StagedEntry]:
     return entries
 
 
+def staged_entries() -> list[StagedEntry]:
+    """List the staged additions, modifications, and type changes.
+
+    Returns:
+        One entry per staged path that has content to commit, in index order.
+
+    Raises:
+        GitError: git could not list the index.
+    """
+    return _raw_diff(f"--diff-filter={STAGED_STATUS_FILTER}")
+
+
+def merge_heads() -> list[str]:
+    """Return the commits being merged in, or an empty list outside a merge.
+
+    Two sources, because git exposes the merge differently per hook. A clean
+    `git merge` runs pre-merge-commit before it writes MERGE_HEAD, but exports
+    a `GITHEAD_<commit id>` variable for each head it merges; the `git commit`
+    that concludes a conflicted merge has MERGE_HEAD on disk instead.
+
+    Raises:
+        GitError: git could not locate the repository's MERGE_HEAD file.
+    """
+    from_environment = [
+        name.removeprefix(GITHEAD_ENV_PREFIX)
+        for name in os.environ
+        if name.startswith(GITHEAD_ENV_PREFIX)
+        and OBJECT_ID.fullmatch(name.removeprefix(GITHEAD_ENV_PREFIX))
+    ]
+    merge_head = Path(
+        os.fsdecode(_run_git(["rev-parse", "--git-path", MERGE_HEAD_REF])).strip(),
+    )
+    try:
+        from_file = merge_head.read_text(encoding="ascii").split()
+    except FileNotFoundError:
+        from_file = []
+    return list(dict.fromkeys([*from_file, *from_environment]))
+
+
+def paths_identical_in(commit: str, paths: Collection[str]) -> set[str]:
+    """Return the paths whose staged blob and mode equal those in `commit`.
+
+    Raises:
+        GitError: git could not compare the index with `commit`.
+    """
+    differing = {entry.path for entry in _raw_diff(commit)}
+    return {path for path in paths if path not in differing}
+
+
 def _is_personal_settings(path: PurePosixPath) -> bool:
-    return path.as_posix() in PERSONAL_SETTINGS_PATHS
+    # .claude/settings.local.json is gitignored at any depth; the Codex rules
+    # file only at the root.
+    is_claude_local = path.parts[-2:] == (CLAUDE_DIRECTORY, CLAUDE_LOCAL_SETTINGS_NAME)
+    return is_claude_local or path.as_posix() == CODEX_LOCAL_RULES_PATH
 
 
 def _is_under_secrets_directory(path: PurePosixPath) -> bool:
@@ -331,8 +423,12 @@ def read_blobs(blob_ids: Sequence[str]) -> list[bytes]:
     return contents
 
 
-def find_violations() -> list[Finding]:
+def find_violations(merge_commits: Sequence[str] = ()) -> list[Finding]:
     """Judge every staged change in the current repository.
+
+    Args:
+        merge_commits: The commits being merged in (`merge_heads()`); a staged
+            entry identical to the same path in one of them is not judged.
 
     Returns:
         Every refused path, in index order; empty when the commit is safe.
@@ -341,6 +437,10 @@ def find_violations() -> list[Finding]:
         GitError: git could not list or read the staged changes.
     """
     entries = staged_entries()
+    inherited: set[str] = set()
+    for commit in merge_commits:
+        inherited |= paths_identical_in(commit, {entry.path for entry in entries})
+    entries = [entry for entry in entries if entry.path not in inherited]
     path_reasons = {entry.path: blocked_path_reason(entry.path) for entry in entries}
     to_read = [
         entry
@@ -379,7 +479,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.parse_args(argv)
     try:
-        findings = find_violations()
+        merge_commits = merge_heads()
+        findings = find_violations(merge_commits)
     except GitError as error:
         print(f"check_staged: {error}", file=sys.stderr)
         return ExitCode.GIT_FAILED
@@ -388,7 +489,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"check_staged: refused {finding.path}: {finding.reason}", file=sys.stderr
         )
     if findings:
-        print(f"check_staged: {FIX_HINT}", file=sys.stderr)
+        hint = MERGE_FIX_HINT if merge_commits else FIX_HINT
+        print(f"check_staged: {hint}", file=sys.stderr)
         return ExitCode.BLOCKED
     return ExitCode.OK
 

@@ -165,31 +165,34 @@ def _load_pre_commit_config() -> dict[str, object]:
     return config
 
 
-def _check_staged_hook(config: dict[str, object]) -> dict[str, object]:
+def _all_hooks(config: dict[str, object]) -> list[dict[str, object]]:
     repos = config["repos"]
     assert isinstance(repos, list)
-    hooks = [
-        hook for repo in repos if repo["repo"] == "local" for hook in repo["hooks"]
-    ]
-    (hook,) = [hook for hook in hooks if hook["id"] == HOOK_ID]
-    assert isinstance(hook, dict)
+    return [hook for repo in repos for hook in repo["hooks"]]
+
+
+def _check_staged_hook(config: dict[str, object]) -> dict[str, object]:
+    (hook,) = [hook for hook in _all_hooks(config) if hook["id"] == HOOK_ID]
     return hook
 
 
 def _install_pre_commit(repo: GitRepo) -> None:
     """Install the real check-staged hook definition into `repo` via pre-commit.
 
-    Only the entry changes: the template's `uv run --locked` needs this
-    project's lock file, so the script runs under the test's interpreter.
+    Only how it is launched changes: `language: python` would build a
+    virtualenv per test (and download its build backend), so the script runs
+    under the test's own interpreter instead.
+    `test_pre_commit_config_runs_the_gate_on_every_commit_kind` pins the real
+    language and entry.
     """
     config = _load_pre_commit_config()
     hook = {
         **_check_staged_hook(config),
+        "language": "system",
         "entry": f"{shlex.quote(sys.executable)} {shlex.quote(str(SCRIPT))}",
     }
     test_config = {
         "default_install_hook_types": config["default_install_hook_types"],
-        "default_stages": config["default_stages"],
         "repos": [{"repo": "local", "hooks": [hook]}],
     }
     # JSON is valid YAML, so no YAML writer is needed.
@@ -226,6 +229,11 @@ def _install_pre_commit(repo: GitRepo) -> None:
         pytest.param("keys/id_rsa.pub", "SSH_KEY", id="id-rsa-pub"),
         pytest.param(
             ".claude/settings.local.json", "PERSONAL_SETTINGS", id="claude-local"
+        ),
+        pytest.param(
+            "apps/web/.claude/settings.local.json",
+            "PERSONAL_SETTINGS",
+            id="nested-claude-local",
         ),
         pytest.param(".codex/rules/local.rules", "PERSONAL_SETTINGS", id="codex-local"),
     ],
@@ -275,6 +283,11 @@ def test_secret_kind_credential_shape_is_named(label: str, sample: str) -> None:
             id="bare-prefixes",
         ),
         pytest.param(b"-----BEGIN PUBLIC KEY-----\n", id="public-key"),
+        pytest.param(
+            b"weigh the risk-or-reward-tradeoff-analysis\n", id="risk-or-prose"
+        ),
+        pytest.param(b"xoxo-gossip-girl-season-finale\n", id="xoxo-prose"),
+        pytest.param(b"see desk-proj-overview-for-the-quarter\n", id="desk-proj-prose"),
         pytest.param(SCRIPT.read_bytes(), id="the-gate-itself"),
     ],
 )
@@ -437,7 +450,7 @@ def test_check_outside_a_repository_fails_closed(tmp_path: Path) -> None:
     )
 
     assert result.returncode == GIT_FAILED
-    assert result.stderr.startswith("check_staged: `git diff --cached")
+    assert result.stderr.startswith("check_staged: `git ")
 
 
 def test_check_reads_all_blobs_with_one_cat_file_batch(
@@ -479,7 +492,6 @@ def test_check_reads_all_blobs_with_one_cat_file_batch(
 def test_pre_commit_config_runs_the_gate_on_every_commit_kind() -> None:
     config = _load_pre_commit_config()
     hook = _check_staged_hook(config)
-
     hook_types, stages = config["default_install_hook_types"], hook["stages"]
 
     assert isinstance(hook_types, list)
@@ -488,6 +500,30 @@ def test_pre_commit_config_runs_the_gate_on_every_commit_kind() -> None:
     assert {"pre-commit", "pre-merge-commit"} <= set(stages)
     assert (hook["always_run"], hook["pass_filenames"]) == (True, False)
     assert not {"files", "exclude", "types", "types_or"} & hook.keys()
+
+
+def test_pre_commit_config_runs_the_gate_without_uv() -> None:
+    hook = _check_staged_hook(_load_pre_commit_config())
+
+    assert (hook["language"], hook["entry"]) == (
+        "python",
+        "python scripts/check_staged.py",
+    )
+    assert "additional_dependencies" not in hook
+
+
+def test_pre_commit_config_only_the_gate_runs_at_pre_merge_commit() -> None:
+    # A hook's manifest may declare stages of its own (typos lists
+    # pre-merge-commit), which `default_stages` would not override, so every
+    # other hook must name its stages explicitly.
+    others = [
+        hook for hook in _all_hooks(_load_pre_commit_config()) if hook["id"] != HOOK_ID
+    ]
+
+    assert others
+    assert {str(hook["id"]): hook.get("stages") for hook in others} == {
+        str(hook["id"]): ["pre-commit"] for hook in others
+    }
 
 
 @pytest.fixture
@@ -534,18 +570,73 @@ def test_commit_with_pathspec_judges_the_temporary_index(hooked_repo: GitRepo) -
     assert hooked_repo.head() == before
 
 
-def test_clean_merge_bringing_a_secret_is_refused(hooked_repo: GitRepo) -> None:
-    hooked_repo.git("switch", "--quiet", "-c", "side")
-    hooked_repo.write("config.txt", f"{_aws_key()}\n")
-    hooked_repo.git("add", "config.txt")
-    hooked_repo.git("commit", "--quiet", "--no-verify", "-m", "side brings a key")
-    hooked_repo.git("switch", "--quiet", "main")
+def _commit_on_side_branch(repo: GitRepo, relative: str, content: str) -> None:
+    """Commit `content` on a new `side` branch, past the hook, then return to main."""
+    repo.git("switch", "--quiet", "-c", "side")
+    repo.write(relative, content)
+    repo.git("add", "--", relative)
+    repo.git("commit", "--quiet", "--no-verify", "-m", "side")
+    repo.git("switch", "--quiet", "main")
+
+
+@pytest.mark.parametrize(
+    ("relative", "content"),
+    [
+        pytest.param("config.txt", f"{_aws_key()}\n", id="secret-content"),
+        pytest.param(".env", "TOKEN=1\n", id="secret-path"),
+    ],
+)
+def test_clean_merge_of_content_already_in_the_other_history_passes(
+    hooked_repo: GitRepo,
+    relative: str,
+    content: str,
+) -> None:
+    _commit_on_side_branch(hooked_repo, relative, content)
+    before = hooked_repo.head()
+
+    hooked_repo.git("merge", "--quiet", "--no-ff", "--no-edit", "side")
+
+    assert hooked_repo.head() != before
+    assert (
+        hooked_repo.git("rev-parse", "HEAD^2").stdout
+        == hooked_repo.git("rev-parse", "side").stdout
+    )
+
+
+def test_clean_merge_producing_new_secret_content_is_refused(
+    hooked_repo: GitRepo,
+) -> None:
+    # Both sides edit shared.txt in different places, so the merged blob is
+    # new to both histories and is judged at pre-merge-commit.
+    hooked_repo.write("shared.txt", "top\nmiddle\nbottom\n")
+    hooked_repo.commit_all("three lines")
+    _commit_on_side_branch(hooked_repo, "shared.txt", f"{_aws_key()}\nmiddle\nbottom\n")
+    hooked_repo.write("shared.txt", "top\nmiddle\nmain\n")
+    hooked_repo.commit_all("main edits the bottom")
     before = hooked_repo.head()
 
     result = hooked_repo.git("merge", "--no-ff", "--no-edit", "side", check=False)
 
     assert result.returncode != 0
-    assert "refused config.txt" in result.stdout + result.stderr
+    assert "refused shared.txt" in result.stdout + result.stderr
+    assert hooked_repo.head() == before
+
+
+def test_merge_adding_new_secret_content_is_refused_with_merge_hint(
+    hooked_repo: GitRepo,
+) -> None:
+    _commit_on_side_branch(hooked_repo, "side.txt", "harmless\n")
+    hooked_repo.git("merge", "--quiet", "--no-ff", "--no-commit", "side")
+    hooked_repo.stage("added-during-merge.txt", f"{_aws_key()}\n")
+    before = hooked_repo.head()
+
+    result = hooked_repo.git("commit", "--no-edit", check=False)
+
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "refused added-during-merge.txt" in output
+    assert "refused side.txt" not in output
+    assert "A merge is in progress" in output
     assert hooked_repo.head() == before
 
 
@@ -569,9 +660,30 @@ def test_conflicted_merge_resolution_with_secret_is_refused(
 
     result = hooked_repo.git("commit", "--no-edit", check=False)
 
+    output = result.stdout + result.stderr
     assert result.returncode != 0
-    assert "refused shared.txt" in result.stdout + result.stderr
+    assert "refused shared.txt" in output
+    assert "A merge is in progress" in output
     assert hooked_repo.head() == before
+
+
+def test_conflicted_merge_keeps_content_already_in_the_other_history(
+    hooked_repo: GitRepo,
+) -> None:
+    _commit_on_side_branch(hooked_repo, "config.txt", f"{_aws_key()}\n")
+    hooked_repo.git("switch", "--quiet", "side")
+    hooked_repo.write("shared.txt", "side\n")
+    hooked_repo.git("commit", "--quiet", "--no-verify", "-am", "side edit")
+    hooked_repo.git("switch", "--quiet", "main")
+    hooked_repo.write("shared.txt", "main\n")
+    hooked_repo.git("commit", "--quiet", "-am", "main edit")
+    assert hooked_repo.git("merge", "side", check=False).returncode != 0
+    hooked_repo.stage("shared.txt", "resolved\n")
+    before = hooked_repo.head()
+
+    hooked_repo.git("commit", "--quiet", "--no-edit")
+
+    assert hooked_repo.head() != before
 
 
 def test_commit_at_a_rebase_stop_with_secret_is_refused(hooked_repo: GitRepo) -> None:
