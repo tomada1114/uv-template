@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Security scanning workflows: CodeQL (`python`, `actions`), OSV-Scanner
+  on `uv.lock`, Dependency Review with a license allow-list, and a weekly
+  full-history gitleaks audit with a checksum-verified binary
 - A safer bootstrap flow with validated package/repository names, collision
   checks, syntax-safe metadata quoting, and protection against rewriting
   untracked, symlinked, or secret files after a Git failure
