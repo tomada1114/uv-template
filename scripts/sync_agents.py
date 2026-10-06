@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import stat
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -86,6 +87,10 @@ def list_files(directory: Path, label: str) -> list[str]:
     return files
 
 
+def _is_executable(path: Path) -> bool:
+    return bool(path.stat().st_mode & stat.S_IXUSR)
+
+
 def diff_trees(source: Path, mirror: Path) -> list[TreeDifference]:
     """Report every way in which ``mirror`` disagrees with ``source``."""
     source_files = list_files(source, SOURCE_DIRECTORY)
@@ -94,7 +99,10 @@ def diff_trees(source: Path, mirror: Path) -> list[TreeDifference]:
     for relative in source_files:
         if relative not in mirror_files:
             differences.append(TreeDifference("missing", relative))
-        elif (source / relative).read_bytes() != (mirror / relative).read_bytes():
+        elif (source / relative).read_bytes() != (mirror / relative).read_bytes() or (
+            # A skill script invoked from the mirror must stay runnable there.
+            _is_executable(source / relative) != _is_executable(mirror / relative)
+        ):
             differences.append(TreeDifference("differs", relative))
         mirror_files.discard(relative)
     differences.extend(
@@ -113,6 +121,7 @@ def sync_trees(source: Path, mirror: Path) -> list[TreeDifference]:
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source / difference.relative, target)
+        shutil.copymode(source / difference.relative, target)
     if mirror.exists():
         # Deepest first, so a parent emptied by its children's removal goes too.
         for directory in sorted(

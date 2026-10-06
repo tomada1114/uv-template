@@ -76,6 +76,19 @@ def test_sync_trees_makes_mirror_identical_and_prunes_empty_dirs(
     assert not (mirror / "gone").exists()
 
 
+def test_sync_trees_carries_the_executable_bit(tmp_path: Path) -> None:
+    source, mirror = tmp_path / "source", tmp_path / "mirror"
+    _write(source / "a" / "scripts" / "run.sh", "#!/bin/sh\n")
+    (source / "a" / "scripts" / "run.sh").chmod(0o755)
+    _write(mirror / "a" / "scripts" / "run.sh", "#!/bin/sh\n")
+
+    changed = sync_agents.sync_trees(source, mirror)
+
+    assert [(d.kind, d.relative) for d in changed] == [("differs", "a/scripts/run.sh")]
+    assert (mirror / "a" / "scripts" / "run.sh").stat().st_mode & 0o111
+    assert sync_agents.diff_trees(source, mirror) == []
+
+
 def test_list_files_missing_directory_is_empty(tmp_path: Path) -> None:
     assert sync_agents.list_files(tmp_path / "absent", "absent") == []
 

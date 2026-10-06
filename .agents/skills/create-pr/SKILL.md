@@ -56,7 +56,7 @@ will not match the verified state.
 just verify
 ```
 
-`just verify` runs `lint -> docs-check -> smoke -> test` without mutating the
+`just verify` runs its recipe chain (see the `justfile`) without mutating the
 tree, so it proves the *committed* tree is green.
 **If any step fails, abort PR creation** and report the failure.
 
