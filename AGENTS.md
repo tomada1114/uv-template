@@ -6,7 +6,17 @@ This is a Python application built with [uv](https://docs.astral.sh/uv/) and
 [hatchling](https://hatch.pypa.io/). It uses a strict `src/` layout with
 comprehensive type checking and linting.
 
+It ships a framework-free core with two entry points over it: a FastAPI HTTP
+API and a Typer CLI (`my-app`). The sample domain is a to-do list — replace it
+with your own, and delete whichever entry point you do not need.
+
 ## Quick Reference
+
+The recipes are grouped by who runs them: finite checks an agent runs to
+verify its own work, a server that never ends on its own, and the recipes that
+write to GitHub.
+
+### Checks and tasks an agent runs
 
 ```bash
 just install         # Install dependencies and git hooks when .git/ is present
@@ -19,12 +29,30 @@ just check           # Mutating dev check: fmt → lint → test
 just lock            # Update uv.lock after dependency changes
 just verify          # Non-mutating gate: lock-check → agents-check → lint → test-skills → test
 just test-skills     # Run the unittest suites bundled under .agents/skills/*/scripts/tests
+just run *ARGS       # Run the CLI, e.g. `just run todo list` (uv run --locked my-app ...)
 just worktree-clean  # Remove agent worktrees under .claude/worktrees with a merged PR
 just agents-sync     # Regenerate the .claude/skills mirror from .agents/skills
 just agents-check    # Fail when the skills mirror has drifted
-just labels          # Create/update GitHub labels from .github/labels.yml (writes to GitHub; ask first)
-just ruleset         # Apply .github/rulesets/main.json to GitHub (admin-only human step; writes to GitHub)
 just clean           # Remove build artifacts and caches
+```
+
+### Long-running — human-run
+
+```bash
+just dev             # Serve the API on http://127.0.0.1:8000 with auto-reload; runs until stopped
+```
+
+`just dev` is the developer's server: never start, stop, or restart it, and
+never bind its port. To see something only a running server shows, prefer a
+`TestClient` test; failing that, start `uv run --locked my-app serve --port
+<free port>`, verify against it, and stop it before your turn ends. Never
+leave a server you started running.
+
+### Writes to GitHub
+
+```bash
+just labels          # Create/update GitHub labels from .github/labels.yml (ask first)
+just ruleset         # Apply .github/rulesets/main.json to GitHub (admin-only human step; never an agent)
 ```
 
 Without Just: replace `just <cmd>` with the corresponding `uv run` commands
@@ -43,7 +71,9 @@ being run at all.
 
 | What you changed | The narrowest check that can fail |
 |---|---|
-| A module under `src/` | `uv run --locked pytest tests/test_<module>.py` |
+| A module under `src/my_app/<layer>/` | `uv run --locked pytest tests/<layer>/` |
+| `settings.py` or `composition.py` | `uv run --locked pytest tests/test_settings.py tests/test_composition.py` |
+| A repository adapter | `uv run --locked pytest tests/adapters/test_repository_contract.py` |
 | One test | `uv run --locked pytest tests/test_<module>.py::test_<name>` |
 | Any Python file's lint or types | `uv run --locked ruff check <file>`, then `uv run --locked mypy src scripts tests` |
 | A script under `scripts/` | `uv run --locked pytest tests/test_<script>.py` |
@@ -55,11 +85,47 @@ being run at all.
 ## Architecture
 
 ```
-src/my_package/
-├── __init__.py   # Package root — keep it thin
-└── core.py       # Placeholder module — replace and re-export via __init__.py
+src/my_app/
+├── core/            # Framework-free: domain model, ports (Protocols), services, errors
+├── adapters/        # Port implementations: in-memory and SQLite (stdlib sqlite3) repositories
+├── api/             # FastAPI: create_app(settings) factory, routers, Pydantic schemas
+├── cli/             # Typer: `my-app todo add|list|complete|delete`; serve.py holds `my-app serve`
+├── settings.py      # pydantic-settings, read from MY_APP_* environment variables
+└── composition.py   # Composition root: wires adapters into services for both entry points
 ```
 
+- Dependencies point inward: `api/` and `cli/` call `core/` services and get
+  them only from `composition.build_container`; `adapters/` implement
+  `core/ports.py`; `core/` imports nothing outside the stdlib and itself.
+  Ruff's `TID251` (banned-api in `pyproject.toml`) and
+  `tests/core/test_imports.py` fail the build when `core/` imports fastapi,
+  typer, uvicorn, sqlite3, or httpx.
+- Domain errors derive from `core.errors.AppError`; each entry point maps
+  them in one place. The API's one `AppError` handler in `api/app.py` answers
+  404 (not found), 422 (invalid input), or 400 (any other `AppError`) with an
+  `ErrorResponse` body. The CLI's `cli/errors.py` owns every exit code:
+  0 success, 1 domain error, 2 usage error (Typer's own), 3 invalid
+  `MY_APP_*` setting — each failure is one line on stderr, no traceback.
+- The CLI never imports the API at import time: `cli/serve.py` is the only
+  bridge, and it imports FastAPI and uvicorn inside the command.
+- Removing an entry point is a deletion, never a core change:
+  - Without the API: delete `src/my_app/api/`, `src/my_app/cli/serve.py` and
+    its `app.command()(serve)` line in `cli/main.py`, `tests/api/`,
+    `tests/cli/test_serve.py`, the `fastapi` and `uvicorn` runtime
+    dependencies and the `httpx` dev dependency (then `uv lock`), the
+    `just dev` recipe, and the `fastapi.*` entries and the `api/**`
+    per-file-ignore in `pyproject.toml`'s ruff config.
+  - Without the CLI: delete `src/my_app/cli/`, `tests/cli/`,
+    `[project.scripts]`, the `typer` runtime dependency (then `uv lock`), the
+    `just run` recipe, and the `typer.*` entries and the `cli/**`
+    per-file-ignore in the ruff config. Keep `uvicorn`: `just dev` serves the
+    API with it.
+- A new repository implements `core.ports.TodoRepository` and joins the one
+  contract suite in `tests/adapters/test_repository_contract.py`.
+- Pydantic stays at the boundaries (`api/schemas.py`, `settings.py`); the core
+  uses frozen dataclasses.
+- Tests mirror the layers: `tests/core/`, `tests/adapters/`, `tests/api/`,
+  `tests/cli/`, plus `tests/test_settings.py` and `tests/test_composition.py`.
 - Internal modules can use a leading underscore (`_internal.py`)
 - Separate concerns: one module per logical unit
 - Update README.md when a command, setting, or behavior it documents changes
@@ -69,6 +135,9 @@ src/my_package/
 | Concern | Canonical source |
 |---|---|
 | Tooling and quality commands | `justfile`, `pyproject.toml`, CI workflows |
+| Layer boundaries | `[tool.ruff.lint.flake8-tidy-imports.banned-api]` and its per-file-ignores in `pyproject.toml` |
+| HTTP routes and CLI commands | `src/my_app/api/routers/`, `src/my_app/cli/` |
+| Configuration keys | `src/my_app/settings.py` (`Settings`, prefix `MY_APP_`) |
 | Current execution status | Git, fresh test output, and CI — never prose or test counts in a prompt |
 
 ## Skills
@@ -232,7 +301,7 @@ repositories, so a private repository must replace the reporting route in
 
 ## Conventions: tests/**/*.py
 
-- Mirror the source layout with `tests/test_<module>.py`; use descriptive names such as `test_<what>_<scenario>_<expected_result>`.
+- Mirror the source layout: `tests/<layer>/test_<module>.py` for `src/my_app/<layer>/<module>.py`, `tests/test_<module>.py` for a top-level module; use descriptive names such as `test_<what>_<scenario>_<expected_result>`.
 - Test behavior through the public API, using Arrange-Act-Assert and covering both happy and error paths for each public function.
 - Verify exception messages with `pytest.raises(..., match=r"...")`; also test cleanup and recovery after failures.
 - Consider empty, boundary, type, collection, concurrent, and state-transition cases; use parametrization with readable ids for related inputs.
@@ -296,6 +365,7 @@ even if no dependency changed, so the cutoff does not drift too far behind:
 - Treat 300-line modules and 40-line functions as review triggers, not absolute correctness rules; split only when doing so improves a real responsibility boundary. One logical concern per module.
 - Prefer 3 or fewer parameters (group related params with dataclass or TypedDict)
 - Google-style docstrings (Args/Returns/Raises) on all public functions; document *why*, not what the type signature already says; don't document obvious code
+- Exception: a Typer command's or a FastAPI route's docstring stays one plain-text line, because it is published as `--help` or OpenAPI text; put the reasoning in a comment or the module docstring
 
 ### Error Handling
 
@@ -303,6 +373,7 @@ even if no dependency changed, so the cutoff does not drift too far behind:
 - Catch the most specific exception possible
 - Use `logging.exception()` in catch blocks (auto-includes traceback), never `logger.error(str(e))`
 - Never swallow exceptions silently; if catching, handle meaningfully or re-raise
+- Expected domain errors (`AppError`) are mapped at the entry-point boundary — an HTTP status, or an exit code plus one line on stderr — and not logged with `logging.exception()`; unexpected errors keep their traceback
 - Never use exceptions for control flow
 - Return `None` or a sentinel only when the caller expects it; prefer raising for true errors
 

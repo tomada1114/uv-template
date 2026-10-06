@@ -22,8 +22,8 @@ body:
       label: Steps to Reproduce
       description: Minimal code or steps to reproduce the behavior.
       placeholder: |
-        ```python
-        from my_package import ...
+        ```bash
+        uv run --locked my-app todo ...
         ```
     validations:
       required: true
@@ -48,7 +48,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: Output of `python -c "import my_package; print(my_package.__version__)"`.
+      description: Output of `uv run --locked python -c "import my_app; print(my_app.__version__)"`.
       placeholder: "0.1.0"
     validations:
       required: true

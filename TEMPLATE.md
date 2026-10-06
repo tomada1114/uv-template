@@ -16,8 +16,8 @@ it from the spawned repo, so nothing here ships with your application.
      --description "One line about what this application does."
    ```
 
-   This renames `src/my_package` to `src/my_cool_lib` and replaces
-   `my-package`, `my_package`, `uv-template`, `your-username`, `Your Name`,
+   This renames `src/my_app` to `src/my_cool_lib` and replaces
+   `my-app`, `my_app`, `uv-template`, `your-username`, `Your Name`,
    and `you@example.com` across all eligible tracked files. The distribution name and
    GitHub repository name may differ; omit `--github-repository` when they are
    the same. Metadata values are validated before any files are changed, and
@@ -41,14 +41,16 @@ it from the spawned repo, so nothing here ships with your application.
 4. Update `README.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `LICENSE`, and
    `AGENTS.md`; update `CLAUDE.md` only when the new project has
    Claude-specific settings or workflow notes
-5. Replace the placeholder implementation and keep the README usage examples
-   in sync with it
+5. Replace the sample to-do domain under `src/my_app/` with your own, drop
+   the entry point you do not need (README's Architecture section lists
+   exactly which files, dependencies, and recipes go with each), and keep the
+   README usage examples in sync with it
 
 To find any placeholders the script left untouched (e.g. because an
 optional argument was omitted):
 
 ```bash
-rg -n "your-username|my-package|my_package|uv-template|Your Name|you@example" .
+rg -n "your-username|my-app|my_app|MY_APP_|uv-template|Your Name|you@example" .
 ```
 
 ### Working in the new repository
@@ -87,11 +89,22 @@ from day one mean every line of code is held to the same standard — there is
 never a "legacy" codebase to clean up. LLMs generating code also benefit from
 strict rules: they produce higher-quality output when constraints are clear.
 
-### Why zero runtime dependencies?
+### Why a framework-free core with FastAPI and Typer over it?
 
-The template should not impose opinions about logging, HTTP clients, or data
-validation. You add what your application needs. Starting from zero keeps the
-dependency tree small and every dependency a deliberate choice.
+Most Python applications end up with an HTTP API, a command line, or both, and
+the expensive mistake is letting either framework leak into the business
+rules. The template therefore ships the shape rather than an empty package: a
+`core` that imports only the stdlib (ports are `typing.Protocol`s, values are
+frozen dataclasses), adapters that implement its ports, and two thin entry
+points that get their services from one composition root. Ruff's banned-api
+rule and a test keep the core clean, and the CLI reaches the API only through
+`cli/serve.py`, so dropping the entry point you do not need is a list of
+deletions (README's Architecture section), not a refactor.
+
+The runtime dependencies are exactly what those entry points need — FastAPI,
+uvicorn, Typer, and pydantic-settings — and the SQLite adapter uses the
+stdlib `sqlite3` driver rather than an ORM. Anything else is yours to add
+deliberately.
 
 ### Why Just over Make?
 

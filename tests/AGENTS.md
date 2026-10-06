@@ -2,7 +2,7 @@
 
 ## Structure and Organization
 
-- File structure mirrors source: `tests/test_<module>.py`
+- File structure mirrors source: `tests/<layer>/test_<module>.py` for `src/my_app/<layer>/` (`core`, `adapters`, `api`, `cli`), `tests/test_<module>.py` for top-level modules (`settings`, `composition`)
 - Shared fixtures go in `tests/conftest.py`; use the narrowest fixture scope possible
 - Function names: `test_<what>_<scenario>_<expected_result>` (e.g. `test_parse_config_empty_string_raises_value_error`)
 - Follow Arrange-Act-Assert; one logical behavior per test (several `assert` statements are fine if they verify that one behavior)
@@ -10,7 +10,9 @@
 ## What to Test
 
 - Test *behavior and contracts*, not implementation details
-- Test through the public API (`from my_package import ...`), never internal modules or private helpers directly
+- Test through each layer's public modules (`from my_app.core.services import TodoService`), never private helpers directly
+- Drive the API with the `client` fixture (`tests/api/conftest.py`: `TestClient(create_app(container=...))`) and the CLI with `typer.testing.CliRunner` passing `obj=` a container; build both containers through the composition root (the `make_container` fixture, fixed clock), never by hand-wiring adapters in an entry-point test
+- Every repository adapter runs the one contract suite in `tests/adapters/test_repository_contract.py`; add a `pytest.param` there rather than a separate suite
 - Always test the happy path AND the error path for every public function
 
 ## Edge Cases (always consider these)
@@ -45,7 +47,7 @@
 ## Mocking Strategy
 
 - Mock at boundaries only: I/O, network, clock, external services — never the unit under test
-- Prefer fakes (in-memory implementations) over mocks for repositories and stores
+- Prefer fakes (in-memory implementations) over mocks for repositories and stores: `InMemoryTodoRepository` is the core's fake, and the `fixed_clock` fixture fixes time
 - Assert on behavior and outputs, not on how many times a mock was called — except when the call itself is the contract (retry/rate-limit behavior, a skipped step, proving no network call happened)
 - Needing more than two mocks in one test usually means the code under test has too many dependencies
 

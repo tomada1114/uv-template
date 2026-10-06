@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- An application skeleton in `src/my_app/` (distribution and console script
+  `my-app`): a framework-free `core` (frozen-dataclass domain model,
+  `typing.Protocol` ports, services, an `AppError` base with
+  `TodoNotFoundError`/`InvalidTodoError`), in-memory and stdlib-`sqlite3`
+  `adapters` sharing one contract suite, a FastAPI `api` (`create_app`,
+  `GET /healthz`, to-do routes), a Typer `cli` (`my-app todo
+  add|list|complete|delete`, `my-app serve`), `MY_APP_*` settings via
+  pydantic-settings, and one composition root for both entry points. Ruff's
+  `TID251` banned-api rule and a test keep fastapi, typer, uvicorn, sqlite3,
+  and httpx out of the core. The API answers domain errors with an
+  `ErrorResponse` body (404 / 422, 400 for any other `AppError`); the CLI
+  exits 1 for a domain error, 2 for a usage error, and 3 for an invalid
+  `MY_APP_*` setting, with one line on stderr. `my-app todo` never imports
+  FastAPI or uvicorn. Runtime dependencies: fastapi, uvicorn, typer,
+  pydantic-settings; dev: httpx
+- `just dev` (human-run API server with auto-reload) and `just run *ARGS`
+  (the CLI through `uv run --locked my-app`)
 - The main branch ruleset as code (`.github/rulesets/main.json`) and
   `just ruleset` (`scripts/apply_ruleset.py`), an admin-run upsert that never
   deletes
@@ -68,6 +85,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking:** the package placeholder is now `my-app`/`my_app`, and
+  `scripts/bootstrap.py` renames those instead of `my-package`/`my_package`
 - `scripts/bootstrap.py` accepts a GitHub repository name independent of the
   distribution name and replaces placeholders without cascading into new
   values
@@ -143,6 +162,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- The library placeholder `src/my_package` (`add()`) and its tests, replaced
+  by the application skeleton
 - The agent hooks under `.agents/hooks/` (`guard.py`, `format.py`,
   `stop_check.py`, `hook_payload.py`) and their wiring in
   `.claude/settings.json` and `.codex/hooks.json`; the guard rails now run as
