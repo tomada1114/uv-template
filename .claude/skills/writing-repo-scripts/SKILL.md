@@ -73,8 +73,8 @@ Next: fix <repo>/.github/rulesets/main.json and rerun `just ruleset`
   `ERR_LABELS_SYNC`, `ERR_RULESET_GH`. A refusal with its own remedy gets its own code
   rather than a shared one: `ERR_RULESET_PLAN_UNSUPPORTED` apart from `ERR_RULESET_GH`.
 - Reports go to stderr; stdout is for the result a caller may parse.
-- A code is a contract: a test asserts it (`"ERR_AGENTS_DRIFT" in
-  capsys.readouterr().err`), so renaming one is a change a caller notices.
+- A code is a contract: a test asserts it on `capsys.readouterr().err`
+  (`tests/test_sync_agents.py`), so renaming one is a change a caller notices.
 
 ## Subprocesses
 

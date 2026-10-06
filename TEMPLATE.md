@@ -6,52 +6,12 @@ it from the spawned repo, so nothing here ships with your application.
 
 ## Using This Template
 
-1. Click **"Use this template"** on GitHub (or clone and remove `.git`)
-2. Run `scripts/bootstrap.py` to rename the package and replace placeholders:
-
-   ```bash
-   uv run --locked python scripts/bootstrap.py my-cool-lib \
-     --author "Jane Doe" --email jane@example.com --github-user janedoe \
-     --github-repository my-cool-lib-repo \
-     --description "One line about what this application does."
-   ```
-
-   This renames `src/my_app` to `src/my_cool_lib` and replaces
-   `my-app`, `my_app`, `uv-template`, `your-username`, `Your Name`,
-   and `you@example.com` across all eligible tracked files. The distribution name and
-   GitHub repository name may differ; omit `--github-repository` when they are
-   the same. Metadata values are validated before any files are changed, and
-   quoted author and description values are escaped for TOML. The
-   script also writes the current year into `LICENSE`, moves `[tool.uv]
-   exclude-newer` to two weeks before today, resets `CHANGELOG.md` to an empty
-   skeleton, and runs `uv lock` (a lock file still naming the template would
-   fail the first CI run — if the lock step warns, run `uv lock` yourself
-   before committing).
-
-   `--github-user` is required: it is baked into the project URLs, and
-   leaving it out ships a dead security-report link in
-   `.github/ISSUE_TEMPLATE/config.yml`. `--author`, `--email`, and
-   `--description` are optional; any omitted placeholder is left as-is.
-
-   Finally the script deletes its own scaffolding — this file,
-   `scripts/bootstrap.py`, and `tests/test_bootstrap.py`. Pass
-   `--keep-bootstrap` to keep them.
-3. Update `pyproject.toml` metadata (keywords, URLs) beyond what the
-   script covers
-4. Update `README.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `LICENSE`, and
-   `AGENTS.md`; update `CLAUDE.md` only when the new project has
-   Claude-specific settings or workflow notes
-5. Replace the sample to-do domain under `src/my_app/` with your own, drop
-   the entry point you do not need (README's Architecture section lists
-   exactly which files, dependencies, and recipes go with each), and keep the
-   README usage examples in sync with it
-
-To find any placeholders the script left untouched (e.g. because an
-optional argument was omitted):
-
-```bash
-rg -n "your-username|my-app|my_app|MY_APP_|uv-template|Your Name|you@example" .
-```
+The steps live in one place: the `starting-an-app` skill
+(`.agents/skills/starting-an-app/SKILL.md`, mirrored to `.claude/skills/`). It gives
+the order of work from "Use this template" to the first feature — the bootstrap, the
+Product section, labels, the GitHub settings, the ruleset, removing the sample — and
+marks which steps are a human's. Its `references/bootstrap.md` documents
+`scripts/bootstrap.py`: the flags, what it refuses, and what it rewrites and removes.
 
 ### Working in the new repository
 

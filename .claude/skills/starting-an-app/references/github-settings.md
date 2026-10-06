@@ -1,8 +1,7 @@
 # GitHub settings a new repository must enable
 
-Read when a repository is created from this template, when a required check or a
-security workflow changes, or when the repository becomes private. Every step here is a
-human step on GitHub: an agent proposes it and never runs it.
+The list behind `starting-an-app`'s security-settings and ruleset steps. Every setting
+here is a human step on GitHub: an agent lists it for the owner and never changes it.
 
 ## Main branch ruleset
 
@@ -12,8 +11,8 @@ pull request for every change (0 approvals), and the required status checks.
 ruleset. Writing rulesets needs repository admin rights, so **`just ruleset` is a human
 (admin) step** — an agent never runs it. Rerun it after editing `main.json`.
 
-What makes a job fit to be a required check is in the skill's "CI workflows and required
-checks".
+What makes a job fit to be a required check, and what a CI change owes `main.json`, is
+`changing-gates`' "CI workflows and required checks".
 
 ## Security settings
 
@@ -29,17 +28,8 @@ the job. These are separate repository settings to turn on:
 Do not enable CodeQL "default setup": it rejects uploads from the advanced `codeql.yml`,
 which fails the required "Analyze" checks.
 
-## A private repository
-
 On a private repository, CodeQL and Dependency Review need GitHub Code Security, and
-secret scanning needs GitHub Secret Protection. Without them, delete `codeql.yml` and
-`dependency-review.yml` rather than guarding them with an `if:` on visibility — but
-first remove "Analyze (python)", "Analyze (actions)", and "Dependency Review" from
-`.github/rulesets/main.json` (and from the context list in
-`tests/test_apply_ruleset.py`) and have the owner re-run `just ruleset`, or every pull
-request waits forever on them. `osv-scanner.yml`, `security-audit.yml`, and `ci.yml`'s
-zizmor job run anywhere.
-
-Private vulnerability reporting works only on public repositories, so a private
-repository must replace the reporting route in `SECURITY.md` and the security contact
-link in `.github/ISSUE_TEMPLATE/config.yml` with another contact.
+secret scanning needs GitHub Secret Protection; `osv-scanner.yml`, `security-audit.yml`,
+and `ci.yml`'s zizmor job run anywhere. Private vulnerability reporting works only on
+public repositories. What a private repository does about both, in order, is
+[private-repository.md](private-repository.md).

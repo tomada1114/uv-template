@@ -2,11 +2,11 @@
 name: steering-the-roadmap
 description: >
   Covers docs/architecture/roadmap.md, the project's Now / Next / Later direction
-  between AGENTS.md's Overview and the issue backlog. Use when asked what to work on
+  between AGENTS.md's Product section and the issue backlog. Use when asked what to work on
   next or for the project's plan or status, before choosing an issue for
   shipping-issues, when every issue behind a Now outcome has closed, when the owner
   reorders, adds, defers, or drops an outcome, when reviewing parked `on hold` issues or
-  requests from daily use for a pattern, when an Overview or ADR change moves the
+  requests from daily use for a pattern, when a Product or ADR change moves the
   direction, or when filling in the roadmap skeleton after the bootstrap rename.
 ---
 
@@ -14,15 +14,15 @@ description: >
 
 **Owns:** `docs/architecture/roadmap.md` — what it holds (the Now, Next, and Later
 horizons), who changes it and when, and how the open backlog and the parked `on hold`
-issues feed it. **Does not own:** what the project is and its non-goals (`AGENTS.md`'s
-"Overview"); a label's meaning, a priority tier, filing, parking, or promoting an issue
+issues feed it. **Does not own:** what the project is, for whom, and its non-goals
+(`AGENTS.md`'s "Product"); a label's meaning, a priority tier, filing, parking, or promoting an issue
 (`triaging-issues`, including its "Requests from daily use"); whether a change owes an
 ADR and how one is written (`recording-architecture-decisions`); implementing and
 merging an issue (`shipping-issues`).
 
 ## What the roadmap is for
 
-"Overview" says what the project is and is not, and it changes rarely. The backlog says
+"Product" says what the project is and is not, and it changes rarely. The backlog says
 what work exists, one issue at a time, and changes daily. Neither says which outcomes
 come first, so without a roadmap the order is whatever the last session remembered. The
 roadmap is that order, written down, and it is re-read every time rather than recalled.
@@ -35,8 +35,8 @@ a decision first says so, and the decision is made where it belongs.
 
 The template ships `roadmap.md` as a `TODO:` skeleton, and its own direction lives in
 its issues. In the template, leave the page a skeleton. In a project, fill it in right
-after "Overview" describes the project: the first Now outcome is usually the core thing
-that section says the project does. Nothing checks the page for leftover `TODO:`
+after "Product" describes the project: the first Now outcome is usually the core
+interaction that section names. Nothing checks the page for leftover `TODO:`
 markers, so one is noticed only by the next person who reads the page.
 
 ## Horizons, not milestones
@@ -59,13 +59,13 @@ everything a horizon needs — issues, tiers, and `on hold`.
 Write each entry as an outcome — what a user can do, or what is true of the project —
 not as a task. "Done when" names something observable: a command's output, a `just`
 recipe that passes, a behavior a user sees. An entry stays short and links issues by
-number; it never copies an issue body, an ADR, or an "Overview" line.
+number; it never copies an issue body, an ADR, or a "Product" line.
 
 ## Where each fact lives
 
 | Fact | Home |
 |---|---|
-| What the project is, and any non-goals | `AGENTS.md`'s "Overview" |
+| What the project is, for whom, and its non-goals | `AGENTS.md`'s "Product" |
 | Which outcomes come now, next, later | `docs/architecture/roadmap.md` |
 | A unit of work, its tier, its `blocked:` or `on hold` label | the issue tracker (`triaging-issues`) |
 | Why the architecture is the way it is | an ADR (`recording-architecture-decisions`) |
@@ -121,7 +121,7 @@ roadmap change the owner has not approved. Review the page when:
 - a Now outcome's issues have all closed, or Now has no ready issue left;
 - the owner asks what is next, or changes their mind about an outcome;
 - a parked issue is promoted or closed, or parked issues start to cluster;
-- "Overview" changes, or an ADR is accepted, rejected, or superseded — a line that
+- "Product" changes, or an ADR is accepted, rejected, or superseded — a line that
   depended on it moves with it.
 
 Update "Last reviewed" whenever the page is checked against the backlog, even if nothing
@@ -130,8 +130,8 @@ else moves.
 Never, without the owner saying so:
 
 - put an outcome in Now, reorder Now, or drop an outcome;
-- add a line that contradicts a non-goal "Overview" states — that is a change to
-  "Overview" first, and a human's call;
+- add a line that contradicts a non-goal "Product" states — that is a change to
+  "Product" first, and a human's call;
 - treat a line as the go-ahead for an architecture change: a line that hits a trigger in
   `recording-architecture-decisions` says "Before it moves up: an ADR", and that skill
   writes it.

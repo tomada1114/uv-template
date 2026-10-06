@@ -2,13 +2,11 @@
 
 ## Overview
 
-This is a Python application built with [uv](https://docs.astral.sh/uv/) and
-[hatchling](https://hatch.pypa.io/). It uses a strict `src/` layout with
-comprehensive type checking and linting.
-
-It ships a framework-free core with two entry points over it: a FastAPI HTTP
-API and a Typer CLI (`my-app`). The sample domain is a to-do list — replace it
-with your own, and delete whichever entry point you do not need.
+A Python application built with [uv](https://docs.astral.sh/uv/) and
+[hatchling](https://hatch.pypa.io/), in a strict `src/` layout with comprehensive
+type checking and linting. A framework-free core carries two entry points: a
+FastAPI HTTP API and a Typer CLI (`my-app`). The sample domain is a to-do list —
+replace it with your own, and delete whichever entry point you do not need.
 
 Every task here:
 
@@ -17,10 +15,33 @@ Every task here:
   outside the current scope instead of making it (`triaging-issues`).
 - Never create a file unless it is necessary; prefer editing an existing one.
 
+## Product
+
+<!-- template-only -->
+In the template every entry below stays a `TODO:` on purpose: each repository cut
+from it writes its own, and `tests/test_product_section.py` fails here if one is
+filled in.
+<!-- /template-only -->
+
+This section is about the application rather than the harness: without it, an
+agent implementing an issue has no in-repo answer to "is this in scope?". The owner
+decides every entry; an agent drafts one only from what the owner has said. Once the
+bootstrap has run (`.template-origin` exists), `tests/test_product_section.py` — and
+so `just verify` — fails while any entry below is still a placeholder.
+
+- **What it is, and who it is for** — TODO: one paragraph: the problem it solves,
+  and whose problem that is.
+- **The core interaction** — TODO: the one thing a user does most. If the app does
+  not do this well, nothing else about it matters.
+- **Non-goals** — TODO: what this app deliberately does not do, even where it would
+  be easy. Moving anything from here to a goal is a human's decision, not an
+  implementer's.
+- **Where these decisions are recorded** — TODO: `docs/product/requirements.md`,
+  and the ADRs under `docs/architecture/` for the choices made since.
+
 ## Quick Reference
 
-Grouped by who runs them. The `justfile` is the source of truth for what each
-recipe runs; this list is its index.
+Grouped by who runs them; the `justfile` is the source of truth, this its index.
 
 ### Checks and tasks an agent runs
 
@@ -48,10 +69,10 @@ just clean           # Remove build artifacts and caches
 just dev             # Serve the API on http://127.0.0.1:8000 with auto-reload; runs until stopped
 ```
 
-`just dev` is the developer's server: never start, stop, or restart it, and
-never bind its port. To see what only a running server shows, prefer a
-`TestClient` test; failing that, run `my-app serve` of your own on a free port
-and stop it before your turn ends (`running-the-app`).
+`just dev` is the developer's server: never start, stop, or restart it, or bind
+its port. To see what only a running server shows, prefer a `TestClient` test,
+else your own `my-app serve` on a free port, stopped before your turn ends
+(`running-the-app`).
 
 ### Writes to GitHub
 
@@ -61,9 +82,8 @@ just ruleset         # Apply .github/rulesets/main.json to GitHub (admin-only hu
 ```
 
 Without Just, run the `uv run` commands the `justfile` gives each recipe.
-`just check` mutates the tree (it runs `fmt` first), so it never proves the
-*committed* tree is green; `just verify` mutates nothing and is the gate for a
-PR or a completion claim.
+`just check` runs `fmt` first, so it never proves the *committed* tree green;
+`just verify` mutates nothing and is the gate for a PR or a completion claim.
 
 ## Validating a change
 
@@ -84,8 +104,8 @@ being run at all.
 | A workflow under `.github/workflows/` | `uv run --locked pre-commit run zizmor --all-files` |
 | Markdown or other prose | `uv run --locked pre-commit run typos --files <file>` |
 
-The current state of the work comes from Git, fresh test output, and CI —
-never from prose or a test count in a prompt.
+The state of the work comes from Git, fresh test output, and CI — never from
+prose or a test count in a prompt.
 
 ## Architecture
 
@@ -104,9 +124,8 @@ src/my_app/
   `core/ports.py`; `core/` imports nothing outside the stdlib and itself.
   Ruff's `TID251` banned-api rule and `tests/core/test_imports.py` fail the
   build otherwise (`designing-core-logic`).
-- Domain errors derive from `core.errors.AppError`, and each entry point maps
-  them in exactly one place: `api/app.py`'s handler and `cli/errors.py`.
-  `designing-errors` owns the statuses and exit codes.
+- Domain errors derive from `core.errors.AppError`; each entry point maps them
+  in one place (`api/app.py`, `cli/errors.py`), per `designing-errors`.
 - The CLI never imports the API at import time: `cli/serve.py` is the only
   bridge, and it imports FastAPI and uvicorn inside the command.
 - Removing an entry point is a deletion, never a core change:
@@ -114,10 +133,9 @@ src/my_app/
 
 ## Skills
 
-Skills are authored under `.agents/skills/` (read by Codex CLI) and mirrored
-byte for byte into `.claude/skills/` (read by Claude Code). Edit only
-`.agents/skills/`, run `just agents-sync`, and commit both trees
-(`authoring-skills`).
+Skills are authored under `.agents/skills/` (Codex CLI) and mirrored into
+`.claude/skills/` (Claude Code): edit only `.agents/skills/`, run
+`just agents-sync`, and commit both trees (`authoring-skills`).
 
 | Skill | Load it when |
 |---|---|
@@ -135,6 +153,7 @@ byte for byte into `.claude/skills/` (read by Claude Code). Edit only
 | `running-the-app` | running the CLI or a server of your own to observe a change, and stopping that server afterwards |
 | `shipping-issues` | shipping the next issue or the whole backlog: rank, implement, review, PR, CI, merge |
 | `smart-commit` | grouping working-tree changes into commits, or a pre-commit hook refuses a commit |
+| `starting-an-app` | setting up an app cut from this template: the Product section, the bootstrap pull request, labels, ruleset, security settings, dropping an entry point or the sample domain, the first ADRs; in the template, the bootstrap itself |
 | `steering-the-roadmap` | asked what to work on next, or the Now / Next / Later roadmap moves |
 | `tdd` | changing behavior under `src/` or `scripts/`, or fixing a bug: the failing test comes first |
 | `triaging-issues` | filing, labelling, or prioritizing an issue, or recording a problem found outside the task |
@@ -154,13 +173,10 @@ named sub-agent, a step marked for a tier may go to one of three:
 | `architect` | high | design judgment, review and bug finding, multi-file work, synthesis, a spec that still has holes |
 | `worker` | medium | single-shot, tool-free writing or checking from a complete brief |
 
-Each tier is defined once per host, and both hosts describe the same three:
-`.claude/agents/<tier>.md` for Claude Code pins a model alias (`opus` for
-`executor` and `architect`, `sonnet` for `worker` — never a dated model ID) and
-an `effort`; `.codex/agents/<tier>.toml` for Codex CLI sets only
-`model_reasoning_effort` and omits `model`, so the session's model is
-inherited. The instructions are the same text in both files, and
-`tests/test_agent_tiers.py` holds the two directories to that.
+Both hosts define the same three: `.claude/agents/<tier>.md` pins a model alias
+(`opus`, or `sonnet` for `worker` — never a dated model ID) and an `effort`;
+`.codex/agents/<tier>.toml` sets only `model_reasoning_effort`, so the session's
+model is inherited. `tests/test_agent_tiers.py` holds their instructions equal.
 
 - Neither file declares a permission — no `sandbox_mode`, no tool list.
 - Codex CLI loads `.codex/` only for a trusted project (in an untrusted
@@ -196,17 +212,14 @@ sign-off for exactly those, for that invocation only:
   it once CI passes, filing and labelling follow-up issues and the comments it
   posts, and deleting the branches it created.
 - `create-pr`: pushing the current branch, `gh pr create` for it, and
-  `gh pr edit` on its own open pull request — never a force-push and never a
-  merge.
+  `gh pr edit` on its own open pull request — never a force-push or a merge.
 - `smart-commit`: the commits it makes on the current branch, and pushing that
-  branch only when the request asked for a push — never a force-push and never
-  `main`.
+  branch only when asked — never a force-push and never `main`.
 
 One request is a standing exception too: the owner explicitly asking for an
-issue ("file an issue for this") is the sign-off for the `gh issue create` of
-each issue that request asks for, with the labels `triaging-issues` gives it.
-An issue the agent would file from a friction it noticed on its own is drafted
-in the reply and waits for a yes.
+issue ("file an issue for this") signs off the `gh issue create` of each issue it
+asks for, with the labels `triaging-issues` gives it. An issue the agent would
+file on its own initiative is drafted in the reply and waits for a yes.
 
 None of them covers a force-push or other history rewrite, `--no-verify` or
 any other hook bypass, weakening a gate, or adding a dependency — a new
@@ -214,8 +227,7 @@ dependency is proposed and the agent stops for sign-off.
 
 ## Enforcement layers
 
-Four layers, each catching what the one before it cannot. `changing-gates`
-owns a change to any of them.
+Each layer catches what the one before it cannot; `changing-gates` owns them.
 
 | Layer | Runs | Holds |
 |---|---|---|
@@ -224,17 +236,14 @@ owns a change to any of them.
 | CI (`.github/workflows/`) | Every pull request and push to `main` | The `just verify` checks plus typos and zizmor; CodeQL, Dependency Review, OSV-Scanner; the PR title; a weekly gitleaks scan of the whole history |
 | GitHub ruleset (`.github/rulesets/main.json`) | Every change to `main` | Every change arrives by a branch and a pull request, with the required checks green; no force-push, no deletion |
 
-- The git hooks are the only guard that runs for every author, so
-  `just install` installs both (`pre-commit`, `pre-merge-commit`) and fails
-  when either is missing. They live in the main checkout's `.git/hooks/` and
-  are shared by every worktree: run `just install` from the main checkout.
+- The git hooks are the only guard for every author, so `just install` installs
+  both (`pre-commit`, `pre-merge-commit`) and fails when one is missing. Every
+  worktree shares the main checkout's `.git/hooks/`: run it from the main checkout.
 - Commits git makes itself — rebase replays, cherry-picks, reverts — run no
   hook; the weekly gitleaks scan is their backstop.
 - No agent-specific hook, permission rule, model choice, or plugin marketplace
-  is committed — a committed allowlist would force one person's trust on every
-  repository made from this template. Keep them in `~/.claude/settings.json`,
-  `~/.codex/config.toml`, or the gitignored `.claude/settings.local.json` and
-  `.codex/rules/local.rules`.
-- The live ruleset and the repository's security settings change only by a
-  human: `just ruleset` is an admin step, and what a new repository must
-  enable is in `changing-gates`' `references/github-settings.md`.
+  is committed: one person's trust would bind every repository made from this
+  template. Keep them in `~/.claude/settings.json`, `~/.codex/config.toml`, or
+  the gitignored `.claude/settings.local.json` and `.codex/rules/local.rules`.
+- Only a human changes the live ruleset (`just ruleset`, an admin step) or the
+  repository's security settings; `starting-an-app` lists what a new one enables.

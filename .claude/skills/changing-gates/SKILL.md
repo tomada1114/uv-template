@@ -97,8 +97,8 @@ AGENTS.md's "Enforcement layers" names the layers. Keeping them in step is this 
   `.github/rulesets/main.json` and the context list in
   `tests/test_apply_ruleset.py::test_required_contexts_match_settled_defaults` in the
   same pull request. The live ruleset changes only when the owner reruns `just ruleset`
-  — an admin step an agent proposes and never runs. The new-repository settings around
-  it are in [references/github-settings.md](references/github-settings.md).
+  — an admin step an agent proposes and never runs. **BACKGROUND:** `starting-an-app`
+  for the ruleset and security settings a new repository enables.
 - A new workflow file is warranted only for a different trigger or permission
   footprint, never as a convenience split from `ci.yml`.
 

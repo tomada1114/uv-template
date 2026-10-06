@@ -1,36 +1,132 @@
-"""Rename this template into a new project by replacing its placeholders."""
+"""Turn this template into a new application, once.
+
+Run it from the root of a clean git clone of the template:
+
+    uv run --locked python scripts/bootstrap.py todo-api --author "Jane Doe" \
+        --github-user jdoe --github-repository jdoe/todo-api \
+        --description "Todo API" --contact-url https://github.com/jdoe
+
+The order is fixed: validate every input and the repository's state, compute
+every file's new content in memory, and only then write. A refusal, an invalid
+value, or a template file that no longer has the shape this script expects
+therefore leaves the tree byte-identical. After the write it records the
+template in `.template-origin`, runs `uv lock`, and formats the tree.
+
+The `starting-an-app` skill's `references/bootstrap.md` documents the flags,
+the refusals, and everything the run removes.
+"""
 
 from __future__ import annotations
 
 import argparse
 import datetime as dt
+import enum
 import json
 import keyword
 import re
-import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-OLD_DISTRIBUTION_NAME = "my-app"
-OLD_MODULE_NAME = "my_app"
-OLD_REPOSITORY_NAME = "uv-template"
-OLD_GITHUB_USER = "your-username"
-OLD_AUTHOR_NAME = "Your Name"
-OLD_AUTHOR_EMAIL = "you@example.com"
+PLACEHOLDER_SLUG = "my-app"
+PLACEHOLDER_MODULE = "my_app"
+PLACEHOLDER_DISPLAY_NAME = "My App"
+PLACEHOLDER_ENV_PREFIX = "MY_APP_"
+PLACEHOLDER_REPOSITORY = "your-username/uv-template"
+PLACEHOLDER_AUTHOR = "Your Name"
 # The same idea is worded differently per file, so both spellings are replaced.
-OLD_DESCRIPTIONS = (
+PLACEHOLDER_DESCRIPTIONS = (
     "A short description of the project.",
     "A short description of what this application does.",
+)
+# No value may contain one of these tokens, in any case: CI's leftover scan
+# looks for them, so a value holding one would read as a placeholder the rename
+# missed. They never occur inside ordinary words.
+FORBIDDEN_TOKENS = (
+    "my-app",
+    "my_app",
+    "uv-template",
+    "your-username",
+    "you@example.com",
+)
+# No value may equal one of these phrases, in any case. Containing one is fine:
+# "Book my appointments" or "Sync my apps" is ordinary prose.
+FORBIDDEN_PHRASES = (PLACEHOLDER_DISPLAY_NAME, PLACEHOLDER_AUTHOR)
+# Names an app slug may not take, in its hyphenated or its module form: the
+# layers' own package names and the placeholders (the issue's settled list);
+# the packages the app and its tooling import, which the app's own top-level
+# module would shadow; and every scripts/*.py stem, which `uv run python
+# scripts/<stem>.py` puts first on sys.path. Python keywords and stdlib modules
+# are checked separately.
+RESERVED_NAMES = frozenset(
+    {
+        "app",
+        "src",
+        "test",
+        "tests",
+        "core",
+        "api",
+        "cli",
+        "adapters",
+        "settings",
+        PLACEHOLDER_SLUG,
+        PLACEHOLDER_MODULE,
+        "fastapi",
+        "typer",
+        "pydantic",
+        "pydantic_settings",
+        "uvicorn",
+        "httpx",
+        "starlette",
+        "pytest",
+        "ruff",
+        "mypy",
+        *(path.stem for path in Path(__file__).resolve().parent.glob("*.py")),
+    }
+)
+
+TEMPLATE_REPOSITORY_URL = "https://github.com/tomada1114/uv-template"
+# The template's first commit. Every clone of the template shares it; GitHub's
+# "Use this template" starts a new history without it.
+TEMPLATE_ROOT_COMMIT = "ccf05e09ee69311d15581c3e6f9bd086eb711e0a"
+ORIGIN_FILE = ".template-origin"
+UNKNOWN = "unknown"
+
+SELF = "scripts/bootstrap.py"
+# The template's own files: kept, untouched, by --keep-bootstrap; otherwise
+# deleted, this script last of all.
+KEEPABLE_FILES = (
+    "TEMPLATE.md",
+    "tests/test_bootstrap.py",
+    ".agents/skills/starting-an-app/references/bootstrap.md",
+    ".claude/skills/starting-an-app/references/bootstrap.md",
+    SELF,
+)
+# Rewritten by `uv lock` after the rename rather than edited here.
+REGENERATED_FILES = frozenset({"uv.lock"})
+ENV_EXAMPLE_SUFFIXES = (".example", ".sample", ".template")
+
+FINISHING_COMMANDS = (
+    ("uv", "lock"),
+    ("uv", "run", "--locked", "ruff", "check", "--fix", "--quiet", "."),
+    ("uv", "run", "--locked", "ruff", "format", "--quiet", "."),
 )
 
 # `uv lock`/`uv sync` refuse anything published after this cutoff, so a fresh
 # project starts two weeks behind the index rather than at the template's date.
 EXCLUDE_NEWER_LAG_DAYS = 14
 EXCLUDE_NEWER_PATTERN = re.compile(r'exclude-newer = "[^"]*"')
-LICENSE_YEAR_PATTERN = re.compile(r"(Copyright \(c\) )\d{4}")
+LICENSE_LINE_PATTERN = re.compile(
+    rf"Copyright \(c\) \d{{4}} {re.escape(PLACEHOLDER_AUTHOR)}"
+)
 
 CHANGELOG_SKELETON = """# Changelog
 
@@ -42,102 +138,282 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 """
 
-# Template-only scaffolding, removed from the new project unless kept.
-BOOTSTRAP_FILES = (
-    "TEMPLATE.md",
-    "scripts/bootstrap.py",
-    "tests/test_bootstrap.py",
-)
+# The contact slots: the template's sentence, which points at the repository's
+# private vulnerability reporting and issue tracker, and the sentence that
+# replaces it when --contact-url is given.
+SECURITY_CONTACT_TEMPLATE = f"""If that form is unavailable, [open an issue](https://github.com/{PLACEHOLDER_REPOSITORY}/issues)
+asking for a private contact, and leave every detail of the vulnerability out of it.
+"""
+SECURITY_CONTACT_PERSON = """If that form is unavailable, ask the maintainer for a private contact through
+<{contact_url}>, and leave every detail of the vulnerability out of it.
+"""
+CONDUCT_CONTACT_TEMPLATE = f"""Instances of abusive, harassing, or otherwise unacceptable behavior may be
+reported privately through the repository's
+[private vulnerability reporting form](https://github.com/{PLACEHOLDER_REPOSITORY}/security/advisories/new),
+which only the maintainers can read. A report that needs no privacy can go to
+[the issue tracker](https://github.com/{PLACEHOLDER_REPOSITORY}/issues).
+"""
+CONDUCT_CONTACT_PERSON = """Instances of abusive, harassing, or otherwise unacceptable behavior may be
+reported privately to the community leaders through <{contact_url}>.
+"""
 
-EXCLUDED_FILE_NAMES = {"uv.lock"}
-ENV_EXAMPLE_SUFFIXES = (".example", ".sample", ".template")
-# Only used for the non-git fallback walk (e.g. after ``.git`` was removed):
-# generated/untracked directories that must never be rewritten.
-EXCLUDED_DIR_NAMES = {
-    ".git",
-    ".venv",
-    "venv",
-    "dist",
-    "build",
-    "__pycache__",
-    ".mypy_cache",
-    ".ruff_cache",
-    ".pytest_cache",
-    "htmlcov",
-    ".tox",
-    "node_modules",
-    "secrets",
-}
-
-_DISTRIBUTION_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-_GITHUB_USER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]*$")
-_REPOSITORY_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-_EMAIL_PATTERN = re.compile(r"^[^@\s<>]+@[^@\s<>]+$")
-_CONTROL_CHARACTER_PATTERN = re.compile(r"[\x00-\x1f\x7f]")
-
-_TOML_DESCRIPTION_PATTERN = re.compile(r'(?m)^(?P<prefix>\s*description\s*=\s*)"[^"]*"')
-_TOML_AUTHOR_PATTERN = re.compile(
-    r'(?P<prefix>\bname\s*=\s*)"[^"]*"(?P<suffix>\s*,\s*email\s*=)'
-)
-_TOML_EMAIL_PATTERN = re.compile(r'(?P<prefix>\bemail\s*=\s*)"[^"]*"')
+_SLUG_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
+_GITHUB_OWNER_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
+_REPOSITORY_NAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
+_EMAIL_PATTERN = re.compile(r"[^\s@<>()]+@[^\s@<>()]+\.[^\s@<>()]+")
+# Characters that would break a Markdown, TOML, JSON, or Python string site.
+_UNSAFE_TEXT_PATTERN = re.compile(r'[\x00-\x1f\x7f"\\`<>]')
+_CONTROL_PATTERN = re.compile(r"[\x00-\x1f\x7f]")
+MAX_SLUG_LENGTH = 40
+MAX_DISPLAY_NAME_LENGTH = 60
+MAX_AUTHOR_LENGTH = 100
+MAX_DESCRIPTION_LENGTH = 200
 
 
-def _normalize_module_name(package_name: str) -> str:
-    """Return the snake_case module name derived from a distribution name."""
-    if not _DISTRIBUTION_NAME_PATTERN.fullmatch(package_name):
-        msg = (
-            f"Invalid package name {package_name!r}: use letters, numbers, "
-            "periods, hyphens, or underscores, starting with a letter or number."
+class BootstrapError(Exception):
+    """An input, or the repository's state, rules the run out before any write."""
+
+
+class WriteError(BootstrapError):
+    """Writing failed part-way; the tree holds a partial rewrite."""
+
+    def __init__(self, error: OSError, done: list[str]) -> None:
+        """Explain what was written before error, and how to undo all of it."""
+        steps = "; ".join(done) or "nothing yet"
+        super().__init__(
+            f"writing failed: {error}. Done before the failure: {steps}. The work "
+            "tree was clean before the run, so `git restore --staged --worktree :/ "
+            "&& git clean -fd` discards the partial rewrite and restores the "
+            "template; then fix the cause and run the bootstrap again."
         )
-        raise SystemExit(msg)
 
-    module_name = re.sub(r"[-.]+", "_", package_name).lower()
-    if not module_name.isidentifier() or keyword.iskeyword(module_name):
+
+class _Marker(enum.Enum):
+    """A line that opens or closes a template-only block."""
+
+    OPEN = "<!-- template-only -->"
+    CLOSE = "<!-- /template-only -->"
+
+
+_MARKERS = {marker.value: marker for marker in _Marker}
+
+
+@dataclass(frozen=True, slots=True)
+class Identity:
+    """The values the new application is named with, as given on the command line.
+
+    Attributes:
+        slug: Distribution, console-script, and (with underscores) module name.
+        author: Copyright holder and package author; never an email address.
+        description: The one-line summary in `pyproject.toml` and README.
+        github_user: Owner of the GitHub repository.
+        github_repository: `NAME` or `OWNER/NAME`; defaults to the slug.
+        display_name: Human-readable name; defaults to the slug.
+        contact_url: Public profile URL for the security and conduct contact
+            slots; without it they point at the repository itself.
+    """
+
+    slug: str
+    author: str
+    description: str
+    github_user: str
+    github_repository: str | None = None
+    display_name: str | None = None
+    contact_url: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Names:
+    """Validated values, with every spelling the rename writes derived."""
+
+    slug: str
+    module: str
+    env_prefix: str
+    display_name: str
+    repository: str
+    author: str
+    description: str
+    contact_url: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class Plan:
+    """Everything the run will change, computed before the first write."""
+
+    writes: dict[str, str]
+    deletions: tuple[str, ...]
+    origin: str
+
+
+def _check_text(value: str, label: str, max_length: int) -> str:
+    """Reject a value that cannot be written safely into every file it reaches."""
+    if not value or value != value.strip() or len(value) > max_length:
+        msg = f"invalid {label} {value!r}: 1-{max_length} characters, no surrounding spaces"
+        raise BootstrapError(msg)
+    if _UNSAFE_TEXT_PATTERN.search(value):
+        msg = f'invalid {label} {value!r}: one line without quotes, backslashes, backticks, "<" or ">"'
+        raise BootstrapError(msg)
+    if _EMAIL_PATTERN.search(value):
         msg = (
-            f"Invalid package name {package_name!r}: must become a valid Python "
-            "module name once hyphens and periods are replaced with underscores."
+            f"invalid {label} {value!r}: an email address is never written into the app"
         )
-        raise SystemExit(msg)
-    return module_name
+        raise BootstrapError(msg)
+    return value
 
 
-def _validate_single_line(value: str | None, label: str) -> None:
-    """Reject values that would create malformed generated files."""
-    if value is not None and _CONTROL_CHARACTER_PATTERN.search(value):
-        msg = f"Invalid {label}: it must be a single line without control characters."
-        raise SystemExit(msg)
+def _check_slug(slug: str) -> str:
+    """Return the module name for a valid, unreserved slug."""
+    if len(slug) > MAX_SLUG_LENGTH or not _SLUG_PATTERN.fullmatch(slug):
+        msg = (
+            f"invalid name {slug!r}: lower-case letters and digits in words joined "
+            f"by single hyphens, starting with a letter, at most {MAX_SLUG_LENGTH} characters"
+        )
+        raise BootstrapError(msg)
+    module = slug.replace("-", "_")
+    if (
+        {slug, module} & RESERVED_NAMES
+        or keyword.iskeyword(module)
+        or module in sys.stdlib_module_names
+    ):
+        msg = (
+            f"reserved name {slug!r}: it collides with a layer of the app, a "
+            "placeholder, a Python keyword, or a standard-library module"
+        )
+        raise BootstrapError(msg)
+    return module
 
 
-def _validate_inputs(  # noqa: PLR0913
-    package_name: str,
-    author: str | None,
-    email: str | None,
-    github_user: str,
-    github_repository: str | None,
-    description: str | None,
-) -> str:
-    """Validate bootstrap inputs and return the normalized module name."""
-    module_name = _normalize_module_name(package_name)
-    if not _GITHUB_USER_PATTERN.fullmatch(github_user):
-        msg = f"Invalid GitHub user or organization {github_user!r}."
-        raise SystemExit(msg)
-
-    repository = package_name if github_repository is None else github_repository
-    if not _REPOSITORY_NAME_PATTERN.fullmatch(repository):
-        msg = f"Invalid GitHub repository name {repository!r}."
-        raise SystemExit(msg)
-
-    _validate_single_line(author, "author")
-    _validate_single_line(email, "email")
-    _validate_single_line(description, "description")
-    if email is not None and not _EMAIL_PATTERN.fullmatch(email):
-        msg = f"Invalid email address {email!r}."
-        raise SystemExit(msg)
-    return module_name
+def _check_repository(identity: Identity) -> str:
+    """Return the repository as `OWNER/NAME`."""
+    owner = identity.github_user
+    if not _GITHUB_OWNER_PATTERN.fullmatch(owner):
+        msg = f"invalid GitHub user or organization {owner!r}"
+        raise BootstrapError(msg)
+    given = identity.github_repository or identity.slug
+    given_owner, _, name = given.rpartition("/")
+    if given_owner and given_owner.lower() != owner.lower():
+        msg = f"--github-repository {given!r} names owner {given_owner!r}, but --github-user is {owner!r}"
+        raise BootstrapError(msg)
+    if (
+        not _REPOSITORY_NAME_PATTERN.fullmatch(name)
+        or name in {".", ".."}
+        or name.endswith(".git")
+    ):
+        msg = f"invalid GitHub repository name {name!r}"
+        raise BootstrapError(msg)
+    return f"{owner}/{name}"
 
 
-def _is_protected_path(path: Path) -> bool:
-    """Return whether a path may contain credentials rather than placeholders."""
+def _check_contact_url(url: str | None) -> str | None:
+    """Accept only a public https URL: never a mailto: link or embedded credentials."""
+    if url is None:
+        return None
+    parts = urlsplit(url)
+    if (
+        parts.scheme != "https"
+        or not parts.hostname
+        or "@" in parts.netloc
+        or _CONTROL_PATTERN.search(url)
+        or any(character in url for character in ' "<>\\`')
+    ):
+        msg = f"invalid --contact-url {url!r}: a public https:// profile URL, without credentials"
+        raise BootstrapError(msg)
+    return url
+
+
+def resolve_names(identity: Identity) -> Names:
+    """Validate the identity and derive every spelling the rename writes.
+
+    Args:
+        identity: The values as given on the command line.
+
+    Returns:
+        The validated values, with the module name and environment prefix.
+
+    Raises:
+        BootstrapError: A value is malformed, reserved, holds an email address,
+            or contains a placeholder.
+    """
+    module = _check_slug(identity.slug)
+    display_name = identity.display_name or identity.slug
+    names = Names(
+        slug=identity.slug,
+        module=module,
+        env_prefix=f"{module.upper()}_",
+        display_name=_check_text(display_name, "display name", MAX_DISPLAY_NAME_LENGTH),
+        repository=_check_repository(identity),
+        author=_check_text(identity.author, "author", MAX_AUTHOR_LENGTH),
+        description=_check_text(
+            identity.description, "description", MAX_DESCRIPTION_LENGTH
+        ),
+        contact_url=_check_contact_url(identity.contact_url),
+    )
+    for field, value in (
+        ("name", names.slug),
+        ("display name", names.display_name),
+        ("GitHub repository", names.repository),
+        ("author", names.author),
+        ("description", names.description),
+        ("contact URL", names.contact_url or ""),
+    ):
+        lowered = value.lower()
+        if hit := next((t for t in FORBIDDEN_TOKENS if t in lowered), None):
+            msg = f"invalid {field} {value!r}: it contains the placeholder {hit!r}"
+            raise BootstrapError(msg)
+        if lowered in (phrase.lower() for phrase in FORBIDDEN_PHRASES):
+            msg = f"invalid {field} {value!r}: it is a placeholder"
+            raise BootstrapError(msg)
+    return names
+
+
+def _git(root: Path, *args: str) -> str:
+    """Run git in root and return its standard output."""
+    try:
+        result = subprocess.run(  # noqa: S603 -- a fixed git argv, no shell
+            ["git", *args],  # noqa: S607 -- git resolved from PATH, as a shell would
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as error:
+        msg = f"git is unavailable: {error}"
+        raise BootstrapError(msg) from error
+    if result.returncode != 0:
+        msg = f"`git {' '.join(args)}` failed in {root}: {result.stderr.strip()}"
+        raise BootstrapError(msg)
+    return result.stdout
+
+
+def _check_work_tree(root: Path, names: Names) -> None:
+    """Refuse anything but the clean root of a template work tree."""
+    top_level = Path(_git(root, "rev-parse", "--show-toplevel").strip()).resolve()
+    if top_level != root:
+        msg = f"run the bootstrap from the root of the git work tree ({top_level}), not {root}"
+        raise BootstrapError(msg)
+    if (root / ORIGIN_FILE).exists():
+        msg = (
+            f"already bootstrapped: {ORIGIN_FILE} exists. The bootstrap runs once; "
+            "for a clean retry, start again from a fresh clone of the template"
+        )
+        raise BootstrapError(msg)
+    if status := _git(root, "status", "--porcelain", "--untracked-files=all"):
+        listed = "\n".join(status.splitlines()[:10])
+        msg = f"the working tree has uncommitted changes; commit or stash them first:\n{listed}"
+        raise BootstrapError(msg)
+    source = root / "src" / PLACEHOLDER_MODULE
+    if not source.is_dir():
+        msg = f"expected the template's package at {source}"
+        raise BootstrapError(msg)
+    destination = root / "src" / names.module
+    if destination.exists() or destination.is_symlink():
+        msg = f"destination package already exists: {destination}"
+        raise BootstrapError(msg)
+
+
+def _is_protected(relative: str) -> bool:
+    """Whether a path may hold credentials rather than placeholders."""
+    path = Path(relative)
     name = path.name
     if name == ".env" or (
         name.startswith(".env.") and not name.endswith(ENV_EXAMPLE_SUFFIXES)
@@ -146,379 +422,370 @@ def _is_protected_path(path: Path) -> bool:
     return "secrets" in path.parts
 
 
-def _git_tracked_files(repo_root: Path) -> list[Path] | None:
-    """Return absolute paths of git-tracked files under repo_root.
+def _strip_template_only(text: str, relative: str) -> str:
+    """Remove every template-only block, marker lines included.
+
+    A marker is a line holding only the marker, optionally behind `#` so YAML,
+    TOML, and shell files can carry one. When a removed block sat between two
+    blank lines, one of them goes too.
+    """
+    kept: list[str] = []
+    open_line: int | None = None
+    just_closed = False
+    for number, line in enumerate(text.splitlines(keepends=True), start=1):
+        marker = _MARKERS.get(line.strip().removeprefix("#").strip())
+        if marker is _Marker.OPEN:
+            if open_line is not None:
+                msg = f"{relative}:{number}: template-only block opened inside the one at line {open_line}"
+                raise BootstrapError(msg)
+            open_line = number
+        elif marker is _Marker.CLOSE:
+            if open_line is None:
+                msg = (
+                    f"{relative}:{number}: template-only block closed but never opened"
+                )
+                raise BootstrapError(msg)
+            open_line, just_closed = None, True
+        elif open_line is None:
+            is_doubled_blank = not line.strip() and (not kept or not kept[-1].strip())
+            if not (just_closed and is_doubled_blank):
+                kept.append(line)
+            just_closed = False
+    if open_line is not None:
+        msg = f"{relative}:{open_line}: template-only block never closed"
+        raise BootstrapError(msg)
+    stripped = "".join(kept)
+    return stripped.rstrip("\n") + "\n" if stripped != text and stripped else stripped
+
+
+@dataclass(frozen=True, slots=True)
+class _Site:
+    """Text a template file must hold exactly once, so the rename can edit it."""
+
+    file: str
+    text: str
+
+    def replace(self, content: str, new: str) -> str:
+        """Return content with the site replaced by new."""
+        if content.count(self.text) != 1:
+            first_line = self.text.splitlines()[0]
+            msg = f"{self.file}: expected exactly one {first_line!r}; the template changed shape"
+            raise BootstrapError(msg)
+        return content.replace(self.text, new)
+
+
+def _edit_pyproject(text: str, names: Names, today: dt.date) -> str:
+    """Write the metadata with TOML quoting and move the dependency cutoff."""
+    if len(EXCLUDE_NEWER_PATTERN.findall(text)) != 1:
+        msg = "pyproject.toml: expected exactly one exclude-newer setting"
+        raise BootstrapError(msg)
+    cutoff = today - dt.timedelta(days=EXCLUDE_NEWER_LAG_DAYS)
+    text = EXCLUDE_NEWER_PATTERN.sub(
+        f'exclude-newer = "{cutoff.isoformat()}T00:00:00Z"', text
+    )
+    text = _Site("pyproject.toml", f'name = "{PLACEHOLDER_AUTHOR}"').replace(
+        text, f"name = {json.dumps(names.author, ensure_ascii=False)}"
+    )
+    description = f'description = "{PLACEHOLDER_DESCRIPTIONS[0]}"'
+    return _Site("pyproject.toml", description).replace(
+        text, f"description = {json.dumps(names.description, ensure_ascii=False)}"
+    )
+
+
+def _edit_license(text: str, names: Names, today: dt.date) -> str:
+    """Write the run's year and the author into the copyright line."""
+    if len(LICENSE_LINE_PATTERN.findall(text)) != 1:
+        msg = "LICENSE: expected exactly one template copyright line"
+        raise BootstrapError(msg)
+    return LICENSE_LINE_PATTERN.sub(
+        lambda _: f"Copyright (c) {today.year} {names.author}", text
+    )
+
+
+def _edit_security(text: str, names: Names, _today: dt.date) -> str:
+    """Name the contact URL in SECURITY.md's fallback route, when one is given."""
+    new = SECURITY_CONTACT_TEMPLATE
+    if names.contact_url:
+        new = SECURITY_CONTACT_PERSON.format(contact_url=names.contact_url)
+    return _Site("SECURITY.md", SECURITY_CONTACT_TEMPLATE).replace(text, new)
+
+
+def _edit_conduct(text: str, names: Names, _today: dt.date) -> str:
+    """Name the contact URL as the conduct reporting route, when one is given."""
+    new = CONDUCT_CONTACT_TEMPLATE
+    if names.contact_url:
+        new = CONDUCT_CONTACT_PERSON.format(contact_url=names.contact_url)
+    return _Site("CODE_OF_CONDUCT.md", CONDUCT_CONTACT_TEMPLATE).replace(text, new)
+
+
+def _reset_changelog(_text: str, _names: Names, _today: dt.date) -> str:
+    """Start the app's changelog empty; the template's history is not its own."""
+    return CHANGELOG_SKELETON
+
+
+FILE_EDITS: dict[str, Callable[[str, Names, dt.date], str]] = {
+    "pyproject.toml": _edit_pyproject,
+    "LICENSE": _edit_license,
+    "SECURITY.md": _edit_security,
+    "CODE_OF_CONDUCT.md": _edit_conduct,
+    "CHANGELOG.md": _reset_changelog,
+}
+
+
+def _replace_placeholders(text: str, names: Names) -> str:
+    """Replace every placeholder in one pass, so no new value is rewritten again."""
+    replacements = {
+        PLACEHOLDER_REPOSITORY: names.repository,
+        PLACEHOLDER_AUTHOR: names.author,
+        PLACEHOLDER_DISPLAY_NAME: names.display_name,
+        PLACEHOLDER_ENV_PREFIX: names.env_prefix,
+        PLACEHOLDER_SLUG: names.slug,
+        PLACEHOLDER_MODULE: names.module,
+    }
+    replacements.update(dict.fromkeys(PLACEHOLDER_DESCRIPTIONS, names.description))
+    pattern = re.compile(
+        "|".join(re.escape(old) for old in sorted(replacements, key=len, reverse=True))
+    )
+    return pattern.sub(lambda match: replacements[match.group(0)], text)
+
+
+def _candidate_files(root: Path) -> list[str]:
+    """Return the tracked text-file paths the rename may rewrite."""
+    untouched = {*KEEPABLE_FILES, *REGENERATED_FILES}
+    candidates = []
+    for relative in _git(root, "ls-files", "-z").split("\0"):
+        path = root / relative
+        if (
+            relative
+            and relative not in untouched
+            and path.is_file()
+            and not path.is_symlink()
+            and not _is_protected(relative)
+        ):
+            candidates.append(relative)
+    return candidates
+
+
+def _plan_writes(root: Path, names: Names, today: dt.date) -> dict[str, str]:
+    """Compute the new content of every file the rename changes."""
+    writes: dict[str, str] = {}
+    edited: set[str] = set()
+    for relative in _candidate_files(root):
+        try:
+            text = (root / relative).read_bytes().decode("utf-8")
+        except UnicodeDecodeError:
+            continue  # a binary file holds no placeholder
+        new_text = _strip_template_only(text, relative)
+        if edit := FILE_EDITS.get(relative):
+            new_text = edit(new_text, names, today)
+            edited.add(relative)
+        new_text = _replace_placeholders(new_text, names)
+        if new_text != text:
+            writes[relative] = new_text
+    if missing := sorted(FILE_EDITS.keys() - edited):
+        msg = f"the template is missing files the rename edits: {', '.join(missing)}"
+        raise BootstrapError(msg)
+    return writes
+
+
+def _origin_record(root: Path) -> str:
+    """Describe the template commit this app was cut from, or how to find it."""
+    is_shallow = _git(root, "rev-parse", "--is-shallow-repository").strip() == "true"
+    roots = set(_git(root, "rev-list", "--max-parents=0", "HEAD").split())
+    is_template_history = not is_shallow and TEMPLATE_ROOT_COMMIT in roots
+    commit = _git(root, "rev-parse", "HEAD").strip() if is_template_history else UNKNOWN
+    tree = _git(root, "rev-parse", "HEAD^{tree}").strip()
+    return (
+        "# Written once by the template's bootstrap. Keep it committed: the\n"
+        "# bootstrap refuses a second run while it exists, and\n"
+        "# tests/test_product_section.py reads it to know this is an app, whose\n"
+        "# AGENTS.md Product section must be filled in.\n"
+        "# commit is the template commit this app was cut from, or\n"
+        '# "unknown" when this history does not start at the template\'s first commit\n'
+        '# (GitHub\'s "Use this template" starts a new one). Then find it by tree:\n'
+        "#   git log --format='%H %T' <template remote>/main | grep <tree>\n"
+        f"template: {TEMPLATE_REPOSITORY_URL}\n"
+        f"commit: {commit}\n"
+        f"tree: {tree}\n"
+    )
+
+
+def plan(root: Path, names: Names, *, keep_bootstrap: bool = False) -> Plan:
+    """Check the repository and compute every change, writing nothing.
+
+    Args:
+        root: The template checkout's resolved git root.
+        names: Validated values from `resolve_names`.
+        keep_bootstrap: Keep the template's own files instead of deleting them.
 
     Returns:
-        The tracked files (excluding protected files), or None when repo_root
-        is not a Git repository and a filesystem walk is therefore required.
-        A Git failure inside a repository raises instead of widening the write
-        scope to untracked files.
+        Every write, deletion, and the `.template-origin` record.
+
+    Raises:
+        BootstrapError: The tree is not a clean, never-bootstrapped template
+            root, or a file the rename edits no longer has the expected shape.
     """
-    try:
-        top_level = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],  # noqa: S607
-            check=False,
-            capture_output=True,
-            cwd=repo_root,
-            text=True,
-        )
-    except OSError as error:
-        if (repo_root / ".git").exists():
-            msg = f"Git is unavailable while inspecting {repo_root}: {error}"
-            raise SystemExit(msg) from error
-        return None
-
-    if top_level.returncode != 0:
-        if not (repo_root / ".git").exists():
-            return None
-        msg = f"Could not identify the Git root for {repo_root}: {top_level.stderr.strip()}"
-        raise SystemExit(msg)
-    git_root = Path(top_level.stdout.strip()).resolve()
-    if git_root != repo_root:
-        msg = (
-            f"Bootstrap must run at the Git root ({repo_root}); "
-            f"Git found an ancestor root at {git_root}."
-        )
-        raise SystemExit(msg)
-
-    try:
-        result = subprocess.run(
-            ["git", "ls-files", "-z"],  # noqa: S607
-            check=False,
-            capture_output=True,
-            cwd=repo_root,
-            text=True,
-        )
-    except OSError as error:
-        if (repo_root / ".git").exists():
-            msg = f"Git is unavailable while inspecting {repo_root}: {error}"
-            raise SystemExit(msg) from error
-        return None
-
-    if result.returncode != 0:
-        if not (repo_root / ".git").exists():
-            return None
-        msg = f"Could not list tracked files in {repo_root}: {result.stderr.strip()}"
-        raise SystemExit(msg)
-
-    files = []
-    for relative_path in result.stdout.split("\0"):
-        if not relative_path or Path(relative_path).name in EXCLUDED_FILE_NAMES:
-            continue
-        path = repo_root / relative_path
-        if path.is_file() and not path.is_symlink() and not _is_protected_path(path):
-            files.append(path)
-    return files
+    _check_work_tree(root, names)
+    today = dt.datetime.now(tz=dt.UTC).date()
+    return Plan(
+        writes=_plan_writes(root, names, today),
+        deletions=() if keep_bootstrap else KEEPABLE_FILES,
+        origin=_origin_record(root),
+    )
 
 
-def _walk_project_files(repo_root: Path) -> list[Path]:
-    """Return every file under repo_root, skipping excluded dirs and files."""
-    files = []
-    for path in repo_root.rglob("*"):
-        if not path.is_file() or path.is_symlink():
-            continue
-        if path.name in EXCLUDED_FILE_NAMES:
-            continue
-        if EXCLUDED_DIR_NAMES & set(path.relative_to(repo_root).parts):
-            continue
-        if _is_protected_path(path):
-            continue
-        files.append(path)
-    return files
+def _moved(relative: str, module: str) -> str:
+    """Return where a template path lives once the package directory is renamed."""
+    old_prefix = f"src/{PLACEHOLDER_MODULE}/"
+    if relative.startswith(old_prefix):
+        return f"src/{module}/{relative.removeprefix(old_prefix)}"
+    return relative
 
 
-def _iter_project_files(repo_root: Path) -> list[Path]:
-    """Return the files to rewrite.
+def _apply(root: Path, names: Names, change: Plan) -> None:
+    """Write a computed plan, most failure-prone step first, this script last.
 
-    Prefers git-tracked files so generated/untracked trees (``.venv``,
-    caches, build output) are never read or rewritten. Falls back to a
-    filtered filesystem walk when repo_root is not a git repository, e.g.
-    after the template's ``.git`` directory has been removed.
+    Raises:
+        WriteError: A write failed; the message names the steps already done
+            and how to restore the template.
     """
-    tracked = _git_tracked_files(repo_root)
-    if tracked is not None:
-        return tracked
-    return _walk_project_files(repo_root)
+    done: list[str] = []
+    try:
+        (root / "src" / PLACEHOLDER_MODULE).rename(root / "src" / names.module)
+        done.append(f"renamed src/{PLACEHOLDER_MODULE} to src/{names.module}")
+        for relative, text in change.writes.items():
+            (root / _moved(relative, names.module)).write_bytes(text.encode("utf-8"))
+        done.append(f"rewrote {len(change.writes)} files")
+        (root / ORIGIN_FILE).write_text(change.origin, encoding="utf-8")
+        done.append(f"wrote {ORIGIN_FILE}")
+        for relative in change.deletions:
+            (root / relative).unlink(missing_ok=True)
+        done.append("deleted the template's own files")
+    except OSError as error:
+        raise WriteError(error, done) from error
 
 
-def _replace_placeholders_in_file(
-    path: Path,
-    replacements: dict[str, str],
-    *,
-    python_literals: bool = False,
-) -> bool:
-    """Replace every placeholder occurrence in a single file.
+def bootstrap(root: Path, identity: Identity, *, keep_bootstrap: bool = False) -> Names:
+    """Validate, plan, then rewrite the template at root into the new app.
+
+    Args:
+        root: The template checkout's git root.
+        identity: The values the app is named with.
+        keep_bootstrap: Keep the template's own files instead of deleting them.
 
     Returns:
-        True if the file's contents changed.
-    """
-    try:
-        text = path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        return False
+        The validated names the app now carries.
 
-    if python_literals:
-        literal_values = "|".join(
-            re.escape(old) for old in sorted(replacements, key=len, reverse=True)
-        )
-        literal_pattern = re.compile(
-            rf"(?P<quote>['\"])(?P<value>{literal_values})(?P=quote)"
-        )
-        new_text = literal_pattern.sub(
-            lambda match: (
-                _quoted_string(replacements[match.group("value")])
-                if match.group("quote") == '"'
-                else repr(replacements[match.group("value")])
-            ),
-            text,
-        )
-    else:
-        placeholder_pattern = re.compile(
-            "|".join(
-                re.escape(old) for old in sorted(replacements, key=len, reverse=True)
+    Raises:
+        BootstrapError: Before any file is written, when an input or the
+            repository's state rules the run out.
+        WriteError: When writing failed part-way; its message says what was
+            done and how to restore the template.
+    """
+    root = root.resolve()
+    names = resolve_names(identity)
+    _apply(root, names, plan(root, names, keep_bootstrap=keep_bootstrap))
+    return names
+
+
+def finish(root: Path) -> bool:
+    """Regenerate uv.lock and format the renamed tree.
+
+    The lock still names the template's package until `uv lock` runs, and a
+    longer module name can push imports past the line length, so both steps
+    belong to the rename. They run after the write, so a failure here cannot be
+    rolled back; it is reported with the command to run by hand.
+
+    Returns:
+        Whether every command succeeded.
+    """
+    for command in FINISHING_COMMANDS:
+        shown = " ".join(command)
+        try:
+            result = subprocess.run(command, cwd=root, check=False)  # noqa: S603 -- fixed argv, no shell
+        except OSError as error:
+            print(f"error: could not run `{shown}`: {error}", file=sys.stderr)
+            return False
+        if result.returncode != 0:
+            print(
+                f"error: `{shown}` failed (exit {result.returncode}). The rename is "
+                "written; run that command and the ones after it by hand.",
+                file=sys.stderr,
             )
-        )
-        new_text = placeholder_pattern.sub(
-            lambda match: replacements[match.group(0)],
-            text,
-        )
-
-    if new_text == text:
-        return False
-
-    path.write_text(new_text, encoding="utf-8")
+            return False
     return True
 
 
-def _rename_source_directory(repo_root: Path, new_module_name: str) -> None:
-    """Rename src/my_app to src/<new_module_name> in place."""
-    old_dir = repo_root / "src" / OLD_MODULE_NAME
-    new_dir = repo_root / "src" / new_module_name
-    if old_dir == new_dir:
-        return
-    if not old_dir.is_dir():
-        msg = f"Expected source directory not found: {old_dir}"
-        raise SystemExit(msg)
-    if new_dir.exists() or new_dir.is_symlink():
-        msg = f"Destination source directory already exists: {new_dir}"
-        raise SystemExit(msg)
-    shutil.move(str(old_dir), str(new_dir))
+def _check_invoked_from(repo_root: Path) -> None:
+    """Refuse a run from inside another checkout than the one holding this script.
 
-
-def _quoted_string(value: str) -> str:
-    """Encode a value as a double-quoted string literal."""
-    return json.dumps(value, ensure_ascii=False)
-
-
-def _rewrite_project_metadata(
-    repo_root: Path,
-    author: str | None,
-    email: str | None,
-    description: str | None,
-) -> None:
-    """Write user-provided metadata with syntax-safe TOML quoting."""
-    pyproject = repo_root / "pyproject.toml"
-    if pyproject.is_file():
-        text = pyproject.read_text(encoding="utf-8")
-        if description:
-            text = _TOML_DESCRIPTION_PATTERN.sub(
-                lambda match: f"{match.group('prefix')}{_quoted_string(description)}",
-                text,
-                count=1,
-            )
-        if author:
-            text = _TOML_AUTHOR_PATTERN.sub(
-                lambda match: (
-                    f"{match.group('prefix')}{_quoted_string(author)}"
-                    f"{match.group('suffix')}"
-                ),
-                text,
-                count=1,
-            )
-        if email:
-            text = _TOML_EMAIL_PATTERN.sub(
-                lambda match: f"{match.group('prefix')}{_quoted_string(email)}",
-                text,
-                count=1,
-            )
-        pyproject.write_text(text, encoding="utf-8")
-
-
-def _rewrite_exclude_newer(repo_root: Path, today: dt.date) -> None:
-    """Move the supply-chain cutoff to two weeks before the run date."""
-    pyproject = repo_root / "pyproject.toml"
-    if not pyproject.is_file():
-        return
-    cutoff = today - dt.timedelta(days=EXCLUDE_NEWER_LAG_DAYS)
-    text = pyproject.read_text(encoding="utf-8")
-    new_text = EXCLUDE_NEWER_PATTERN.sub(
-        f'exclude-newer = "{cutoff.isoformat()}T00:00:00Z"', text
-    )
-    if new_text != text:
-        pyproject.write_text(new_text, encoding="utf-8")
-
-
-def _rewrite_license_year(repo_root: Path, today: dt.date) -> None:
-    """Set the LICENSE copyright year to the year of the run."""
-    license_file = repo_root / "LICENSE"
-    if not license_file.is_file():
-        return
-    text = license_file.read_text(encoding="utf-8")
-    new_text = LICENSE_YEAR_PATTERN.sub(rf"\g<1>{today.year}", text)
-    if new_text != text:
-        license_file.write_text(new_text, encoding="utf-8")
-
-
-def _reset_changelog(repo_root: Path) -> None:
-    """Replace the template's changelog with an empty skeleton."""
-    changelog = repo_root / "CHANGELOG.md"
-    if not changelog.is_file():
-        return
-    changelog.write_text(CHANGELOG_SKELETON, encoding="utf-8")
-
-
-def _delete_bootstrap_files(repo_root: Path) -> None:
-    """Remove the template-only scaffolding from the new project."""
-    for relative_path in BOOTSTRAP_FILES:
-        (repo_root / relative_path).unlink(missing_ok=True)
-
-
-def bootstrap(  # noqa: PLR0913
-    repo_root: Path,
-    package_name: str,
-    author: str | None,
-    email: str | None,
-    github_user: str,
-    description: str | None = None,
-    *,
-    github_repository: str | None = None,
-    keep_bootstrap: bool = False,
-) -> str:
-    """Rename the package and replace template placeholders in-place.
-
-    Returns:
-        The normalized module name the source directory was renamed to.
+    The script rewrites its own checkout; run from a different repository (a
+    template checkout next to the new app, say), the rename would land
+    somewhere other than where the user is looking.
     """
-    module_name = _validate_inputs(
-        package_name,
-        author,
-        email,
-        github_user,
-        github_repository,
-        description,
-    )
-    repository_name = package_name if github_repository is None else github_repository
-    repo_root = repo_root.resolve()
-    old_dir = repo_root / "src" / OLD_MODULE_NAME
-    new_dir = repo_root / "src" / module_name
-    if not old_dir.is_dir():
-        msg = f"Expected source directory not found: {old_dir}"
-        raise SystemExit(msg)
-    if old_dir != new_dir and (new_dir.exists() or new_dir.is_symlink()):
-        msg = f"Destination source directory already exists: {new_dir}"
-        raise SystemExit(msg)
-
-    today = dt.datetime.now(tz=dt.UTC).date()
-
-    replacements = {
-        OLD_MODULE_NAME: module_name,
-        OLD_DISTRIBUTION_NAME: package_name,
-        OLD_REPOSITORY_NAME: repository_name,
-        OLD_GITHUB_USER: github_user,
-    }
-
-    project_files = _iter_project_files(repo_root)
-    pyproject = repo_root / "pyproject.toml"
-    for path in project_files:
-        _replace_placeholders_in_file(path, replacements)
-        file_replacements: dict[str, str] = {}
-        if path != pyproject:
-            if author:
-                file_replacements[OLD_AUTHOR_NAME] = author
-            if email:
-                file_replacements[OLD_AUTHOR_EMAIL] = email
-            if description:
-                for old_description in OLD_DESCRIPTIONS:
-                    file_replacements[old_description] = description
-        if file_replacements:
-            _replace_placeholders_in_file(
-                path,
-                file_replacements,
-                python_literals=path.suffix == ".py",
-            )
-
-    _rewrite_exclude_newer(repo_root, today)
-    _rewrite_project_metadata(repo_root, author, email, description)
-    _rewrite_license_year(repo_root, today)
-    _reset_changelog(repo_root)
-    _rename_source_directory(repo_root, module_name)
-    if not keep_bootstrap:
-        _delete_bootstrap_files(repo_root)
-    return module_name
-
-
-def _run_uv_lock(repo_root: Path) -> None:
-    """Regenerate uv.lock, warning instead of aborting when it fails.
-
-    CI runs ``uv sync --locked`` everywhere, so a lock still naming the
-    template would fail the new project's very first run.
-    """
-    try:
-        result = subprocess.run(
-            ["uv", "lock"],  # noqa: S607
-            cwd=repo_root,
-            check=False,
+    top_level = Path(_git(Path.cwd(), "rev-parse", "--show-toplevel").strip())
+    if top_level.resolve() != repo_root.resolve():
+        msg = (
+            f"run the bootstrap from inside {repo_root}, the checkout it belongs "
+            f"to; the current directory is in {top_level}"
         )
-    except OSError as error:
-        print(f"warning: could not run `uv lock` ({error}).", file=sys.stderr)
-        return
-    if result.returncode != 0:
-        print(
-            "warning: `uv lock` failed — run it manually before the first commit.",
-            file=sys.stderr,
-        )
+        raise BootstrapError(msg)
 
 
-def main(argv: list[str]) -> int:
-    """Parse arguments and bootstrap the template in place."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("name", help="New package name, e.g. 'my-cool-lib'")
-    parser.add_argument("--author", default=None, help="Author name")
-    parser.add_argument("--email", default=None, help="Author email")
-    parser.add_argument(
-        "--github-user",
-        required=True,
-        help="GitHub username or org (required: it is baked into project URLs)",
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
     )
+    parser.add_argument("name", help="the app's slug, e.g. todo-api (module: todo_api)")
+    parser.add_argument("--author", required=True, help="author and copyright holder")
+    parser.add_argument("--description", required=True, help="one line about the app")
+    parser.add_argument("--github-user", required=True, help="the repository's owner")
     parser.add_argument(
         "--github-repository",
         default=None,
-        help="GitHub repository name (defaults to the package name)",
+        help="NAME or OWNER/NAME (default: the slug, under --github-user)",
     )
+    parser.add_argument("--display-name", default=None, help="default: the slug")
     parser.add_argument(
-        "--description", default=None, help="One-line description of the project"
+        "--contact-url",
+        default=None,
+        help="public profile URL for SECURITY.md and CODE_OF_CONDUCT.md "
+        "(default: the repository's private reporting form and issue tracker)",
     )
     parser.add_argument(
         "--keep-bootstrap",
         action="store_true",
-        help="Keep TEMPLATE.md and the bootstrap script instead of deleting them",
+        help="keep TEMPLATE.md, this script, its test, and its skill reference, "
+        "untouched, for debugging",
     )
-    args = parser.parse_args(argv)
+    return parser.parse_args(argv)
 
-    module_name = bootstrap(
-        REPO_ROOT,
-        args.name,
-        args.author,
-        args.email,
-        args.github_user,
-        args.description,
+
+def main(argv: list[str] | None = None) -> int:
+    """Bootstrap the template this script belongs to, then finish it with uv."""
+    args = _parse_args(argv)
+    identity = Identity(
+        slug=args.name,
+        author=args.author,
+        description=args.description,
+        github_user=args.github_user,
         github_repository=args.github_repository,
-        keep_bootstrap=args.keep_bootstrap,
+        display_name=args.display_name,
+        contact_url=args.contact_url,
     )
-    _run_uv_lock(REPO_ROOT)
-
-    print(f"Bootstrapped {args.name!r} (module: {module_name}).")
+    try:
+        _check_invoked_from(REPO_ROOT)
+        names = bootstrap(REPO_ROOT, identity, keep_bootstrap=args.keep_bootstrap)
+    except BootstrapError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    print(f"Renamed the template to {names.slug} (package src/{names.module}).")
+    if not finish(REPO_ROOT):
+        return 1
+    print(
+        "Next: write AGENTS.md's Product section, then commit it with the rewrite "
+        "as one `chore: bootstrap` commit, per the starting-an-app skill."
+    )
     return 0
 
 

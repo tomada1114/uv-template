@@ -2,7 +2,7 @@
 
 <!--
 The template ships this page as a skeleton: a project cut from the template replaces
-every `TODO:` line below once `AGENTS.md`'s "Overview" describes what the project is.
+every `TODO:` line below once `AGENTS.md`'s "Product" describes what the project is.
 Nothing checks this page for leftover markers; the `steering-the-roadmap` skill says who
 changes it, when, and from what. Delete this comment when the page is first filled in.
 -->
@@ -11,8 +11,8 @@ This page records the project's direction: the outcomes it is working toward now
 ones that come next, and the ones only intended for later. It sits between two other
 homes and repeats neither:
 
-- `AGENTS.md`'s "Overview" says what the project is and, once it states them, its
-  non-goals. Nothing here contradicts a non-goal; moving one is the owner's call, made
+- `AGENTS.md`'s "Product" says what the project is, for whom, and its non-goals.
+  Nothing here contradicts a non-goal; moving one is the owner's call, made
   in that section first.
 - The issue tracker holds the units of work, their priority tiers, and their `blocked:`
   and `on hold` labels (`triaging-issues`). This page links issues by number and never

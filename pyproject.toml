@@ -16,7 +16,7 @@ dependencies = [
 ]
 license = "MIT"
 license-files = ["LICENSE"]
-authors = [{ name = "Your Name", email = "you@example.com" }]
+authors = [{ name = "Your Name" }]
 keywords = []
 classifiers = [
     "Development Status :: 3 - Alpha",
