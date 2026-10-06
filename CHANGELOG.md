@@ -15,7 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   domain, and the first ADRs; `references/bootstrap.md` and
   `references/private-repository.md` hold the detail. `TEMPLATE.md` now points
   to it instead of listing the steps
-- `AGENTS.md` gained a `## Product` section of four `TODO:` entries, and
+- `AGENTS.md` gained a `## Product` section of four `TODO:` entries, now the one
+  home of the app's non-goals (`steering-the-roadmap`, `triaging-issues`, and
+  `roadmap.md` point at it instead of "Overview"), and
   `tests/test_product_section.py` fails while one is left once `.template-origin`
   exists (in the template it requires them)
 - CI's `Template Bootstrap Smoke` job: bootstraps a scratch clone with sample
@@ -109,10 +111,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   It replaces `my-app`, `my_app`, `My App` (the new display-name placeholder),
   `MY_APP_`, `your-username/uv-template`, and `Your Name`; validates every value
   and computes every edit in memory before the first write; refuses a dirty work
-  tree, a reserved name (the layers' names, the placeholders, Python keywords,
-  stdlib modules), and a second run; removes `<!-- template-only -->` blocks and
-  the template-only files; writes `.template-origin`; and runs `uv lock` and the
-  formatter. `--email` is gone and no email address is written: the new optional
+  tree, a run from outside its own checkout, a reserved name (the layers' names,
+  the placeholders, the packages the app imports, the `scripts/` stems, Python
+  keywords, stdlib modules), and a second run; removes `<!-- template-only -->`
+  blocks and the template-only files, deleting itself last; writes
+  `.template-origin`; and runs `uv lock` and the formatter. A write that fails
+  part-way names what was done and the `git restore`/`git clean` recovery. `--email` is gone and no email address is written: the new optional
   `--contact-url` fills the contact sentences in `SECURITY.md` and
   `CODE_OF_CONDUCT.md`, which otherwise point at the repository's private
   vulnerability reporting and issue tracker. `--author` and `--description` are

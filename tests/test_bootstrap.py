@@ -17,13 +17,16 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from types import ModuleType
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-LEFTOVER = re.compile(
-    r"my-app|my_app|my app|uv-template|your-username|your name|you@example",
-    re.IGNORECASE,
+# The same scan as CI's smoke job: placeholder tokens in any case, and the
+# display placeholders as whole words.
+LEFTOVER_TOKENS = re.compile(
+    r"my-app|my_app|uv-template|your-username|you@example", re.IGNORECASE
 )
+LEFTOVER_PHRASES = re.compile(r"\b(?:My App|Your Name)\b")
 # A line the bootstrap treats as a template-only marker.
 MARKER_LINE = re.compile(r"^\s*(?:#\s*)?<!-- /?template-only -->\s*$", re.MULTILINE)
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
@@ -123,6 +126,7 @@ def clone(
     root = tmp_path / "app"
     _git(tmp_path, "clone", "--quiet", str(template_repository), str(root))
     monkeypatch.setattr(bootstrap, "REPO_ROOT", root)
+    monkeypatch.chdir(root)
     return root
 
 
@@ -186,7 +190,8 @@ def test_bootstrap_sample_values_leave_no_placeholder_anywhere(sample_app):
         f"{relative}: {match.group(0)}"
         for relative, text in _text_files(sample_app).items()
         if relative not in {"uv.lock", bootstrap.ORIGIN_FILE}
-        for match in LEFTOVER.finditer(text)
+        for pattern in (LEFTOVER_TOKENS, LEFTOVER_PHRASES)
+        for match in pattern.finditer(text)
     ]
     assert hits == []
 
@@ -364,6 +369,15 @@ def test_resolve_names_rejects_an_unusable_contact_url(url):
         pytest.param(
             {"description": "Like uv-template"}, r"placeholder 'uv-template'", id="ph"
         ),
+        pytest.param(
+            {"author": "you@example.com"}, r"email address", id="placeholder-email"
+        ),
+        pytest.param(
+            {"display_name": "MY APP"}, r"is a placeholder", id="my-app-phrase"
+        ),
+        pytest.param(
+            {"author": "your name"}, r"is a placeholder", id="your-name-phrase"
+        ),
     ],
 )
 def test_resolve_names_rejects_invalid_input(overrides, message):
@@ -481,6 +495,12 @@ def test_main_dirty_tree_exits_one_with_an_error_line(clone, capsys):
         "json",
         "email",
         "pydoc-data",  # its module name, pydoc_data, is a stdlib package
+        "fastapi",
+        "pydantic-settings",
+        "starlette",
+        "mypy",
+        "sync-labels",  # a scripts/*.py stem
+        "bootstrap",
     ],
 )
 def test_resolve_names_refuses_a_reserved_name(slug):
@@ -568,9 +588,9 @@ def test_bootstrap_keep_bootstrap_keeps_its_files_untouched(clone):
     bootstrap.bootstrap(clone, bootstrap.Identity(**SAMPLE), keep_bootstrap=True)
 
     after = _snapshot(clone)
-    for relative in KEEPABLE:
+    kept = (*KEEPABLE, f".agents/{SKILL_REFERENCE}", f".claude/{SKILL_REFERENCE}")
+    for relative in kept:
         assert after[relative] == before[relative], relative
-    assert f".agents/{SKILL_REFERENCE}" not in after
 
 
 def test_bootstrap_resets_the_changelog(sample_app):
@@ -610,7 +630,7 @@ def test_main_runs_uv_lock_then_formats_in_the_app(clone, fake_uv, capsys):
         f"{root} run --locked ruff check --fix --quiet .",
         f"{root} run --locked ruff format --quiet .",
     ]
-    assert "Next: review and commit the rewrite" in capsys.readouterr().out
+    assert "Next: write AGENTS.md's Product section" in capsys.readouterr().out
 
 
 def test_main_failed_uv_lock_exits_one_after_writing(
@@ -630,3 +650,94 @@ def test_finish_missing_command_reports_and_returns_false(clone, monkeypatch, ca
 
     assert bootstrap.finish(clone) is False
     assert "could not run `uv-is-not-here`" in capsys.readouterr().err
+
+
+# --- review round: prose, invocation, failed writes, files left alone ------
+
+
+@pytest.mark.parametrize(
+    "description",
+    ["Book my appointments", "Sync my apps", "Store your names and dates"],
+)
+def test_resolve_names_accepts_prose_around_a_placeholder_phrase(description):
+    identity = bootstrap.Identity(**{**SAMPLE, "description": description})
+
+    assert bootstrap.resolve_names(identity).description == description
+
+
+def test_main_from_another_checkout_is_refused_without_writing(
+    clone, template_repository, monkeypatch, capsys
+):
+    before = _snapshot(clone)
+    monkeypatch.chdir(template_repository)
+
+    assert bootstrap.main(SAMPLE_ARGV) == 1
+
+    assert "run the bootstrap from inside" in capsys.readouterr().err
+    assert _snapshot(clone) == before
+
+
+def _fail_after(calls: int, original: Callable[..., object]) -> Callable[..., object]:
+    """Wrap a Path method so every call after the first ``calls`` raises OSError."""
+    count = 0
+
+    def method(self: Path, *args: object, **kwargs: object) -> object:
+        nonlocal count
+        count += 1
+        if count > calls:
+            msg = "disk full"
+            raise OSError(msg)
+        return original(self, *args, **kwargs)
+
+    return method
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        pytest.param(("rename", 0, "nothing yet"), id="rename-fails"),
+        pytest.param(
+            ("write_bytes", 5, "renamed src/my_app to src/todo_api"), id="write-fails"
+        ),
+    ],
+)
+def test_main_failed_write_names_progress_and_recovery_restores_template(
+    clone, monkeypatch, capsys, failure
+):
+    method, calls, done = failure
+    before = _snapshot(clone)
+    monkeypatch.setattr(Path, method, _fail_after(calls, getattr(Path, method)))
+
+    assert bootstrap.main(SAMPLE_ARGV) == 1
+
+    monkeypatch.undo()
+    error = capsys.readouterr().err
+    assert error.startswith("error: writing failed: disk full.")
+    assert f"Done before the failure: {done}" in error
+    assert "git restore --staged --worktree :/ && git clean -fd" in error
+    _git(clone, "restore", "--staged", "--worktree", ":/")
+    _git(clone, "clean", "-fd")
+    assert _snapshot(clone) == before
+
+
+def test_bootstrap_leaves_secret_binary_and_symlinked_files_alone(clone, tmp_path):
+    outside = tmp_path / "outside.md"
+    outside.write_text("my-app\n", encoding="utf-8")
+    untouched = {
+        ".env.local": b"my-app\n",
+        "secrets/token.txt": b"my-app\n",
+        "data.bin": b"\xff\xfe my-app\n",
+    }
+    for relative, data in untouched.items():
+        (clone / relative).parent.mkdir(parents=True, exist_ok=True)
+        (clone / relative).write_bytes(data)
+    (clone / "docs" / "outside.md").symlink_to(outside)
+    _git(clone, "add", "--all", "--force", *untouched, "docs/outside.md")
+    _git(clone, "commit", "--quiet", "--message", "edge cases")
+
+    _run(clone)
+
+    for relative, data in untouched.items():
+        assert (clone / relative).read_bytes() == data, relative
+    assert (clone / "docs" / "outside.md").is_symlink()
+    assert outside.read_text(encoding="utf-8") == "my-app\n"

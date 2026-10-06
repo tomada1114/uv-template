@@ -47,18 +47,25 @@ PLACEHOLDER_DESCRIPTIONS = (
     "A short description of the project.",
     "A short description of what this application does.",
 )
-# No value may contain these, case-insensitively: CI's leftover scan looks for
-# them, so a value holding one would read as a placeholder the rename missed.
-FORBIDDEN_FRAGMENTS = (
+# No value may contain one of these tokens, in any case: CI's leftover scan
+# looks for them, so a value holding one would read as a placeholder the rename
+# missed. They never occur inside ordinary words.
+FORBIDDEN_TOKENS = (
     "my-app",
     "my_app",
-    "my app",
     "uv-template",
     "your-username",
-    "your name",
+    "you@example.com",
 )
-# Names an app slug may not take: the layers' own package names, the
-# placeholders, and (checked separately) Python keywords and stdlib modules.
+# No value may equal one of these phrases, in any case. Containing one is fine:
+# "Book my appointments" or "Sync my apps" is ordinary prose.
+FORBIDDEN_PHRASES = (PLACEHOLDER_DISPLAY_NAME, PLACEHOLDER_AUTHOR)
+# Names an app slug may not take, in its hyphenated or its module form: the
+# layers' own package names and the placeholders (the issue's settled list);
+# the packages the app and its tooling import, which the app's own top-level
+# module would shadow; and every scripts/*.py stem, which `uv run python
+# scripts/<stem>.py` puts first on sys.path. Python keywords and stdlib modules
+# are checked separately.
 RESERVED_NAMES = frozenset(
     {
         "app",
@@ -72,6 +79,17 @@ RESERVED_NAMES = frozenset(
         "settings",
         PLACEHOLDER_SLUG,
         PLACEHOLDER_MODULE,
+        "fastapi",
+        "typer",
+        "pydantic",
+        "pydantic_settings",
+        "uvicorn",
+        "httpx",
+        "starlette",
+        "pytest",
+        "ruff",
+        "mypy",
+        *(path.stem for path in Path(__file__).resolve().parent.glob("*.py")),
     }
 )
 
@@ -82,12 +100,15 @@ TEMPLATE_ROOT_COMMIT = "ccf05e09ee69311d15581c3e6f9bd086eb711e0a"
 ORIGIN_FILE = ".template-origin"
 UNKNOWN = "unknown"
 
-# Kept, untouched, by --keep-bootstrap; otherwise deleted.
-KEEPABLE_FILES = ("TEMPLATE.md", "scripts/bootstrap.py", "tests/test_bootstrap.py")
-# Describes this script, so it goes even with --keep-bootstrap.
-ALWAYS_REMOVED_FILES = (
+SELF = "scripts/bootstrap.py"
+# The template's own files: kept, untouched, by --keep-bootstrap; otherwise
+# deleted, this script last of all.
+KEEPABLE_FILES = (
+    "TEMPLATE.md",
+    "tests/test_bootstrap.py",
     ".agents/skills/starting-an-app/references/bootstrap.md",
     ".claude/skills/starting-an-app/references/bootstrap.md",
+    SELF,
 )
 # Rewritten by `uv lock` after the rename rather than edited here.
 REGENERATED_FILES = frozenset({"uv.lock"})
@@ -151,6 +172,20 @@ MAX_DESCRIPTION_LENGTH = 200
 
 class BootstrapError(Exception):
     """An input, or the repository's state, rules the run out before any write."""
+
+
+class WriteError(BootstrapError):
+    """Writing failed part-way; the tree holds a partial rewrite."""
+
+    def __init__(self, error: OSError, done: list[str]) -> None:
+        """Explain what was written before error, and how to undo all of it."""
+        steps = "; ".join(done) or "nothing yet"
+        super().__init__(
+            f"writing failed: {error}. Done before the failure: {steps}. The work "
+            "tree was clean before the run, so `git restore --staged --worktree :/ "
+            "&& git clean -fd` discards the partial rewrite and restores the "
+            "template; then fix the cause and run the bootstrap again."
+        )
 
 
 class _Marker(enum.Enum):
@@ -289,6 +324,12 @@ def _check_contact_url(url: str | None) -> str | None:
 def resolve_names(identity: Identity) -> Names:
     """Validate the identity and derive every spelling the rename writes.
 
+    Args:
+        identity: The values as given on the command line.
+
+    Returns:
+        The validated values, with the module name and environment prefix.
+
     Raises:
         BootstrapError: A value is malformed, reserved, holds an email address,
             or contains a placeholder.
@@ -316,8 +357,11 @@ def resolve_names(identity: Identity) -> Names:
         ("contact URL", names.contact_url or ""),
     ):
         lowered = value.lower()
-        if hit := next((f for f in FORBIDDEN_FRAGMENTS if f in lowered), None):
+        if hit := next((t for t in FORBIDDEN_TOKENS if t in lowered), None):
             msg = f"invalid {field} {value!r}: it contains the placeholder {hit!r}"
+            raise BootstrapError(msg)
+        if lowered in (phrase.lower() for phrase in FORBIDDEN_PHRASES):
+            msg = f"invalid {field} {value!r}: it is a placeholder"
             raise BootstrapError(msg)
     return names
 
@@ -414,12 +458,20 @@ def _strip_template_only(text: str, relative: str) -> str:
     return stripped.rstrip("\n") + "\n" if stripped != text and stripped else stripped
 
 
-def _replace_once(text: str, old: str, new: str, site: str) -> str:
-    """Replace a site the template must hold exactly once."""
-    if text.count(old) != 1:
-        msg = f"{site}: expected exactly one {old.splitlines()[0]!r}; the template changed shape"
-        raise BootstrapError(msg)
-    return text.replace(old, new)
+@dataclass(frozen=True, slots=True)
+class _Site:
+    """Text a template file must hold exactly once, so the rename can edit it."""
+
+    file: str
+    text: str
+
+    def replace(self, content: str, new: str) -> str:
+        """Return content with the site replaced by new."""
+        if content.count(self.text) != 1:
+            first_line = self.text.splitlines()[0]
+            msg = f"{self.file}: expected exactly one {first_line!r}; the template changed shape"
+            raise BootstrapError(msg)
+        return content.replace(self.text, new)
 
 
 def _edit_pyproject(text: str, names: Names, today: dt.date) -> str:
@@ -431,17 +483,12 @@ def _edit_pyproject(text: str, names: Names, today: dt.date) -> str:
     text = EXCLUDE_NEWER_PATTERN.sub(
         f'exclude-newer = "{cutoff.isoformat()}T00:00:00Z"', text
     )
-    text = _replace_once(
-        text,
-        f'name = "{PLACEHOLDER_AUTHOR}"',
-        f"name = {json.dumps(names.author, ensure_ascii=False)}",
-        "pyproject.toml",
+    text = _Site("pyproject.toml", f'name = "{PLACEHOLDER_AUTHOR}"').replace(
+        text, f"name = {json.dumps(names.author, ensure_ascii=False)}"
     )
-    return _replace_once(
-        text,
-        f'description = "{PLACEHOLDER_DESCRIPTIONS[0]}"',
-        f"description = {json.dumps(names.description, ensure_ascii=False)}",
-        "pyproject.toml",
+    description = f'description = "{PLACEHOLDER_DESCRIPTIONS[0]}"'
+    return _Site("pyproject.toml", description).replace(
+        text, f"description = {json.dumps(names.description, ensure_ascii=False)}"
     )
 
 
@@ -460,7 +507,7 @@ def _edit_security(text: str, names: Names, _today: dt.date) -> str:
     new = SECURITY_CONTACT_TEMPLATE
     if names.contact_url:
         new = SECURITY_CONTACT_PERSON.format(contact_url=names.contact_url)
-    return _replace_once(text, SECURITY_CONTACT_TEMPLATE, new, "SECURITY.md")
+    return _Site("SECURITY.md", SECURITY_CONTACT_TEMPLATE).replace(text, new)
 
 
 def _edit_conduct(text: str, names: Names, _today: dt.date) -> str:
@@ -468,7 +515,7 @@ def _edit_conduct(text: str, names: Names, _today: dt.date) -> str:
     new = CONDUCT_CONTACT_TEMPLATE
     if names.contact_url:
         new = CONDUCT_CONTACT_PERSON.format(contact_url=names.contact_url)
-    return _replace_once(text, CONDUCT_CONTACT_TEMPLATE, new, "CODE_OF_CONDUCT.md")
+    return _Site("CODE_OF_CONDUCT.md", CONDUCT_CONTACT_TEMPLATE).replace(text, new)
 
 
 def _reset_changelog(_text: str, _names: Names, _today: dt.date) -> str:
@@ -504,7 +551,7 @@ def _replace_placeholders(text: str, names: Names) -> str:
 
 def _candidate_files(root: Path) -> list[str]:
     """Return the tracked text-file paths the rename may rewrite."""
-    untouched = {*KEEPABLE_FILES, *ALWAYS_REMOVED_FILES, *REGENERATED_FILES}
+    untouched = {*KEEPABLE_FILES, *REGENERATED_FILES}
     candidates = []
     for relative in _git(root, "ls-files", "-z").split("\0"):
         path = root / relative
@@ -549,8 +596,11 @@ def _origin_record(root: Path) -> str:
     commit = _git(root, "rev-parse", "HEAD").strip() if is_template_history else UNKNOWN
     tree = _git(root, "rev-parse", "HEAD^{tree}").strip()
     return (
-        "# Written once by the template's bootstrap, which refuses to run while this\n"
-        "# file exists. commit is the template commit this app was cut from, or\n"
+        "# Written once by the template's bootstrap. Keep it committed: the\n"
+        "# bootstrap refuses a second run while it exists, and\n"
+        "# tests/test_product_section.py reads it to know this is an app, whose\n"
+        "# AGENTS.md Product section must be filled in.\n"
+        "# commit is the template commit this app was cut from, or\n"
         '# "unknown" when this history does not start at the template\'s first commit\n'
         '# (GitHub\'s "Use this template" starts a new one). Then find it by tree:\n'
         "#   git log --format='%H %T' <template remote>/main | grep <tree>\n"
@@ -563,36 +613,65 @@ def _origin_record(root: Path) -> str:
 def plan(root: Path, names: Names, *, keep_bootstrap: bool = False) -> Plan:
     """Check the repository and compute every change, writing nothing.
 
+    Args:
+        root: The template checkout's resolved git root.
+        names: Validated values from `resolve_names`.
+        keep_bootstrap: Keep the template's own files instead of deleting them.
+
+    Returns:
+        Every write, deletion, and the `.template-origin` record.
+
     Raises:
         BootstrapError: The tree is not a clean, never-bootstrapped template
             root, or a file the rename edits no longer has the expected shape.
     """
     _check_work_tree(root, names)
     today = dt.datetime.now(tz=dt.UTC).date()
-    removed = (
-        ALWAYS_REMOVED_FILES
-        if keep_bootstrap
-        else ALWAYS_REMOVED_FILES + KEEPABLE_FILES
-    )
     return Plan(
         writes=_plan_writes(root, names, today),
-        deletions=removed,
+        deletions=() if keep_bootstrap else KEEPABLE_FILES,
         origin=_origin_record(root),
     )
 
 
+def _moved(relative: str, module: str) -> str:
+    """Return where a template path lives once the package directory is renamed."""
+    old_prefix = f"src/{PLACEHOLDER_MODULE}/"
+    if relative.startswith(old_prefix):
+        return f"src/{module}/{relative.removeprefix(old_prefix)}"
+    return relative
+
+
 def _apply(root: Path, names: Names, change: Plan) -> None:
-    """Write a computed plan: edits, deletions, the package rename, the origin."""
-    for relative, text in change.writes.items():
-        (root / relative).write_bytes(text.encode("utf-8"))
-    for relative in change.deletions:
-        (root / relative).unlink(missing_ok=True)
-    (root / "src" / PLACEHOLDER_MODULE).rename(root / "src" / names.module)
-    (root / ORIGIN_FILE).write_text(change.origin, encoding="utf-8")
+    """Write a computed plan, most failure-prone step first, this script last.
+
+    Raises:
+        WriteError: A write failed; the message names the steps already done
+            and how to restore the template.
+    """
+    done: list[str] = []
+    try:
+        (root / "src" / PLACEHOLDER_MODULE).rename(root / "src" / names.module)
+        done.append(f"renamed src/{PLACEHOLDER_MODULE} to src/{names.module}")
+        for relative, text in change.writes.items():
+            (root / _moved(relative, names.module)).write_bytes(text.encode("utf-8"))
+        done.append(f"rewrote {len(change.writes)} files")
+        (root / ORIGIN_FILE).write_text(change.origin, encoding="utf-8")
+        done.append(f"wrote {ORIGIN_FILE}")
+        for relative in change.deletions:
+            (root / relative).unlink(missing_ok=True)
+        done.append("deleted the template's own files")
+    except OSError as error:
+        raise WriteError(error, done) from error
 
 
 def bootstrap(root: Path, identity: Identity, *, keep_bootstrap: bool = False) -> Names:
     """Validate, plan, then rewrite the template at root into the new app.
+
+    Args:
+        root: The template checkout's git root.
+        identity: The values the app is named with.
+        keep_bootstrap: Keep the template's own files instead of deleting them.
 
     Returns:
         The validated names the app now carries.
@@ -600,6 +679,8 @@ def bootstrap(root: Path, identity: Identity, *, keep_bootstrap: bool = False) -
     Raises:
         BootstrapError: Before any file is written, when an input or the
             repository's state rules the run out.
+        WriteError: When writing failed part-way; its message says what was
+            done and how to restore the template.
     """
     root = root.resolve()
     names = resolve_names(identity)
@@ -635,6 +716,22 @@ def finish(root: Path) -> bool:
     return True
 
 
+def _check_invoked_from(repo_root: Path) -> None:
+    """Refuse a run from inside another checkout than the one holding this script.
+
+    The script rewrites its own checkout; run from a different repository (a
+    template checkout next to the new app, say), the rename would land
+    somewhere other than where the user is looking.
+    """
+    top_level = Path(_git(Path.cwd(), "rev-parse", "--show-toplevel").strip())
+    if top_level.resolve() != repo_root.resolve():
+        msg = (
+            f"run the bootstrap from inside {repo_root}, the checkout it belongs "
+            f"to; the current directory is in {top_level}"
+        )
+        raise BootstrapError(msg)
+
+
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=__doc__.splitlines()[0], allow_abbrev=False
@@ -658,7 +755,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--keep-bootstrap",
         action="store_true",
-        help="keep TEMPLATE.md, this script, and its test, untouched, for debugging",
+        help="keep TEMPLATE.md, this script, its test, and its skill reference, "
+        "untouched, for debugging",
     )
     return parser.parse_args(argv)
 
@@ -676,6 +774,7 @@ def main(argv: list[str] | None = None) -> int:
         contact_url=args.contact_url,
     )
     try:
+        _check_invoked_from(REPO_ROOT)
         names = bootstrap(REPO_ROOT, identity, keep_bootstrap=args.keep_bootstrap)
     except BootstrapError as error:
         print(f"error: {error}", file=sys.stderr)
@@ -684,8 +783,8 @@ def main(argv: list[str] | None = None) -> int:
     if not finish(REPO_ROOT):
         return 1
     print(
-        "Next: review and commit the rewrite as one commit, write AGENTS.md's "
-        "Product section, then continue with the starting-an-app skill."
+        "Next: write AGENTS.md's Product section, then commit it with the rewrite "
+        "as one `chore: bootstrap` commit, per the starting-an-app skill."
     )
     return 0
 

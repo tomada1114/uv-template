@@ -207,12 +207,17 @@ jobs:
           cd "$RUNNER_TEMP/app"
           # Stage everything (ignored files stay out) so git grep sees new files.
           git add --all
-          # .template-origin names the template repository on purpose.
-          if git grep --cached -n -I -i -E 'my-app|my_app|my app|uv-template|your-username|your name|you@example' -- . ':!.template-origin'; then
-            echo "::error::the bootstrap left a placeholder on the lines above"
-            exit 1
-          fi
+          # .template-origin names the template repository on purpose. The
+          # tokens never occur inside ordinary words, so any case is a leftover;
+          # the display placeholders are matched as whole words, as the
+          # template's sites spell them.
           status=0
+          if git grep --cached -n -I -i -E 'my-app|my_app|uv-template|your-username|you@example' -- . ':!.template-origin'; then
+            echo "::error::the bootstrap left a placeholder token on the lines above"; status=1
+          fi
+          if git grep --cached -n -I -w -E 'My App|Your Name' -- . ':!.template-origin'; then
+            echo "::error::the bootstrap left a display placeholder on the lines above"; status=1
+          fi
           for path in TEMPLATE.md scripts/bootstrap.py tests/test_bootstrap.py src/my_app \
             .agents/skills/starting-an-app/references/bootstrap.md; do
             if [ -e "$path" ]; then echo "::error::$path survived the bootstrap"; status=1; fi
@@ -227,8 +232,14 @@ jobs:
       - name: Assert the Product check fails on the unfilled section
         run: |
           cd "$RUNNER_TEMP/app"
-          if uv run --locked pytest -q tests/test_product_section.py; then
+          if uv run --locked pytest -q tests/test_product_section.py >"$RUNNER_TEMP/product.log" 2>&1; then
+            cat "$RUNNER_TEMP/product.log"
             echo "::error::tests/test_product_section.py passed on an app whose Product section is still TODO"
+            exit 1
+          fi
+          if ! grep -qF 'TODO: left in the Product section' "$RUNNER_TEMP/product.log"; then
+            cat "$RUNNER_TEMP/product.log"
+            echo "::error::tests/test_product_section.py failed, but not for the unfilled Product section"
             exit 1
           fi
 
