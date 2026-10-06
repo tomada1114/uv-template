@@ -14,7 +14,7 @@ from my_app.composition import Container, build_container
 from my_app.core.errors import AppError, InvalidTodoError, TodoNotFoundError
 from my_app.settings import Settings
 
-APP_TITLE = "my-app"
+APP_TITLE = "My App"
 
 
 def create_app(

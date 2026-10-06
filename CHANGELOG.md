@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The `starting-an-app` skill: the order of work from "Use this template" to the
+  first feature, which steps are a human's (ruleset, security settings, secrets),
+  `just labels`, choosing the API, the CLI, or both, removing the sample to-do
+  domain, and the first ADRs; `references/bootstrap.md` and
+  `references/private-repository.md` hold the detail. `TEMPLATE.md` now points
+  to it instead of listing the steps
+- `AGENTS.md` gained a `## Product` section of four `TODO:` entries, and
+  `tests/test_product_section.py` fails while one is left once `.template-origin`
+  exists (in the template it requires them)
+- CI's `Template Bootstrap Smoke` job: bootstraps a scratch clone with sample
+  values, fails on any surviving placeholder, fills the Product section, and runs
+  `just verify` there. It is not a required check
 - An application skeleton in `src/my_app/` (distribution and console script
   `my-app`): a framework-free `core` (frozen-dataclass domain model,
   `typing.Protocol` ports, services, an `AppError` base with
@@ -85,6 +97,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking:** `scripts/bootstrap.py` is rebuilt for the application template.
+  It replaces `my-app`, `my_app`, `My App` (the new display-name placeholder),
+  `MY_APP_`, `your-username/uv-template`, and `Your Name`; validates every value
+  and computes every edit in memory before the first write; refuses a dirty work
+  tree, a reserved name (the layers' names, the placeholders, Python keywords,
+  stdlib modules), and a second run; removes `<!-- template-only -->` blocks and
+  the template-only files; writes `.template-origin`; and runs `uv lock` and the
+  formatter. `--email` is gone and no email address is written: the new optional
+  `--contact-url` fills the contact sentences in `SECURITY.md` and
+  `CODE_OF_CONDUCT.md`, which otherwise point at the repository's private
+  vulnerability reporting and issue tracker. `--author` and `--description` are
+  now required; `--github-repository` also takes `OWNER/NAME`
 - **Breaking:** the package placeholder is now `my-app`/`my_app`, and
   `scripts/bootstrap.py` renames those instead of `my-package`/`my_package`
 - `scripts/bootstrap.py` accepts a GitHub repository name independent of the
