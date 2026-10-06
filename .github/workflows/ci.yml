@@ -100,11 +100,22 @@ jobs:
 
   coverage:
     name: Coverage
-    if: ${{ needs.test.result == 'success' }}
+    # Always runs (unless cancelled) so a failed shard fails this required
+    # check instead of skipping it, which a ruleset would count as passing.
+    if: ${{ !cancelled() }}
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Fail when a test shard did not succeed
+        env:
+          TEST_RESULT: ${{ needs.test.result }}
+        run: |
+          if [ "$TEST_RESULT" != "success" ]; then
+            echo "::error::test shards finished with result: $TEST_RESULT"
+            exit 1
+          fi
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
