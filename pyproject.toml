@@ -18,15 +18,12 @@ classifiers = [
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.14",
-    "Typing :: Typed",
 ]
 
 [project.urls]
 Homepage = "https://github.com/your-username/uv-template"
-Documentation = "https://your-username.github.io/uv-template"
 Repository = "https://github.com/your-username/uv-template"
 Issues = "https://github.com/your-username/uv-template/issues"
-Changelog = "https://github.com/your-username/uv-template/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 dev = [
@@ -38,7 +35,6 @@ dev = [
     "pytest-xdist>=3.6",
     "ruff>=0.15.22",
 ]
-docs = ["mkdocs-material>=9.7.6", "mkdocstrings[python]>=1.0.6"]
 
 # --------------------------------------------------------------------------- #
 #  uv

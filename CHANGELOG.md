@@ -19,8 +19,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A safer bootstrap flow with validated package/repository names, collision
   checks, syntax-safe metadata quoting, and protection against rewriting
   untracked, symlinked, or secret files after a Git failure
-- Distribution smoke tests now install and import both wheels and source
-  distributions in isolated environments
 - Initial project structure
 - `scripts/bootstrap.py` deterministic template initializer: renames the
   package and replaces every placeholder (`my-package`, `my_package`,
@@ -31,10 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its own scaffolding deleted unless `--keep-bootstrap` is passed.
   `--github-user` is now required, since omitting it shipped a dead
   security-report URL in `.github/ISSUE_TEMPLATE/config.yml`
-- `just verify` — a non-mutating `lint -> docs-check -> smoke -> test` gate
+- `just verify` — a non-mutating `lock-check -> agents-check -> lint -> test-skills -> test` gate
   for PRs and completion claims, distinct from `just check` (which mutates
   the tree via `fmt` first and never proves the committed tree is green)
-- `just docs-check`, `just test-durations`, and `just worktree-clean`
+- `just test-durations` and `just worktree-clean`
   recipes (the last removes `.claude/worktrees/*` whose branch already has
   a merged PR)
 - A sharded CI test job (`pytest-split` + `pytest-xdist`, 4 shards) with a
@@ -42,17 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--cov-fail-under=80` once, replacing the single-process test run
 - `zizmor` security lint for GitHub Actions workflows, wired into both CI
   and pre-commit
-- PR auto-labeling by Conventional Commit type, so the release changelog
-  categories actually populate
+- PR auto-labeling by Conventional Commit type
 - `TEMPLATE.md`, holding the template's own Design Philosophy and setup
-  checklist so `README.md` ships as a plain library README. The checklist
-  gained two previously missing but required steps: registering PyPI
-  Trusted Publishing (environment `release`) and enabling GitHub Pages
-  from the `gh-pages` branch
-- A PR-time `mkdocs build --strict` job in CI, so documentation breakage
-  surfaces on the pull request instead of after the merge
-- `workflow_dispatch` on the release workflow, so a failed publish can be
-  retried without deleting and re-pushing the tag
+  checklist so `README.md` ships as a plain application README
 - `.devcontainer/devcontainer.json` for a ready-to-use dev environment
 - `.github/ISSUE_TEMPLATE/config.yml` disabling blank issues and linking
   security reports to GitHub Security Advisories
@@ -68,38 +58,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   check) and mypy before an agent turn ends when Python files changed
 - Committed Claude Code permission allowlist for local development
   commands — commit/push/PR creation stay behind approval
-- `.claude/skills/release-workflow/SKILL.md` covering the full release
-  path: preflight, version pick, release PR, tag, and pipeline watch
-
-### Removed
-
-- The agent hooks under `.agents/hooks/` (`guard.py`, `format.py`,
-  `stop_check.py`, `hook_payload.py`) and their wiring in
-  `.claude/settings.json` and `.codex/hooks.json`; the guard rails now run as
-  git hooks for every author, and `AGENTS.md` maps each former behavior to its
-  replacement
-- The empty `tests/conftest.py` — nothing needed it
-- `docs/getting-started.md`, and the hand-maintained copy of the README in
-  `docs/index.md`. The docs home page now includes `README.md` via
-  `--8<--`, the same way `docs/contributing.md` includes `CONTRIBUTING.md`,
-  so a public API change no longer has to be mirrored into four files
-- The Scorecard, `pip-audit`, and dependency-review workflows. With zero
-  runtime dependencies they audit only this repo's dev tooling, and both
-  Scorecard and dependency review need a public repo or GHAS, which a
-  freshly spawned private repo does not have
-- The Codecov upload step and README badge — coverage is already gated in
-  CI by `--cov-fail-under=80`, and the upload needs a per-repo
-  `CODECOV_TOKEN` that every spawned repo would have to provision
-- The redundant `test` job in the release workflow; the same commit
-  already passed CI on `main` before it was tagged
 
 ### Changed
 
 - `scripts/bootstrap.py` accepts a GitHub repository name independent of the
-  PyPI distribution name and replaces placeholders without cascading into new
+  distribution name and replaces placeholders without cascading into new
   values
-- Build and smoke recipes clear stale artifacts, and documentation deployment
-  now rebuilds when `README.md` changes
 - Coverage now names the measured code once, in `[tool.coverage.run]
   source`, so the justfile / CI / CONTRIBUTING command is just `pytest
   --cov ...` and survives the bootstrap rename untouched
@@ -130,26 +94,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - zizmor findings are now exempted with inline `# zizmor: ignore[...]`
   comments instead of line numbers in `.github/zizmor.yml` (removed), which
   stopped matching whenever a workflow shifted by a line
-- The docs deploy no longer triggers on `pyproject.toml` / `uv.lock`, so a
-  dependency bump no longer redeploys the documentation
 - The PR title check no longer runs on `synchronize` — the title cannot
   change on push
 - Moved coverage enforcement (`--cov-fail-under=80`) out of pytest
   `addopts` and into `just test` / CI, so a single test can be run in
   isolation without failing the coverage gate
-- Restructured the release pipeline: a dedicated `build` job now builds
-  and attests provenance once; `publish` and the GitHub Release both
-  consume that artifact instead of rebuilding
 - Scoped all workflow permissions to job level, added `timeout-minutes`
   to every job, added `--locked` to every `uv sync` in CI, and disabled
-  checkout credential persistence outside the docs deploy job
+  checkout credential persistence
 - Simplified `src/my_package/__init__.py`'s version resolution to the
   standard `importlib.metadata.version()` pattern, dropping the ~50-line
   local-pyproject-walking fallback chain
 - Replaced the bespoke `no-commit-to-main` pre-commit hook with the
   pre-commit-hooks builtin `no-commit-to-branch`
 - Unified mypy targets (`src scripts tests`) across justfile, CI,
-  release, and pre-commit
+  and pre-commit
 - Expanded ruff rule set (`D`, `PT`, `N`, `TRY`, `EM`, `DTZ`, `RSE`,
   `PGH`) to match the Python convention in `AGENTS.md`; renamed `TCH` -> `TC`
 - The post-edit format hook now formats only the edited Python file and
@@ -172,8 +131,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   behavior, a skipped step, proving no network call happened); the
   300-line/40-line design rule is now a review trigger, not an absolute limit
 - The PR template's first checklist item is now `just verify` instead of
-  `just check`, matching the non-mutating gate; `create-pr` and
-  `release-workflow` were updated to match
+  `just check`, matching the non-mutating gate; `create-pr` was
+  updated to match
+
+### Removed
+
+- The agent hooks under `.agents/hooks/` (`guard.py`, `format.py`,
+  `stop_check.py`, `hook_payload.py`) and their wiring in
+  `.claude/settings.json` and `.codex/hooks.json`; the guard rails now run as
+  git hooks for every author, and `AGENTS.md` maps each former behavior to its
+  replacement
+- **Breaking:** library publishing — the template now targets applications.
+  The PyPI release workflow, the distribution smoke test (`just build`,
+  `just smoke`), the mkdocs site (`just docs`, `just docs-check`, the `docs`
+  dependency group), `py.typed`, and the `release-workflow` skill are gone
+- The empty `tests/conftest.py` — nothing needed it
+- The Scorecard, `pip-audit`, and dependency-review workflows. With zero
+  runtime dependencies they audit only this repo's dev tooling, and both
+  Scorecard and dependency review need a public repo or GHAS, which a
+  freshly spawned private repo does not have
+- The Codecov upload step and README badge — coverage is already gated in
+  CI by `--cov-fail-under=80`, and the upload needs a per-repo
+  `CODECOV_TOKEN` that every spawned repo would have to provision
 
 ### Fixed
 

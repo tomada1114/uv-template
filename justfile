@@ -67,25 +67,8 @@ lock:
 # Run all checks: format, lint, test
 check: fmt lint test
 
-# Serve documentation locally
-docs:
-    uv run --locked mkdocs serve
-
-# Build documentation and fail on warnings
-docs-check:
-    uv run --locked mkdocs build --strict
-
-# Build distribution packages
-build:
-    uv build --clear
-
-# Build and smoke-test distributions in temporary virtual environments
-smoke:
-    uv build --clear
-    uv run --locked python scripts/smoke_test.py
-
-# Non-mutating local release/PR gate (fail-fast: cheap gates before the suite)
-verify: lock-check agents-check lint test-skills docs-check smoke test
+# Non-mutating local PR gate (fail-fast: cheap gates before the suite)
+verify: lock-check agents-check lint test-skills test
 
 # Each suite is stdlib unittest so it needs no project dependency; the
 # .claude/skills mirror is the same bytes, so only the authored tree runs.
@@ -120,7 +103,7 @@ labels *ARGS:
 
 # Remove build artifacts
 clean:
-    rm -rf dist/ build/ .mypy_cache/ .ruff_cache/ .pytest_cache/ htmlcov/ .coverage .coverage.* coverage.xml site/
+    rm -rf dist/ build/ .mypy_cache/ .ruff_cache/ .pytest_cache/ htmlcov/ .coverage .coverage.* coverage.xml
     find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
     find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
 
