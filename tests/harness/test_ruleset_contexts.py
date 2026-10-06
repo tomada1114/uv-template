@@ -38,10 +38,18 @@ def _required_contexts(ruleset: object) -> list[str] | None:
     for rule in ruleset["rules"]:
         if not isinstance(rule, dict) or rule.get("type") != "required_status_checks":
             continue
-        checks = rule.get("parameters", {}).get("required_status_checks")
-        if not isinstance(checks, list):
+        parameters = rule.get("parameters")
+        checks = (
+            parameters.get("required_status_checks")
+            if isinstance(parameters, dict)
+            else None
+        )
+        if not isinstance(checks, list) or not all(
+            isinstance(check, dict) and isinstance(check.get("context"), str)
+            for check in checks
+        ):
             return None
-        contexts.extend(str(check.get("context")) for check in checks)
+        contexts.extend(check["context"] for check in checks)
     return contexts
 
 
@@ -84,11 +92,9 @@ def test_path_filtered_workflow_jobs_are_not_every_pr_checks() -> None:
 
     assert "Scan uv.lock" not in available
     assert "Secret Scan (full history)" not in available
-    assert {
-        "Analyze (python)",
-        "Analyze (actions)",
-        "Test (shard 1/4)",
-    } <= available.keys()
+    # ci.yml's matrix job, which every app keeps (codeql.yml may be deleted on a
+    # private repository).
+    assert {"Test (shard 1/4)", "Test (shard 4/4)"} <= available.keys()
 
 
 # --- fixtures ---
@@ -139,6 +145,12 @@ def test_ruleset_contexts_missing_ruleset_fails(make_root: MakeRoot) -> None:
             '{"rules": [{"type": "required_status_checks", "parameters": {}}]}',
             r"no readable rules",
             id="no-check-list",
+        ),
+        pytest.param(
+            '{"rules": [{"type": "required_status_checks", "parameters": '
+            '{"required_status_checks": [{"integration_id": 1}]}}]}',
+            r"no readable rules",
+            id="check-without-context",
         ),
     ],
 )

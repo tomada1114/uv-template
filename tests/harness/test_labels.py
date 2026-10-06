@@ -292,6 +292,35 @@ def test_label_findings_without_labels_file_fails(tmp_path: Path) -> None:
     assert label_findings(tmp_path) == [f"{LABELS} is missing"]
 
 
+@pytest.mark.parametrize(
+    ("files", "message"),
+    [
+        pytest.param(
+            {DEPENDABOT: "version: 2\nupdates:\n  package-ecosystem: pip\n"},
+            r"dependabot\.yml: expected a list item",
+            id="dependabot-updates-not-a-list",
+        ),
+        pytest.param(
+            {f"{ISSUE_FORMS}/f.yml": "labels:\n  - bug\n    triage\n"},
+            r"f\.yml: expected a list of one-line strings",
+            id="issue-form-multi-line-item",
+        ),
+        pytest.param(
+            {f"{ISSUE_FORMS}/f.yml": "labels: [bug,\n  triage]\n"},
+            r"f\.yml: a value and a block under one key",
+            id="issue-form-multi-line-flow-list",
+        ),
+    ],
+)
+def test_label_findings_unreadable_file_fails_closed(
+    make_root: MakeRoot, files: dict[str, str], message: str
+) -> None:
+    root = make_root(files)
+
+    with pytest.raises(UnreadableYamlError, match=message):
+        label_findings(root)
+
+
 def test_label_findings_pr_label_without_readable_label_fails_closed(
     make_root: MakeRoot,
 ) -> None:
