@@ -8,14 +8,15 @@ on:
       - edited
       - synchronize
 
-permissions:
-  pull-requests: write
+permissions: {}
 
 jobs:
   label:
     name: Label by Conventional Commit type
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      pull-requests: write # gh pr edit --add-label
     steps:
       - name: Apply label from PR title type
         env:

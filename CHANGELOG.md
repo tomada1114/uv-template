@@ -20,8 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tests/test_apply_ruleset.py`, its workflow scanner now shared in
   `tests/harness/_workflows.py`); and a label pr-label.yml, an issue form, or
   dependabot.yml applies that `.github/labels.yml` does not declare exactly once
-  (moved from `tests/test_sync_labels.py`). The Product check stays
-  `tests/test_product_section.py`, which the recipe also runs
+  (moved from `tests/test_sync_labels.py`); and workflow hygiene — a `uses:`
+  not pinned to a commit SHA with a `# v` comment, a job without
+  `timeout-minutes`, top-level `permissions` wider than `contents: read`, a
+  checkout that keeps its credentials, `pull_request_target`,
+  `continue-on-error`, `|| true`, or a concurrency that can cancel a push run on
+  main. The Product check stays `tests/test_product_section.py`, which the
+  recipe also runs
 - The `starting-an-app` skill: the order of work from "Use this template" to the
   first feature, which steps are a human's (ruleset, security settings, secrets),
   `just labels`, choosing the API, the CLI, or both, removing the sample to-do
@@ -120,6 +125,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- CI, CodeQL, and OSV-Scanner key their concurrency group on the commit SHA
+  outside a pull request, and CI cancels only superseded pull-request runs, so
+  no push to main is cancelled or replaced while pending; `check-pr-title.yml`
+  and `pr-label.yml` move their `pull-requests` scope from the top level onto
+  the job, leaving `permissions: {}` at the top
 - `create-pr` and `smart-commit` drop their `allowed-tools` and `metadata`
   frontmatter keys, which `tests/harness/test_skills.py` now rejects, and
   `authoring-skills` names the harness wherever it said no check enforced a rule

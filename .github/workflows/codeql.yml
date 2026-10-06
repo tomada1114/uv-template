@@ -12,9 +12,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
   # Only superseded PR runs are cancelled; main pushes and scheduled or
-  # dispatched scans always finish.
+  # dispatched scans always finish. Outside a pull request the group is the
+  # run's SHA, so a newer push cannot replace a pending one either.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
