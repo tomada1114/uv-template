@@ -6,16 +6,16 @@
 - [Standing prohibitions for every brief](#standing-prohibitions-for-every-brief)
 - [Priority research and labeling](#priority-research-and-labeling-executor)
 - [Implementation](#implementation-step-3)
-- [Review](#review-step-4)
-- [Review fix](#review-fix-step-4)
+- [Review fix](#review-fix-step-5)
 - [CI repair](#ci-repair-step-6-only-on-fail)
 - [Design decision](#design-decision-step-8b)
 
 Every brief this skill hands off is a fully self-contained prompt: whoever runs it
 cannot ask a question back, so a hole in it returns as a decision made alone rather than
 as a question. Leave nothing merge-gating unguessed. The parent — this session — owns
-every GitHub **write** (opening the PR, `link_check.sh`, `ci_watch.sh`, `land_pr.sh`,
-labels, comments) and every merge-gating judgment; a brief only touches code inside the
+every GitHub **write** (opening the PR, `link_check.sh`, `land_pr.sh`, labels, comments),
+every wait (`review_watch.py`, `ci_watch.sh`), and every merge-gating judgment — triaging
+the PR review's findings included; a brief only touches code inside the
 checkout.
 
 ## Inline or by tier
@@ -51,9 +51,9 @@ checkout in serial mode, that issue's worktree (`<runstate>/worktrees/<n>`) in p
 mode. **Two writers never share a working directory** — that invariant is what makes
 parallel mode safe, and filling `{workdir}` with the main checkout for two concurrent
 runs breaks it silently rather than loudly. `{holding_dir}` is `<runstate>/holding/<n>/`
-for that issue — create it (`mkdir -p`) before handing a brief off. The read-only
-templates are the exception, and only because they write nothing: the review and the
-design brief read a checkout others are working in without disturbing it. Everything
+for that issue — create it (`mkdir -p`) before handing a brief off. The design brief is
+the exception, and only because it writes nothing in the tree: it reads a checkout others
+are working in without disturbing it. Everything
 downstream of implementation still runs one PR at a time in the parent.
 
 ## Standing prohibitions for every brief
@@ -113,21 +113,14 @@ this mode exists to avoid.
 
 Prompt body: [agent-implementation.md](agent-implementation.md).
 
-## Review (step 4)
+## Review fix (step 5)
 
-The standing review: one independent, **read-only** pass against the branch, in a
-context that did not write it — **`architect`** where tiers exist, otherwise followed
-inline. See [implement-and-review.md#review](implement-and-review.md#review), which also
-holds the optional Claude Code path.
-
-Prompt body: [agent-review.md](agent-review.md).
-
-## Review fix (step 4)
-
-Only for findings this session has already read and accepted. Zero accepted findings →
-nothing to run. One brief per branch that has any, handed to **`executor`** or followed
-inline, always inside that branch's own `{workdir}` — in parallel mode never the main
-checkout, which sits on the default branch.
+There is no review brief: the review is the pull request's own, read by
+`review_watch.py` ([pr-ci-merge.md](pr-ci-merge.md#waiting-for-the-pr-review)). This
+brief is only for the findings of that review this session has already read and
+accepted. Zero accepted findings → nothing to run. One brief per PR that has any, handed
+to **`executor`** or followed inline, always inside that branch's own `{workdir}` — in
+parallel mode never the main checkout, which sits on the default branch.
 
 Prompt body: [agent-review-fix.md](agent-review-fix.md).
 

@@ -536,5 +536,69 @@ class LandPrTest(unittest.TestCase):
         self.assertEqual(mutating, [])
 
 
+class ReviewLogGuardTest(unittest.TestCase):
+    """--review-log: an open PR merges only on review_watch.py's CLEAN or
+    FINDINGS verdict for this same PR."""
+
+    def _land(self, pr, log_text):
+        merge = ("pr", "merge", pr, "--squash", "--delete-branch")
+        with tempfile.TemporaryDirectory() as td:
+            log = Path(td) / "review.log"
+            if log_text is not None:
+                log.write_text(log_text, encoding="utf-8")
+            proc, calls = run_script(
+                [pr, "--method", "squash", "--review-log", str(log)],
+                {
+                    state_prefix(pr): "OPEN\n",
+                    draft_prefix(pr): "false\n",
+                    merge_state_prefix(pr): "CLEAN\n",
+                    merge: "",
+                },
+                sequences={state_prefix(pr): ["OPEN\n", "MERGED\n"]},
+            )
+        merges = [call for call in calls if call[:2] == ["pr", "merge"]]
+        return proc, merges
+
+    def test_a_clean_review_lets_the_merge_through(self):
+        proc, merges = self._land("61", "verdict: CLEAN\npr: 61\nfindings: 0\n")
+
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("review: CLEAN\n", proc.stdout)
+        self.assertIn("result: MERGED\n", proc.stdout)
+        self.assertEqual(len(merges), 1)
+
+    def test_a_findings_review_lets_the_merge_through(self):
+        proc, merges = self._land("62", "verdict: FINDINGS\npr: 62\nfindings: 2\n")
+
+        self.assertIn("result: MERGED\n", proc.stdout)
+        self.assertEqual(len(merges), 1)
+
+    def test_an_unsettled_review_refuses_the_merge(self):
+        for verdict in ("PENDING_TIMEOUT", "NO_REVIEW", "ERROR"):
+            with self.subTest(verdict=verdict):
+                proc, merges = self._land("63", f"verdict: {verdict}\npr: 63\n")
+
+                self.assertEqual(proc.returncode, 1)
+                self.assertIn(f"review: {verdict}\n", proc.stdout)
+                self.assertIn("result: REVIEW_UNSETTLED\n", proc.stdout)
+                self.assertEqual(merges, [])
+
+    def test_a_missing_log_refuses_the_merge(self):
+        proc, merges = self._land("64", None)
+
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("review: UNREADABLE\n", proc.stdout)
+        self.assertIn("result: REVIEW_UNSETTLED\n", proc.stdout)
+        self.assertEqual(merges, [])
+
+    def test_another_prs_log_refuses_the_merge(self):
+        proc, merges = self._land("65", "verdict: CLEAN\npr: 66\n")
+
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("result: REVIEW_UNSETTLED\n", proc.stdout)
+        self.assertIn("log for PR #66, not #65", proc.stdout)
+        self.assertEqual(merges, [])
+
+
 if __name__ == "__main__":
     unittest.main()

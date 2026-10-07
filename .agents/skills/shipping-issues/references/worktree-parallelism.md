@@ -115,7 +115,7 @@ cause that is fully understood. Tell them apart by reading the failure:
 When it is the layout, say so and carry the diagnosis forward rather than letting three
 sub-agents each rediscover it:
 
-- Name the exact failing assertion in every step 3 and step 4 prompt for that batch,
+- Name the exact failing assertion in every step 3 and review fix prompt for that batch,
   with the cause, and say it is **not theirs to fix and not to be silenced** — no
   skip-list entry added to quiet it, which would be weakening a gate. Require each agent
   to say in `VERIFY` whether that failure was the _only_ remaining red, which keeps a
