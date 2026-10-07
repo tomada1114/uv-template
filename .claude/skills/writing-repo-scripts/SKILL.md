@@ -2,7 +2,7 @@
 name: writing-repo-scripts
 description: >
   Covers the contract for a repository script under scripts/*.py (sync_agents,
-  sync_labels, apply_ruleset, check_staged): stdlib-only imports, the module
+  sync_labels, apply_ruleset, check_staged, bootstrap): stdlib-only imports, the module
   docstring with Usage, main(argv) returning an exit code, failures reported on stderr
   as ERR_<STAGE>_<KIND> with Expected and Next lines, a gh or git subprocess with a
   fixed argv, scripts that write to GitHub, and tests in tests/test_<script>.py that
@@ -63,6 +63,11 @@ What the scripts share, read from `scripts/*.py`:
 
 ## The stderr contract
 
+`sync_agents.py`, `sync_labels.py`, and `apply_ruleset.py` follow this reporting
+contract. `check_staged.py` uses a hook message read at commit time instead;
+`bootstrap.py` uses one-shot error messages because it deletes itself after setup.
+The remaining shape and subprocess rules still apply to those exceptions.
+
 A failure is read by an agent at least as often as by a person, so a report says what
 failed, the path or value involved, what was expected, and the next safe command — and
 never a secret or a matched credential. The shape, from `apply_ruleset.py`'s `_fail`
@@ -77,8 +82,9 @@ Next: fix <repo>/.github/rulesets/main.json and rerun `just ruleset`
 
 - The code is `ERR_<STAGE>_<KIND>`: the script's area, then the failure —
   `ERR_AGENTS_DRIFT`, `ERR_AGENTS_UNSUPPORTED_ENTRY`, `ERR_LABELS_FILE`,
-  `ERR_LABELS_SYNC`, `ERR_RULESET_GH`. A refusal with its own remedy gets its own code
-  rather than a shared one: `ERR_RULESET_PLAN_UNSUPPORTED` apart from `ERR_RULESET_GH`.
+  `ERR_LABELS_SYNC`, `ERR_LABELS_GH`, `ERR_RULESET_GH`. A refusal with its own remedy
+  gets its own code rather than a shared one: `ERR_RULESET_PLAN_UNSUPPORTED` apart
+  from `ERR_RULESET_GH`.
 - Reports go to stderr; stdout is for the result a caller may parse.
 - A code is a contract: a test asserts it on `capsys.readouterr().err`
   (`tests/test_sync_agents.py`), so renaming one is a change a caller notices.
