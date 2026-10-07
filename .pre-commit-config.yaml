@@ -46,6 +46,14 @@ repos:
       - id: zizmor
         stages: [pre-commit]
 
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        stages: [pre-commit]
+        # .claude/skills/ is a byte-identical mirror of .agents/skills/.
+        exclude: ^\.claude/skills/
+
   - repo: local
     hooks:
       # Use the same locked Ruff as local verification and CI. Preserve the

@@ -76,6 +76,8 @@ AGENTS.md's "Enforcement layers" names the layers. Keeping them in step is this 
 | Harness drift (`tests/harness`) and the Product section | — | `check-harness` | `Test` shards, then `Coverage` |
 | typos | `typos` | — | `Spell Check` |
 | zizmor | `zizmor` | — | `Workflow Security Lint` |
+| shellcheck (skill `.sh` scripts) | `shellcheck` | — | `Lint & Type Check` |
+| Skill scripts under Python 3.9 | — | — | `Skill Scripts (Python 3.9)` (not required) |
 | Staged secrets | `check-staged` | — | the weekly gitleaks history scan |
 
 - A check added to `just verify` gets the matching CI step, and the reverse. Nothing
@@ -92,6 +94,8 @@ AGENTS.md's "Enforcement layers" names the layers. Keeping them in step is this 
 - CI runs zizmor through the pinned pre-commit hook with `--all-files`, sharing
   its version and file selection with local checks, including Dependabot and composite
   action definitions. Update the hook revision rather than introducing a separate CI pin.
+- CI's `Lint & Type Check` runs shellcheck through the pinned `shellcheck-py`
+  pre-commit hook with `--all-files`; the hook excludes the `.claude/skills/` mirror.
 - `just verify` runs neither typos nor zizmor; the pre-commit hook does, so prose and
   workflow changes are checked at commit time and in CI. AGENTS.md's "Validating a
   change" gives the command for each.

@@ -11,6 +11,9 @@ The reverse holds for awk: Ubuntu's default awk is mawk, whose 1.3.4 release
 as `{0,3}` in a regex literal, while macOS awk and GitHub's runners (gawk)
 accept it. So no awk regex in a bundled script uses one.
 
+CI runs this on Linux, where /bin/bash is bash 5, so CI cannot check bash 3.2: only
+a run on a Mac (every `just verify` there) does.
+
 Run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
      (from the shipping-issues skill directory)
 """
