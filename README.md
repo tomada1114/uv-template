@@ -124,8 +124,9 @@ just run --help # the CLI, through uv
 
 The git hooks are not optional: they carry the secret gate that refuses a
 commit staging a secret, for every author. `just install` installs the
-dependencies and the `pre-commit` and `pre-merge-commit` hooks, then fails if
-either hook is missing. `ALLOW_MISSING_GIT_HOOKS=1 just install` still tries
+dependencies and the hooks `.pre-commit-config.yaml`'s
+`default_install_hook_types` lists (`pre-commit` and `pre-merge-commit`), then
+fails if any of them is missing. `ALLOW_MISSING_GIT_HOOKS=1 just install` still tries
 to install them but only warns when that fails (`CI=true` does the same).
 Outside a Git repository — a "Use this template" copy before `git init` — it
 skips the hooks. Without Just, run `uv sync --all-groups --locked` and then
