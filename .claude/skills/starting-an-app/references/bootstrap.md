@@ -60,7 +60,7 @@ the script's own exits 1 with one `error:` line. Neither writes anything:
 - a reserved name, checked in both the hyphenated and the underscored form: `app`,
   `src`, `test`, `tests`, `core`, `api`, `cli`, `adapters`, `settings`, `my-app`,
   `my_app`; a package the app or its tooling imports (`fastapi`, `typer`, `pydantic`,
-  `pydantic_settings`, `uvicorn`, `httpx`, `starlette`, `pytest`, `ruff`, `mypy`),
+  `pydantic_settings`, `uvicorn`, `httpx`, `httpx2`, `starlette`, `pytest`, `ruff`, `mypy`),
   which the app's own module would shadow; every `scripts/*.py` stem; any Python
   keyword; and any standard-library module (`sys.stdlib_module_names`);
 - a value containing a placeholder token (`my-app`, `my_app`, `uv-template`,

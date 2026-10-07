@@ -37,7 +37,10 @@ says which gate looks wrong and why, and a human decides.
 - **mypy:** turning off `strict` or any `warn_*` or `enable_error_code` entry; a new
   `[[tool.mypy.overrides]]` block; a `# type: ignore` without an error code and a
   reason; a cast that only silences an error.
-- **pytest:** removing `--strict-markers` or `--strict-config`; `@pytest.mark.skip`,
+- **pytest:** removing `--strict-markers` or `--strict-config`; removing
+  `filterwarnings = ["error"]`, or adding an `ignore` entry to it (or a
+  `@pytest.mark.filterwarnings` ignore) without a reason comment and a follow-up issue,
+  or one broader than the single warning it names; `@pytest.mark.skip`,
   `xfail`, a deleted test, or a weakened assertion.
 - **The lock:** removing `--locked` from a recipe or a CI step, or `lock-check` from
   `just verify`.

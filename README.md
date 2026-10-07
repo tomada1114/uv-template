@@ -93,8 +93,8 @@ therefore be removed by deleting files, without touching the core:
 - **Drop the API:** delete `src/my_app/api/`, `src/my_app/cli/serve.py` and
   its registration line in `src/my_app/cli/main.py`, `tests/api/`, and
   `tests/cli/test_serve.py`; remove the `fastapi` and `uvicorn` dependencies,
-  the `httpx` dev dependency (unless you keep the LLM layer, whose adapter
-  tests use it), and the `just dev` recipe; run `uv lock`. Remove
+  the `httpx2` dev dependency `TestClient` runs on, the `httpx` dev dependency
+  (unless you keep the LLM layer, whose adapter tests use it), and the `just dev` recipe; run `uv lock`. Remove
   the lines that name `just dev` (this README's Development block and
   `AGENTS.md`'s Quick Reference); `just check-harness` fails while one remains.
   Delete the `.agents/skills/building-api-routes/` skill and its row in
