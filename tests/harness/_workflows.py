@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from fnmatch import fnmatchcase
 from typing import TYPE_CHECKING
 
 from tests.harness._yaml import (
@@ -20,7 +21,9 @@ from tests.harness._yaml import (
     flow_list,
     mapping,
     scalar,
+    scalar_list,
     sequence,
+    split_comment,
 )
 
 if TYPE_CHECKING:
@@ -31,6 +34,13 @@ WORKFLOWS_DIR = ".github/workflows"
 _MATRIX_REF = re.compile(r"\$\{\{\s*matrix\.(?P<key>[A-Za-z0-9_-]+)\s*\}\}")
 _EXPR = re.compile(r"^\$\{\{\s*(?P<body>.*?)\s*\}\}$")
 _GUARDS = {"!cancelled()", "always()"}
+# The ruleset protects the default branch; a pull_request filter has to let a PR
+# into it through, on each of the events a PR's checks are reported for.
+DEFAULT_BRANCH = "main"
+PR_ACTIVITY = frozenset({"opened", "synchronize", "reopened"})
+_PR_FILTERS = frozenset(
+    {"types", "branches", "branches-ignore", "paths", "paths-ignore"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,7 +99,22 @@ def _unfiltered_pull_request(events: Mapping, path: Path) -> bool:
     if pr_value not in {"", "{}"}:
         msg = f"{path.name}: cannot read pull_request: {pr_value!r}"
         raise UnreadableYamlError(msg)
-    return not {"paths", "paths-ignore"} & mapping(pr_block, path).keys()
+    filters = mapping(pr_block, path)
+    if unknown := sorted(filters.keys() - _PR_FILTERS):
+        msg = f"{path.name}: unknown pull_request filter {unknown}"
+        raise UnreadableYamlError(msg)
+    if {"paths", "paths-ignore", "branches-ignore"} & filters.keys():
+        return False
+    if "branches" in filters:
+        patterns = scalar_list(filters["branches"], path)
+        # A `!` pattern re-excludes branches; reading the order is not worth it.
+        if any(p.startswith("!") for p in patterns) or not any(
+            fnmatchcase(DEFAULT_BRANCH, p) for p in patterns
+        ):
+            return False
+    if "types" in filters:
+        return set(scalar_list(filters["types"], path)) >= PR_ACTIVITY
+    return True
 
 
 def _matrix_values(job: Mapping, key: str, path: Path) -> list[str]:
@@ -120,17 +145,22 @@ def _checks(path: Path) -> list[Check] | None:
                 for name in names
                 for value in _matrix_values(job, key, path)
             ]
-        if_expr = job["if"][0] if "if" in job else None
+        if_expr = split_comment(job["if"][0])[0] if "if" in job else None
         checks.extend(Check(name, if_expr, "needs" in job) for name in names)
     return checks
 
 
 def every_pr_checks(workflows_dir: Path) -> dict[str, Check]:
-    """Return checks from workflows whose pull_request trigger is unfiltered."""
+    """Return checks from workflows whose pull_request trigger is unfiltered.
+
+    Two jobs with one name report one context; the skippable one is kept, so a
+    duplicate can only make the judgement stricter.
+    """
     found: dict[str, Check] = {}
     for path in sorted(workflows_dir.glob("*.y*ml")):
         for check in _checks(path) or []:
-            found[check.name] = check
+            if check.name not in found or can_skip(check):
+                found[check.name] = check
     return found
 
 

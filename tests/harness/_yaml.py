@@ -71,7 +71,11 @@ def mapping(lines: list[str], path: Path) -> Mapping:
         if match is None:
             msg = f"{path.name}: cannot read {line!r}"
             raise UnreadableYamlError(msg)
-        result[match["key"].strip("\"'")] = (
+        key = match["key"].strip("\"'")
+        if key in result:
+            msg = f"{path.name}: duplicate key {key!r} in {line!r}"
+            raise UnreadableYamlError(msg)
+        result[key] = (
             match["value"] or "",
             children(lines, index, path),
         )

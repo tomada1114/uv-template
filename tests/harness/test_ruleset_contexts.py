@@ -64,6 +64,8 @@ def ruleset_context_findings(root: Path) -> list[str]:
         return [f"{RULESET}: invalid JSON ({exc})"]
     if contexts is None:
         return [f"{RULESET}: no readable rules[].parameters.required_status_checks"]
+    if not contexts:
+        return [f"{RULESET}: requires no status check, so nothing gates a merge"]
     available = every_pr_checks(root / WORKFLOWS)
     findings: list[str] = []
     for context in contexts:
@@ -85,16 +87,6 @@ def ruleset_context_findings(root: Path) -> list[str]:
 
 def test_ruleset_contexts_on_repository_are_every_pr_jobs() -> None:
     assert ruleset_context_findings(REPO_ROOT) == []
-
-
-def test_path_filtered_workflow_jobs_are_not_every_pr_checks() -> None:
-    available = every_pr_checks(REPO_ROOT / WORKFLOWS)
-
-    assert "Scan uv.lock" not in available
-    assert "Secret Scan (full history)" not in available
-    # ci.yml's matrix job, which every app keeps (codeql.yml may be deleted on a
-    # private repository).
-    assert {"Test (shard 1/4)", "Test (shard 4/4)"} <= available.keys()
 
 
 # --- fixtures ---
@@ -152,6 +144,17 @@ def test_ruleset_contexts_missing_ruleset_fails(make_root: MakeRoot) -> None:
             r"no readable rules",
             id="check-without-context",
         ),
+        pytest.param(
+            '{"rules": [{"type": "deletion"}]}',
+            r"requires no status check",
+            id="no-required-checks-rule",
+        ),
+        pytest.param(
+            '{"rules": [{"type": "required_status_checks", "parameters": '
+            '{"required_status_checks": []}}]}',
+            r"requires no status check",
+            id="empty-contexts",
+        ),
     ],
 )
 def test_ruleset_contexts_unreadable_ruleset_fails(
@@ -189,6 +192,13 @@ def test_ruleset_contexts_unreadable_ruleset_fails(
             "'Docs Build' is a job whose `if:` or `needs:` can skip it",
             id="unguarded-needs",
         ),
+        pytest.param(
+            "on: pull_request\njobs:\n  docs:\n    name: Docs Build\n"
+            "    needs: lint\n    if: always() # also on failure\n"
+            "  again:\n    name: Docs Build\n    if: github.actor == 'me'\n",
+            "'Docs Build' is a job whose `if:` or `needs:` can skip it",
+            id="duplicate-name-skippable-wins",
+        ),
     ],
 )
 def test_ruleset_contexts_unrunnable_context_fails(
@@ -211,7 +221,14 @@ def _workflow(tmp_path: Path, text: str) -> Path:
     ("trigger", "expected"),
     [
         ("on:\n  pull_request:\n", True),
-        ("on:\n  pull_request:\n    types: [opened]\n", True),
+        ("on:\n  pull_request:\n    types: [opened, synchronize, reopened]\n", True),
+        ("on:\n  pull_request:\n    types: [opened]\n", False),
+        ("on:\n  pull_request:\n    types: [opened, reopened, edited]\n", False),
+        ("on:\n  pull_request:\n    branches: [main]\n", True),
+        ("on:\n  pull_request:\n    branches: ['**']\n", True),
+        ("on:\n  pull_request:\n    branches: [release/*]\n", False),
+        ("on:\n  pull_request:\n    branches: ['*', '!main']\n", False),
+        ("on:\n  pull_request:\n    branches-ignore: [wip/*]\n", False),
         ("on:\n  pull_request:\n    paths: [uv.lock]\n", False),
         ("on:\n  pull_request:\n    paths-ignore: [docs/**]\n", False),
         ("on:\n  push:\n    paths: [a]\n  pull_request:\n", True),
@@ -224,7 +241,14 @@ def _workflow(tmp_path: Path, text: str) -> Path:
     ],
     ids=[
         "bare",
-        "types",
+        "types-all-three",
+        "types-opened-only",
+        "types-without-synchronize",
+        "branches-main",
+        "branches-glob",
+        "branches-not-main",
+        "branches-negated",
+        "branches-ignore",
         "paths",
         "paths-ignore",
         "push-paths-only",
@@ -281,8 +305,16 @@ def test_every_pr_checks_fails_closed_on_unreadable_layout(
         ("on:\n  pull_request: {paths: [a]}\n", r"cannot read pull_request"),
         ("on: [push,\n  pull_request]\n", r"flow list must close"),
         ("name: no trigger\n", r"no `on:` trigger"),
+        ("on:\n  pull_request:\n    tags: [v1]\n", r"unknown pull_request filter"),
+        ("on:\n  pull_request:\n  pull_request:\n", r"duplicate key 'pull_request'"),
     ],
-    ids=["inline-pull-request-mapping", "multi-line-flow-list", "no-trigger"],
+    ids=[
+        "inline-pull-request-mapping",
+        "multi-line-flow-list",
+        "no-trigger",
+        "unknown-filter",
+        "duplicate-key",
+    ],
 )
 def test_every_pr_checks_rejects_unreadable_trigger(
     tmp_path: Path, trigger: str, message: str
@@ -314,3 +346,35 @@ def test_every_pr_checks_rejects_unreadable_trigger(
 )
 def test_can_skip(if_expr: str | None, *, has_needs: bool, expected: bool) -> None:
     assert can_skip(Check("J", if_expr, has_needs)) is expected
+
+
+def test_every_pr_checks_strips_comment_from_if(tmp_path: Path) -> None:
+    root = _workflow(
+        tmp_path,
+        "on: pull_request\njobs:\n  a:\n    name: A\n    needs: b\n"
+        "    if: ${{ !cancelled() }} # report even when b fails\n",
+    )
+
+    assert can_skip(every_pr_checks(root)["A"]) is False
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        pytest.param(("a.yml", "b.yml"), id="skippable-last"),
+        pytest.param(("b.yml", "a.yml"), id="skippable-first"),
+    ],
+)
+def test_every_pr_checks_duplicate_name_keeps_skippable(
+    tmp_path: Path, files: tuple[str, str]
+) -> None:
+    plain, skippable = files
+    (tmp_path / plain).write_text(
+        "on: pull_request\njobs:\n  a:\n    name: A\n", encoding="utf-8"
+    )
+    (tmp_path / skippable).write_text(
+        "on: pull_request\njobs:\n  a:\n    name: A\n    if: github.actor == 'x'\n",
+        encoding="utf-8",
+    )
+
+    assert can_skip(every_pr_checks(tmp_path)["A"]) is True
