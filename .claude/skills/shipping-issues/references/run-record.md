@@ -11,7 +11,15 @@ python3 .agents/skills/shipping-issues/scripts/run_record.py --repo <owner>/<rep
 Appends one line (or, for `run-start`, a heading plus a line) to `<runstate>/run.md`,
 where **`<runstate>`** is
 `${AGENT_SKILL_STATE_DIR:-$HOME/.local/state/agent-skills}/shipping-issues/<owner>__<repo>/`
-— never rewritten or deleted, so a stopped run keeps what already landed.
+— never rewritten or deleted, so a stopped run keeps what already landed. A leading `~`
+in `AGENT_SKILL_STATE_DIR` is expanded by every script. `preflight.sh` and
+`issue_digest.py` read `<owner>/<repo>` from the origin URL identically — git's
+scp-style `[user@]host:[/]owner/repo` (a bare ssh host alias too) or
+`https`, `http`, `ssh`, `git`, `git+ssh`, `ssh+git` as
+`scheme://[user@]host[:port]/owner/repo`, `.git` and a trailing `/` optional; anything
+else, `file://` included, is `UNKNOWN` — and `scripts/tests/test_runstate_parity.py`
+holds them equal. `run_record.py` instead takes `--repo` or asks `gh repo view`
+(as do `file_followup.py` and `link_check.sh`); aligning those is left to #126.
 
 Every other file this run generates lives there too, and **never inside a repo
 checkout** — the main one or a worktree: issue bodies for follow-ups, verify baselines
