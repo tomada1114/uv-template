@@ -108,12 +108,12 @@ linkable_text() {
     BEGIN { comment = 0; fence = "" }
     {
       line = $0
-      if (fence == "" && !comment && match(line, /^ {0,3}(```+|~~~+)/)) {
+      if (fence == "" && !comment && match(line, /^( |  |   )?(```+|~~~+)/)) {
         fence = substr(line, RSTART, RLENGTH)
         sub(/^ +/, "", fence); next
       }
       if (fence != "") {
-        if (match(line, /^ {0,3}(```+|~~~+)[[:space:]]*$/)) {
+        if (match(line, /^( |  |   )?(```+|~~~+)[[:space:]]*$/)) {
           close_ = line; sub(/^ +/, "", close_); sub(/[[:space:]]+$/, "", close_)
           if (substr(close_, 1, 1) == substr(fence, 1, 1) && length(close_) >= length(fence)) fence = ""
         }
