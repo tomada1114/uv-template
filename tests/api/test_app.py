@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from contextlib import ExitStack
 from http import HTTPStatus
-from importlib.metadata import version
+from importlib import metadata, reload
 from typing import TYPE_CHECKING
 
 import pytest
 from fastapi.testclient import TestClient
 
+import my_app
 from my_app.api import app as app_module
 from my_app.api.app import create_app
 from my_app.composition import Container, build_llm
@@ -41,10 +42,14 @@ def test_healthz_returns_ok(client):
     assert response.json() == {"status": "ok"}
 
 
-def test_openapi_reports_the_installed_version(client):
-    response = client.get("/openapi.json")
+def test_openapi_uses_the_framework_default_version(make_container, monkeypatch):
+    monkeypatch.setattr(metadata, "version", lambda _: "9.9.9")
+    reload(my_app)
+    reload(app_module)
+    with TestClient(app_module.create_app(container=make_container())) as client:
+        response = client.get("/openapi.json")
 
-    assert response.json()["info"]["version"] == version("my-app")
+    assert response.json()["info"]["version"] == "0.1.0"
 
 
 def test_unmapped_app_error_returns_400_not_500(make_container):

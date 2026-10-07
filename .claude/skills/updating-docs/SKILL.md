@@ -3,11 +3,11 @@ name: updating-docs
 description: >
   Decides whether a change owes a documentation update and which surface it lands on:
   README.md (quickstart, CLI and HTTP tables, exit codes, configuration), CONTRIBUTING.md,
-  CHANGELOG.md's [Unreleased] entry, AGENTS.md, a skill, docs/architecture/, or a
-  docstring - plus what belongs in prose, GitHub Markdown alerts, and examples that
-  must work with the current code. Use when deciding whether a pull request needs a
-  document changed, when one change must move two files at once, or when a command,
-  setting, or behavior a document describes changed.
+  AGENTS.md, a skill, docs/architecture/, or a docstring - plus what belongs in prose,
+  GitHub Markdown alerts, and examples that must work with the current code. Use when
+  deciding whether a pull request needs a document changed, when one change must move
+  two files at once, or when a command, setting, or behavior a document describes
+  changed.
 ---
 
 # Updating Docs
@@ -36,8 +36,7 @@ Each surface has one job; do not let one grow a second copy of another's content
 | File | Holds | Changes when |
 |---|---|---|
 | `README.md` | What the application does, the quickstart, the CLI and HTTP table, error statuses and exit codes, the configuration table, dropping an entry point | A command, route, status, exit code, or setting it documents changes |
-| `CONTRIBUTING.md` | Prerequisites, setup, the development commands, the pull request process, commit messages, the changelog policy | Setup, the toolchain, or the pull request process changes |
-| `CHANGELOG.md` | Keep a Changelog; an entry under `[Unreleased]` | Any user-facing change, in the same pull request |
+| `CONTRIBUTING.md` | Prerequisites, setup, the development commands, the pull request process, commit messages | Setup, the toolchain, or the pull request process changes |
 | `AGENTS.md` | What every agent task needs: the quick reference, the "Validating a change" table, the architecture, the Skills table, the approval rules, the enforcement layers | One of those facts changes |
 | `.agents/skills/<name>/` | One kind of change's conventions, loaded on demand | Those conventions change (`authoring-skills`) |
 | `docs/architecture/` | ADRs and the roadmap | A decision owes an ADR, or the direction moves |
@@ -49,8 +48,8 @@ the template's design or its bootstrap, and `scripts/bootstrap.py` deletes it fr
 <!-- /template-only -->
 
 `README.md` links to `CONTRIBUTING.md` and `AGENTS.md` instead of repeating them, so it
-must not grow a second command index or a second rule list. A `CHANGELOG.md` entry says
-what a user notices, not which files moved.
+must not grow a second command index or a second rule list. Merged pull requests and
+closed issues record shipped changes; `git log` shows the local history.
 
 ## Changes that move two files at once
 
@@ -61,7 +60,7 @@ reader of the diff catches it.
 | When you change | Also change | Caught by |
 |---|---|---|
 | A skill added, renamed, or deleted | Its row in AGENTS.md's Skills table | `tests/harness/test_skills.py` (`just check-harness`) |
-| A `just` recipe added, renamed, or removed | Its line in AGENTS.md's "Quick Reference", in the block for who runs it; `CONTRIBUTING.md` if it lists the recipe | `tests/harness/test_just_recipes.py` when a document it reads still names a renamed or removed one (its docstring lists them; not CHANGELOG.md, an ADR, the roadmap, `docs/product/`, or `.devcontainer/`); review for an added one |
+| A `just` recipe added, renamed, or removed | Its line in AGENTS.md's "Quick Reference", in the block for who runs it; `CONTRIBUTING.md` if it lists the recipe | `tests/harness/test_just_recipes.py` when a document it reads still names a renamed or removed one (its docstring lists them; not an ADR, the roadmap, `docs/product/`, or `.devcontainer/`); review for an added one |
 | A gate, or the narrowest check for one kind of change | Its row in AGENTS.md's "Validating a change" | review |
 | A CLI command or an HTTP route | `README.md`'s command table | review |
 | A `MY_APP_*` setting | `README.md`'s configuration table | review |
@@ -89,8 +88,8 @@ request. Adding a script reaches more files; **REQUIRED:** `writing-repo-scripts
 A code example in a document must be valid Python that works with the current code, and
 a command must run as written. No gate compiles or runs a fenced block or checks that a
 named path still exists. `just check-harness` checks a `just <recipe>` in command
-position, but not in CHANGELOG.md, an ADR, the roadmap, `docs/product/`, or
-`.devcontainer/`. Check by hand before committing:
+position, but not in an ADR, the roadmap, `docs/product/`, or `.devcontainer/`. Check
+by hand before committing:
 
 - every `just <recipe>` you name appears in `just --list`;
 - every file path you name exists;

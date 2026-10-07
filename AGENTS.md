@@ -164,7 +164,7 @@ Skills are authored under `.agents/skills/` (Codex CLI) and mirrored into
 | `steering-the-roadmap` | asked what to work on next, or the Now / Next / Later roadmap moves |
 | `tdd` | changing behavior under `src/` or `scripts/`, or fixing a bug: the failing test comes first |
 | `triaging-issues` | filing, labelling, or prioritizing an issue, or recording a problem found outside the task |
-| `updating-docs` | deciding whether a change owes a README, CHANGELOG, AGENTS.md, or other document update |
+| `updating-docs` | deciding whether a change owes a README, AGENTS.md, or other document update |
 | `writing-python` | writing or reviewing any Python module, class, or function: typing, imports, docstrings, idioms |
 | `writing-repo-scripts` | adding or editing a script under `scripts/`, its `just` recipe, or its tests |
 | `writing-tests` | writing or reviewing a test: its name, assertions, fixtures, fakes, and edge cases |

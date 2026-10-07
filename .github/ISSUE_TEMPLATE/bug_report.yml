@@ -45,11 +45,11 @@ body:
       required: true
 
   - type: input
-    id: version
+    id: commit
     attributes:
-      label: Version
-      description: Output of `uv run --locked python -c "import my_app; print(my_app.__version__)"`.
-      placeholder: "0.1.0"
+      label: Commit
+      description: Output of `git rev-parse --short HEAD`.
+      placeholder: "a1b2c3d"
     validations:
       required: true
 

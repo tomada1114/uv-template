@@ -69,7 +69,7 @@ number; it never copies an issue body, an ADR, or a "Product" line.
 | Which outcomes come now, next, later | `docs/architecture/roadmap.md` |
 | A unit of work, its tier, its `blocked:` or `on hold` label | the issue tracker (`triaging-issues`) |
 | Why the architecture is the way it is | an ADR (`recording-architecture-decisions`) |
-| What has shipped | `CHANGELOG.md` |
+| What has shipped | merged pull requests and closed issues (`git log` for local history) |
 
 A fact in two homes drifts. When a roadmap edit is tempted to hold one of the others,
 link it instead.
@@ -90,10 +90,10 @@ comment giving its reason.
 ## How the backlog feeds it
 
 - **A Now outcome's issues are all closed.** Check its "Done when" yourself — run the
-  command or the recipe. If it holds, remove the entry (`CHANGELOG.md` already records
-  what shipped) and propose the next outcome to move up. If it does not, the missing
-  work is a new issue under that outcome, filed through `triaging-issues`; the entry
-  stays.
+  command or the recipe. If it holds, remove the entry (merged pull requests and
+  closed issues record what shipped) and propose the next outcome to move up. If it
+  does not, the missing work is a new issue under that outcome, filed through
+  `triaging-issues`; the entry stays.
 - **Now has no ready issue.** Everything left is blocked or parked. Say what clears it —
   a `blocked: design` choice, a `blocked: external` step only a person can take — before
   suggesting work from Next.

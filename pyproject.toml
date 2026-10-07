@@ -4,6 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "my-app"
+# Static build metadata required to install the package; never bumped.
 version = "0.1.0"
 description = "A short description of the project."
 readme = "README.md"

@@ -11,5 +11,4 @@
 
 - [ ] Full local verification passes on the committed tree (`just verify`)
 - [ ] Docs updated, if a user-facing behavior, command, or setting changed
-- [ ] `CHANGELOG.md` updated, if this is a user-facing change
 - [ ] Breaking changes called out in the Summary

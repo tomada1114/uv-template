@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from my_app import __version__
 from my_app.api.routers import health, todos
 from my_app.api.schemas import ErrorResponse
 from my_app.composition import Container, build_container
@@ -64,7 +63,7 @@ def create_app(
             if owns_container:
                 services.close()
 
-    app = FastAPI(title=APP_TITLE, version=__version__, lifespan=lifespan)
+    app = FastAPI(title=APP_TITLE, lifespan=lifespan)
     app.state.container = services
     app.include_router(health.router)
     app.include_router(todos.router)

@@ -41,5 +41,5 @@ We follow a coordinated disclosure process. We ask that you:
 2. Allow reasonable time for a fix before public disclosure
 3. Avoid exploiting the vulnerability beyond what is necessary to demonstrate it
 
-We will credit reporters in the fix's pull request or changelog entry unless they prefer to remain
+We will credit reporters in the fix's pull request unless they prefer to remain
 anonymous.

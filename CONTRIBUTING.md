@@ -121,11 +121,10 @@ Examples:
 Recommended types: `feat`, `fix`, `docs`, `refactor`, `test`, `ci`, `chore`,
 `perf`, `build`.
 
-### Changelog Policy
+### Shipped Changes
 
-`CHANGELOG.md` (in [Keep a Changelog](https://keepachangelog.com/) format) is
-the canonical, human-curated record of user-facing changes. Add an entry
-under `[Unreleased]` for any user-facing change in the same PR that makes it.
+Merged pull requests and closed issues record what has shipped. Use `git log`
+for the local history and the repository's pull request and issue lists for context.
 
 ## Getting Help
 
