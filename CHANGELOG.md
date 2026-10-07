@@ -40,10 +40,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   credentials, no step may set `continue-on-error`, and no line may end a
   command with `|| true`; an unreadable action is named by its path from the
   repository root
-- The harness's recipe check now also reads README.md, CONTRIBUTING.md,
-  `docs/**`, and the agent definitions (`.claude/agents/`, `.codex/agents/`),
-  so a renamed or removed `just` recipe they still name fails `just verify`.
-  CHANGELOG.md and a superseded or rejected ADR are history and stay unread
+- The harness's recipe check now also reads every top-level Markdown file but
+  CHANGELOG.md (README.md, CONTRIBUTING.md, TEMPLATE.md, ...), `docs/**` but the
+  ADRs, the roadmap, and `docs/product/`, the agent definitions
+  (`.claude/agents/`, `.codex/agents/`), `.pre-commit-config.yaml`, the
+  `scripts/*.py` strings and comments, and composite actions' `run:` commands,
+  so a renamed or removed `just` recipe they still name fails `just verify`. It
+  now counts `just` only in a command's position, never in a comment, a quoted
+  argument, or a `console`/`text`/`output` fence
 - Seven process skills under `.agents/skills/` (mirrored to
   `.claude/skills/`): `writing-tests` and `placing-tests` (replacing
   `tests/AGENTS.md`), `tdd`, `managing-dependencies` (the `exclude-newer`

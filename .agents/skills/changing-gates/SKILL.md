@@ -140,9 +140,10 @@ Read the current values in the file rather than a copy here. Traps that have cos
 ## What no gate sees
 
 - Anything only a running server shows (`running-the-app`).
-- Whether a path named in Markdown still exists. A named `just <recipe>`, a skill's
-  frontmatter, and AGENTS.md's Skills table are `just check-harness`'s; it leaves out
-  CHANGELOG.md and a superseded or rejected ADR, which are history.
+- Whether a path named in Markdown still exists. A skill's frontmatter, AGENTS.md's
+  Skills table, and a `just <recipe>` in command position are `just check-harness`'s,
+  but the recipe scan leaves out CHANGELOG.md, the ADRs, the roadmap, `docs/product/`
+  (intent or history, not instructions), and `.devcontainer/` (JSON with comments).
 - A staged deletion: `check-staged` never inspects one, by design.
 - Commits that run no hook at all ([references/pre-commit-layer.md](references/pre-commit-layer.md)
   › "When the hooks run, and when they do not").

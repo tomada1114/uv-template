@@ -9,10 +9,11 @@ repository and fails on a fixture built under ``tmp_path``:
   the authoring-skills limit, the body is at most 200 lines, and no nested
   ``SKILL.md`` exists;
 - (b) ``test_skills.py``: AGENTS.md's Skills table lists exactly those skills;
-- (c) ``test_just_recipes.py``: every ``just <recipe>`` named in AGENTS.md,
-  CLAUDE.md, the skills, ``.github/**``, README.md, CONTRIBUTING.md,
-  ``docs/**`` (bar a superseded or rejected ADR), and the agent definitions
-  exists in the justfile;
+- (c) ``test_just_recipes.py``: every ``just <recipe>`` in command position
+  in the top-level Markdown, ``docs/**`` (bar the ADRs, the roadmap, and
+  ``docs/product/``), the skills, the agent definitions, ``.github/**``
+  (composite actions' ``run:`` included), ``.pre-commit-config.yaml``, and
+  the scripts exists in the justfile (its docstring lists what is not read);
 - (d) ``test_ruleset_contexts.py``: every required context in
   ``.github/rulesets/main.json`` is a job that runs on every pull request and
   cannot be skipped, and one with ``needs:`` has a step, in one of the
@@ -23,7 +24,7 @@ repository and fails on a fixture built under ``tmp_path``:
 - (f) ``test_workflow_hygiene.py``: workflow hygiene (SHA pins, timeouts,
   top-level permissions, checkout credentials, no fail-open constructs, push
   runs on main never cancelled by concurrency), and the same pin, checkout,
-  and ``continue-on-error`` rules for the steps of a composite action under
+  ``continue-on-error``, and ``|| true`` rules for a composite action under
   ``.github/actions/``;
 - (g) the Product section check is ``tests/test_product_section.py`` (#95),
   not duplicated here.
