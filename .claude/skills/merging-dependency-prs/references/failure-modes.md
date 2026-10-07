@@ -50,7 +50,10 @@ younger than the configured window.
 **Cause:** `.github/dependabot.yml`'s `cooldown: default-days` — 7 for
 `github-actions`, 14 for `uv`, equal to `[tool.uv] exclude-newer`. Dependabot exempts
 **security updates** from its own cooldown, but not from `exclude-newer`: a `uv`
-security update younger than 14 days does not lock (F4).
+security update younger than 14 days does not lock. Dependabot runs `uv lock` under the
+same window, so that failure normally stays inside its own job and no PR opens: look in
+the Dependabot job log (Insights → Dependency graph → Dependabot) and at the Dependabot
+alert, which stays open.
 
 **Fix:** a security update you want now is a human decision: report the advisory, the
 affected version, and its publish date, and let the owner choose between waiting out
@@ -63,20 +66,20 @@ one-package exception.
 touches `pyproject.toml` or `uv.lock`.
 
 **Cause:** CI installs with `--locked`, which refuses a lock that disagrees with the
-manifest or with the `exclude-newer` window. Three shapes:
+manifest. Two shapes:
 
 - **`ecosystem=other`** — a security update the repository settings enabled outside the
   `uv` entry, typically a `pyproject.toml`-only change with no regenerated lock.
 - **A `uv` PR whose lock went stale** — another `uv` PR merged first and moved
   `uv.lock` under it; the merge state is usually `BEHIND` or `DIRTY`.
-- **A `uv` PR newer than the window** — a security update, which skips the cooldown,
-  proposing a release younger than 14 days.
 
-**Fix:** none of these is a regression. A stale lock is F6: `@dependabot rebase`, then
-review the new head. The other two are held and the advisory reported: the update lands
-through a `uv` PR once the window admits it, or earlier through `managing-dependencies`'
-one-package exception, which is the owner's call. Close an `other` PR only after its
-replacement lands, with a pointer to it. Never hand-edit `uv.lock`, and never move
+**Fix:** neither is a regression. A stale lock is F6: wait for Dependabot's own
+rebase, then review the new head. An `other` PR is held and its advisory reported: the
+update lands through a `uv` PR once the window admits it, or earlier through
+`managing-dependencies`' one-package exception, which is the owner's call. A `uv`
+security update younger than the window rarely reaches this point — its signal is F3's
+failed Dependabot job. Close an `other` PR only after its replacement lands, with a
+pointer to it. Never hand-edit `uv.lock`, and never move
 `exclude-newer` to let one version through.
 
 ## F5 — Test or coverage failure

@@ -29,22 +29,33 @@ formality. Step 4 repeats this review whenever a head changes:
 
 A `dependabot/uv/...` PR moves Python dependencies. Review it as closely as an Action:
 
-- `pyproject.toml` and `uv.lock` move together. A `pyproject.toml` change arrives with
-  the `uv.lock` that `uv lock` generated for it, in the same PR; a `pyproject.toml`
-  change without its lock is held. A `uv.lock`-only change is a lock refresh inside
-  the existing ranges and needs no `pyproject.toml` change.
+- A `uv` PR always moves `uv.lock`, and moves `pyproject.toml` too when it raises a
+  range. A `pyproject.toml` change arrives with the `uv.lock` that `uv lock` generated
+  for it, in the same PR; a `pyproject.toml` change without its lock is held. A
+  `uv.lock`-only change is a lock refresh inside the existing ranges.
 - In `pyproject.toml`, only the `>=X.Y` lower bound of a dependency that already exists
   under `[project] dependencies` or `[dependency-groups]` may change. A new entry, a
   removed one, or anything under `[tool.*]` — `exclude-newer` included — goes to
   "Stop and ask".
-- In `uv.lock`, every changed `[[package]]` names a package the base already locked; its
-  `version`, `sdist`, and `wheels` change, nothing else. A package the base did not lock
-  is a new package, transitive or not: "Stop and ask", with `managing-dependencies`'
-  review record. A change under `[options]` is "Stop and ask" too.
-- CI's `uv sync --group dev --locked` passed on the current head — every job starts with
-  it, and it refuses a lock that disagrees with `pyproject.toml` or with the
-  `exclude-newer` window. `uv lock --check` (the first step of `just verify`) passes on a
-  checkout of that head.
+- In `uv.lock`, what matters is that no `[[package]]` appears that the base did not
+  lock: that is a new package, transitive or not — "Stop and ask", with
+  `managing-dependencies`' review record. These changes are expected and fine:
+  - an upgraded package's `version`, `sdist`, and `wheels`;
+  - its own `dependencies` and their markers, as the new release declares them;
+  - the root `my-app` package's `[package.metadata]` `requires-dist` / `requires-dev`,
+    rewritten when a range in `pyproject.toml` moves;
+  - a `[[package]]` dropping out because nothing requires it any more.
+
+  A change under `[options]` is "Stop and ask".
+- `[tool.uv] exclude-newer-package` holds no entry whose timestamp is older than the
+  14-day window. Such an entry is stale — its fix is already inside the window — and
+  it freezes that package at its date, so Dependabot's proposals for it fail. Put its
+  removal (comment included, then `uv lock`) in the plan as its own change; this review
+  is the trigger that drops it (`managing-dependencies`).
+- CI's `uv sync --group dev --locked` passed on the current head — every job that
+  installs the project starts with it (the spell-check and workflow-lint jobs do not),
+  and it refuses a lock that disagrees with `pyproject.toml`. `uv lock --check` (the
+  first step of `just verify`) passes on a checkout of that head.
 - List every `version =` change of a grouped PR. A 0.x minor among them (`ruff`) is a
   major risk: read its changelog or release notes before approving.
 - A `ruff` bump moves with the `astral-sh/ruff-pre-commit` hook's `rev:` in

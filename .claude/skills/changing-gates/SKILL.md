@@ -41,6 +41,10 @@ says which gate looks wrong and why, and a human decides.
   `xfail`, a deleted test, or a weakened assertion.
 - **The lock:** removing `--locked` from a recipe or a CI step, or `lock-check` from
   `just verify`.
+- **The supply-chain window:** shortening `[tool.uv] exclude-newer` in `pyproject.toml`
+  or a Dependabot `cooldown` in `.github/dependabot.yml` (the `uv` entry's must equal
+  `exclude-newer`), or a blanket or stale `exclude-newer-package` entry
+  (`managing-dependencies`).
 - **The pre-commit layer:** removing a hook, narrowing its `files`, `types`, or
   `stages`, loosening `scripts/check_staged.py`'s rules, `--no-verify`, `SKIP=<id>`, or
   an edit to `.git/hooks/`.

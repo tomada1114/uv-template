@@ -87,25 +87,34 @@ dependency), so `uv lock --check` stays stable from one day to the next.
 
 **Dependabot proposes, a human merges via `merging-dependency-prs`.** The `uv` entry in
 `.github/dependabot.yml` runs monthly with `cooldown.default-days: 14`: one grouped PR
-for minor and patch updates, one PR per major, each moving `pyproject.toml` and
-`uv.lock` together and labelled `dependencies`. The cooldown equals `exclude-newer` on
-purpose — uv's Dependabot guide recommends it — so Dependabot never proposes a version
-the window refuses to lock. Change the two together or not at all; shortening either
-loosens a gate, which is the owner's decision.
+for minor and patch updates and one PR per major, labelled `dependencies`. Each always
+moves `uv.lock`, and moves `pyproject.toml` too when it raises a range. The cooldown
+equals `exclude-newer` on purpose — uv's Dependabot guide recommends it — so Dependabot
+almost never proposes a version the window refuses to lock. The edge remains: uv judges
+each artifact's upload time against now minus 14 × 24 hours, while the cooldown counts
+days since the release, so a wheel uploaded days after its release, or a release on the
+boundary day, can still disagree. That shows as a failed Dependabot job, not as a PR
+(`merging-dependency-prs`' failure mode F3). Change the two together or not at all;
+shortening either loosens a gate, which is the owner's decision.
 
-Why — decided in the template's issue #92, option D: the update path used to be a
-monthly hand move of a fixed cutoff date, and that date was 77 days old when the
-decision was made. A procedure that depends on someone remembering it does not hold; a
-relative window leaves no date to move, and the floor still bounds what a hand-run
-command resolves.
+Why: the update path used to be a monthly hand move of a fixed cutoff date, and a
+procedure that depends on someone remembering it does not hold. A relative window leaves
+no date to move, and the floor still bounds what a hand-run command resolves.
+
+<!-- template-only -->
+Decided in the template's issue #92, option D, when the fixed cutoff date was 77 days
+old.
+<!-- /template-only -->
 
 - **A hand-run upgrade stays allowed** — before a release, or to take one package early
   within the window: `uv lock --upgrade` or `uv lock --upgrade-package <package>`, then
   `just check` and `just verify`, then `pyproject.toml` and `uv.lock` in one commit of
   their own. The same 14-day window bounds it.
 - **Security updates skip Dependabot's cooldown, not the window.** A fix younger than 14
-  days does not lock: Dependabot's job fails or its PR fails CI's `uv sync --locked`.
-  Wait out the window, or take the exception below.
+  days does not lock: Dependabot runs `uv lock` under the same window, so its job fails
+  and no PR opens — the signal is the Dependabot job log (Insights → Dependency graph →
+  Dependabot) and the alert, which stays open. Wait out the window, or take the
+  exception below.
 
 <!-- template-only -->
 `scripts/bootstrap.py` leaves `exclude-newer` as it is: a relative window needs no date
@@ -119,8 +128,12 @@ give that one package (and any package the fix needs) an absolute timestamp just
 its release, such as `exclude-newer-package = { virtualenv = "2026-09-22T00:00:00Z" }`.
 The entry's comment names the advisory, why waiting is riskier, and the date after
 which the entry is dropped — the day the fix turns 14 days old and the window admits it.
-Never a blanket exception and never a shorter global window to let one package through;
-drop the entry once its date passes.
+Never a blanket exception and never a shorter global window to let one package through.
+
+Drop the entry once its date passes: a stale entry freezes that package at its date, so
+the window no longer moves it and every Dependabot proposal for it fails. The trigger is
+the review of every Dependabot `uv` PR — `merging-dependency-prs`' review checklist
+looks for an `exclude-newer-package` entry older than the window and plans its removal.
 
 ## What the scanners catch
 

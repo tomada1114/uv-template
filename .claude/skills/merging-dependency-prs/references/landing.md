@@ -24,7 +24,8 @@ head. A rerun is allowed only for the run/job and reason the plan covers; a newl
 needed one requires fresh approval.
 
 Every merged `uv` PR leaves the next one's `uv.lock` stale, so `uv` PRs land this way
-one after another: merge, request the next PR's rebase (Dependabot re-runs `uv lock`),
+one after another: merge, wait for Dependabot to rebase the next PR on its own (it re-runs
+`uv lock`), request that rebase with the comment above only if it has not happened,
 review its new head, and only then merge it.
 
 ## Combined PR
@@ -45,7 +46,10 @@ Apply one approved change at a time:
 - For a `uv` package the plan puts on the combined branch — to complete a `ruff` unit,
   say — apply the reviewed PR's `pyproject.toml` range change, if it has one, by hand,
   then regenerate the lock with `uv lock --upgrade-package <package>==<version>` for
-  each approved package and version. `uv.lock` is never hand-edited and never taken
+  each approved package and version. A `python-minor-patch` group holding `ruff` moves
+  whole: every member, every range edit the group PR made, and the hook's `rev:`; the
+  group PR closes as superseded only after the combined PR merges. `uv.lock` is never
+  hand-edited and never taken
   from a bot branch, and the window still applies. A `[[package]]` the regenerated
   lock adds that the reviewed PR did not is a new package: SKILL.md's "Stop and ask".
 
