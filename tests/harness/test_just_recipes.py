@@ -2,20 +2,28 @@
 
 A renamed or removed recipe must not leave AGENTS.md, CLAUDE.md, a skill, or a
 file under ``.github/`` pointing an agent at nothing. Only code is read, so
-English prose ("just to be safe") never counts: in Markdown and in YAML text
-(issue forms and comments render as Markdown) the inline code spans and the
-lines of a shell-fenced block (a bare fence often holds a prompt template, so
-only its spans count); in a workflow also every non-comment line, where
-``just`` is a command. A token is ``just`` not preceded by a name character, then a recipe
-name, so ``just --list`` and the placeholder ``just <recipe>`` name nothing and
-arguments (``just run todo list``) are ignored. The skills' Markdown is read
-(``SKILL.md`` and ``references/``), not their scripts, whose own suites run under
-``just test-skills``.
+English prose ("just to be safe") never counts:
+
+- in Markdown and in YAML text (issue forms and comments render as Markdown),
+  the inline code spans and the lines of a shell-fenced block (a bare fence
+  often holds a prompt template, so only its spans count);
+- in a workflow, also the commands of each ``run:`` step;
+- in a skill's own scripts (``.agents/skills/*/scripts/*.py``, not their
+  tests), the code spans inside string literals and comments, which is how
+  they name a recipe to an agent.
+
+A token is ``just`` not preceded by a name character, then a recipe name, so
+``just --list`` and the placeholder ``just <recipe>`` name nothing and
+arguments (``just run todo list``) are ignored. ``just -f``/``--justfile``/
+``-d``/``--working-directory`` points at another justfile, which this check
+cannot read, so that form is reported rather than skipped.
 """
 
 from __future__ import annotations
 
+import io
 import re
+import tokenize
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -38,6 +46,7 @@ DOCUMENT_GLOBS = (
     ".github/**/*.yml",
     ".github/**/*.yaml",
 )
+SKILL_SCRIPTS = ".agents/skills/*/scripts/*.py"
 WORKFLOW_PARENT = ".github/workflows"
 # Column-0 justfile lines that look like a recipe header but are not one.
 NOT_RECIPES = frozenset({"set", "export", "unexport", "import", "mod", "alias"})
@@ -46,6 +55,12 @@ _NAME = r"[A-Za-z_][A-Za-z0-9_-]*"
 _RECIPE_HEADER = re.compile(rf"^@?(?P<name>{_NAME})(?:[ \t]+[^:]*?)?[ \t]*:(?!=)")
 _ALIAS = re.compile(rf"^alias[ \t]+(?P<name>{_NAME})[ \t]*:=")
 _TOKEN = re.compile(rf"(?<![\w./-])just\s+(?P<name>{_NAME})")
+_OTHER_JUSTFILE = re.compile(
+    r"(?<![\w./-])just\s+(?P<flag>-f|-d|--justfile|--working-directory)(?![\w-])"
+)
+_RUN_KEY = re.compile(r"^\s*(?:-\s+)?run:(?:\s+(?P<value>.*?))?\s*$")
+_BLOCK_INDICATOR = re.compile(r"^[|>][+-]?[1-9]?$")
+_SCRIPT_TOKENS = frozenset({tokenize.STRING, tokenize.COMMENT, tokenize.FSTRING_MIDDLE})
 _FENCE = re.compile(r"^\s*(?:`{3,}|~{3,})\s*(?P<info>[\w-]*)")
 # A fence in one of these is a command listing; any other (a bare one holding a
 # prompt template, a python one) is prose whose inline spans alone count.
@@ -93,16 +108,54 @@ def code_snippets(text: str) -> Iterator[tuple[int, str]]:
             yield start + paragraph.count("\n", 0, match.start()), match[1]
 
 
-def _workflow_commands(text: str) -> Iterator[tuple[int, str]]:
-    for number, line in enumerate(text.splitlines(), start=1):
-        if not line.lstrip().startswith("#"):
-            yield number, split_comment(line)[0]
+def _indent(line: str) -> int:
+    return len(line) - len(line.lstrip())
+
+
+def workflow_run_lines(text: str) -> Iterator[tuple[int, str]]:
+    """Yield ``(line number, command)`` for each line of every ``run:`` step."""
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if (match := _RUN_KEY.match(line)) is None:
+            continue
+        value = split_comment(match["value"] or "")[0]
+        if not _BLOCK_INDICATOR.match(value):
+            yield index + 1, value
+            continue
+        key_column = line.index("run:")
+        for number, body in enumerate(lines[index + 1 :], start=index + 2):
+            if body.strip() and _indent(body) <= key_column:
+                break
+            if not body.lstrip().startswith("#"):
+                yield number, split_comment(body)[0]
+
+
+def script_snippets(text: str) -> Iterator[tuple[int, str]]:
+    """Yield ``(line number, code)`` for each code span in a string or comment."""
+    for token in tokenize.generate_tokens(io.StringIO(text).readline):
+        if token.type in _SCRIPT_TOKENS:
+            for match in _SPAN.finditer(token.string):
+                yield (
+                    token.start[0] + token.string.count("\n", 0, match.start()),
+                    match[1],
+                )
 
 
 def documents(root: Path) -> list[Path]:
     """Return every document this check reads, sorted and without repeats."""
-    found = {path for pattern in DOCUMENT_GLOBS for path in root.glob(pattern)}
+    patterns = (*DOCUMENT_GLOBS, SKILL_SCRIPTS)
+    found = {path for pattern in patterns for path in root.glob(pattern)}
     return sorted(path for path in found if path.is_file())
+
+
+def _snippets(path: Path, root: Path) -> list[tuple[int, str]]:
+    text = path.read_text(encoding="utf-8")
+    if path.suffix == ".py":
+        return list(script_snippets(text))
+    snippets = list(code_snippets(text))
+    if path.parent == root / WORKFLOW_PARENT:
+        snippets.extend(workflow_run_lines(text))
+    return snippets
 
 
 def recipe_findings(root: Path) -> list[str]:
@@ -114,10 +167,13 @@ def recipe_findings(root: Path) -> list[str]:
     findings: list[str] = []
     for path in documents(root):
         relative = path.relative_to(root).as_posix()
-        text = path.read_text(encoding="utf-8")
-        snippets = list(code_snippets(text))
-        if path.parent == root / WORKFLOW_PARENT:
-            snippets.extend(_workflow_commands(text))
+        snippets = _snippets(path, root)
+        findings.extend(
+            f"{relative}:{number}: `just {match['flag']}` names another justfile, "
+            "which this check cannot read; name the recipe of the root justfile"
+            for number, code in sorted(set(snippets))
+            for match in _OTHER_JUSTFILE.finditer(code)
+        )
         missing = sorted(
             {
                 (number, match["name"])
@@ -143,7 +199,9 @@ def test_recipes_named_on_repository_exist() -> None:
 def test_justfile_recipes_reads_repository_justfile() -> None:
     recipes = justfile_recipes((REPO_ROOT / JUSTFILE).read_text(encoding="utf-8"))
 
-    assert {"verify", "check-harness", "run", "labels", "test-skills"} <= recipes
+    # Only the harness's own recipes: an app may delete the others (`just run`
+    # goes with the CLI).
+    assert {"verify", "check-harness"} <= recipes
     assert not recipes & NOT_RECIPES
 
 
@@ -224,6 +282,22 @@ def test_recipe_findings_existing_or_no_recipe_passes(
             id="workflow-run",
         ),
         pytest.param(
+            ".github/workflows/ci.yml",
+            "jobs:\n  a:\n    steps:\n      - name: Check\n        run: |\n"
+            "          # just a comment\n          just test\n\n"
+            "          uvx --from rust-just==1 just docs # the docs\n",
+            9,
+            id="workflow-run-block",
+        ),
+        pytest.param(
+            ".agents/skills/foo/scripts/tool.py",
+            '"""Tool.\n\nRun `just test` first.\n"""\n'
+            "# A prose comment: just fixed.\n"
+            'print(f"next: `just test`, then `just docs`")  # `just t`\n',
+            6,
+            id="skill-script-strings",
+        ),
+        pytest.param(
             ".github/ISSUE_TEMPLATE/bug.yml",
             "body:\n  - type: markdown\n    attributes:\n      value: Run `just docs`.\n",
             4,
@@ -241,12 +315,51 @@ def test_recipe_findings_missing_recipe_names_file_and_recipe(
     ]
 
 
-def test_recipe_findings_workflow_comment_prose_is_not_a_command(
-    make_root: MakeRoot,
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param("# It is just docs here.\njobs: {}\n", id="comment"),
+        pytest.param(
+            "jobs:\n  a:\n    name: Run just the fast checks\n    steps:\n"
+            "      - name: Run just the docs\n        run: just test\n",
+            id="step-and-job-names",
+        ),
+        pytest.param(
+            "defaults:\n  run:\n    shell: bash\njobs: {}\n", id="defaults-run"
+        ),
+    ],
+)
+def test_recipe_findings_workflow_prose_is_not_a_command(
+    make_root: MakeRoot, text: str
 ) -> None:
-    text = "# It is just docs here.\njobs: {}\n"
-
     assert recipe_findings(make_root({".github/workflows/ci.yml": text})) == []
+
+
+def test_recipe_findings_skill_script_tests_are_not_read(make_root: MakeRoot) -> None:
+    text = '"""Fixture: `just docs` is a fake recipe."""\n'
+
+    assert (
+        recipe_findings(make_root({".agents/skills/foo/scripts/tests/t.py": text}))
+        == []
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "flag"),
+    [
+        pytest.param("Run `just -f other/justfile docs`.\n", "-f", id="short"),
+        pytest.param("Run `just --justfile=x test`.\n", "--justfile", id="long-equals"),
+        pytest.param("```bash\njust -d sub test\n```\n", "-d", id="working-dir"),
+    ],
+)
+def test_recipe_findings_other_justfile_is_reported(
+    make_root: MakeRoot, text: str, flag: str
+) -> None:
+    findings = recipe_findings(make_root({"AGENTS.md": text}))
+
+    assert len(findings) == 1
+    assert findings[0].startswith("AGENTS.md:")
+    assert f"`just {flag}` names another justfile" in findings[0]
 
 
 def test_recipe_findings_without_justfile_fails(tmp_path: Path) -> None:
