@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- An optional LLM layer. The core gains `LlmPort` (`complete(messages, *,
+  model=None, max_tokens, timeout)` returning text, the answering model, the
+  finish reason, and token usage) and the `LlmError` family; the adapters are
+  `FakeLlm` for tests, `ClosedLlm`, and `OpenRouterLlm` over OpenRouter's chat
+  completions endpoint, with 2 retries on 429, 502, 503, or a failed
+  connection, `Retry-After` honored up to 8 seconds, and `timeout` bounding
+  the whole call. `httpx` moves into a new optional extra, `ai`
+  (`uv sync --extra ai`); without `OPENROUTER_API_KEY` the layer stays closed
+  and loads no LLM code, and `MY_APP_LLM_MODEL` picks the default model
+  (`deepseek/deepseek-v4.1-flash`). The API answers an LLM error with 503
+  (not configured), 429, 504, or 502. No route uses it yet; the new
+  `integrating-llm` skill shows how to wire one, test it, or remove the layer
 - `just check-harness`, part of `just verify` (CI's test shards run it too): a
   pytest suite in `tests/harness/` that fails on cross-file drift in the agent
   harness — a skill frontmatter with a key other than `name`/`description`, a
