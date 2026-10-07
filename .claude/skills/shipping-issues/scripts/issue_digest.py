@@ -76,6 +76,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 # Dependency phrasings seen in real issue bodies, EN + JA. Group 1 of a leading
 # phrase is a list ("#1, #2 and #3"); every number in it is read.
@@ -266,9 +267,47 @@ def parse_ship_contract(body: str) -> dict[str, Any] | None:
 
 
 CLOSING_RE = re.compile(
-    r"(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s*#(\d+)", re.IGNORECASE
+    r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s*"
+    r"(?:(?P<url>https?://[^/\s]+/(?P<url_repo>[\w.-]+/[\w.-]+)/issues/)"
+    r"|(?:(?P<repo>[\w.-]+/[\w.-]+))?#)(?P<number>\d+)\b", re.IGNORECASE
 )
 BARE_REF_RE = re.compile(r"(?<![\w/])#(\d+)")
+
+
+def repository_from_url(url: str) -> tuple[str, str] | None:
+    """Keep the host as well as owner/repo when comparing issue ownership."""
+    parsed = urlsplit(url)
+    match = re.fullmatch(r"/([\w.-]+/[\w.-]+)/(?:issues|pull)/\d+/?", parsed.path)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc or not match:
+        return None
+    return parsed.netloc.lower(), match.group(1).lower()
+
+
+def closing_text(text: str) -> str:
+    """Mask examples without joining words across an ignored Markdown region."""
+    for start, end in sorted(_code_spans(text), reverse=True):
+        text = text[:start] + " " * (end - start) + text[end:]
+    return re.sub(r"<!--(?:.*?-->|.*\Z)", " ", text, flags=re.DOTALL)
+
+
+def pr_issue_references(pr: dict[str, Any], repository: tuple[str, str] | None) -> set[int]:
+    """Union GitHub's links with local prose and established branch ownership."""
+    refs = {ref["number"] for ref in pr.get("closingIssuesReferences", [])
+            if repository is not None and repository_from_url(ref.get("url", "")) == repository}
+    for field in ("title", "body"):
+        for match in CLOSING_RE.finditer(closing_text(pr.get(field) or "")):
+            qualified = match.group("repo") or match.group("url_repo")
+            if qualified:
+                if repository is None or qualified.lower() != repository[1]:
+                    continue
+                if match.group("url") and urlsplit(match.group("url")).netloc.lower() != repository[0]:
+                    continue
+            refs.add(int(match.group("number")))
+    # A bare digit anywhere is not enough: bump-foo-2-3-4 must not claim #2.
+    branch = pr.get("headRefName", "")
+    refs |= {int(n) for n in re.findall(r"(?:^|/)(\d{1,6})-", branch)}
+    refs |= {int(n) for n in re.findall(r"(?i)issues?[-_/](\d{1,6})", branch)}
+    return refs
 
 
 def normalize_label(name: str) -> str:
@@ -516,7 +555,7 @@ def _cache_key(issue_args: list[str]) -> str:
     so a run that asks for one issue's detail reuses the whole-backlog fetch a
     `--select` took seconds earlier — which is the entire point of the cache.
     """
-    return hashlib.sha256("\x00".join(issue_args).encode()).hexdigest()[:16]
+    return hashlib.sha256("\x00".join(["closing-references-v1", *issue_args]).encode()).hexdigest()[:16]
 
 
 def fetch_issues_and_prs(
@@ -547,7 +586,7 @@ def fetch_issues_and_prs(
     issues = run_gh(issue_args)
     prs = run_gh([
         "pr", "list", "--state", "open", "--limit", "100",
-        "--json", "number,title,body,headRefName,isDraft,url",
+        "--json", "number,title,body,headRefName,isDraft,url,closingIssuesReferences",
     ])
     status = "MISS"
     if path and not disabled:
@@ -798,16 +837,10 @@ def main() -> int:
 
     # Map issue number -> open PR that claims to close it.
     claimed: dict[int, dict[str, Any]] = {}
+    repository = next((repo for issue in issues
+                       if (repo := repository_from_url(issue.get("url", ""))) is not None), None)
     for pr in prs:
-        text = f"{pr.get('title', '')}\n{pr.get('body') or ''}\n{pr.get('headRefName', '')}"
-        refs = {int(n) for n in CLOSING_RE.findall(text)}
-        # Branch-name conventions that unambiguously encode an issue number:
-        # "123-slug", "feat/123-slug", "issue-123". A bare digit anywhere in the
-        # branch is not enough — "bump-foo-2-3-4" must not claim issue #2.
-        branch = pr.get("headRefName", "")
-        refs |= {int(n) for n in re.findall(r"(?:^|/)(\d{1,6})-", branch)}
-        refs |= {int(n) for n in re.findall(r"(?i)issues?[-_/](\d{1,6})", branch)}
-        for n in refs:
+        for n in pr_issue_references(pr, repository):
             claimed.setdefault(n, pr)
 
     # Dependency edges are read from every open issue, not just the filtered
