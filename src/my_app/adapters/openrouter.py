@@ -47,6 +47,14 @@ _UNREACHABLE_MESSAGE: Final = "The LLM provider could not be reached"
 _NOT_A_COMPLETION_MESSAGE: Final = (
     "The LLM provider returned a response that is not a chat completion"
 )
+_UNREADABLE_MESSAGE: Final = "The LLM provider's response could not be read"
+_KEY_NOT_A_HEADER_VALUE_MESSAGE: Final = (
+    "OPENROUTER_API_KEY is not a usable API key: "
+    "it must contain only visible ASCII characters"
+)
+# The characters an Authorization header value may carry: visible ASCII.
+_FIRST_VISIBLE_ASCII: Final = 0x21
+_LAST_VISIBLE_ASCII: Final = 0x7E
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,12 +100,18 @@ class OpenRouterLlm:
             monotonic: Reads the clock the deadline is measured on.
 
         Raises:
-            LlmConfigurationError: If ``api_key`` is None, empty, or blank.
+            LlmConfigurationError: If ``api_key`` is None, empty, or blank, or
+                holds a character an HTTP header cannot carry; the message
+                never contains the key.
             ValueError: If ``model`` is blank or ``max_retries`` is not a
                 non-negative integer.
         """
         if api_key is None or not api_key.strip():
             raise LlmConfigurationError(LLM_NOT_CONFIGURED_MESSAGE)
+        if not _is_header_value(api_key.strip()):
+            # httpx would fail at request time with the whole key in its
+            # error's args; refuse it here, with nothing chained that holds it.
+            raise LlmConfigurationError(_KEY_NOT_A_HEADER_VALUE_MESSAGE) from None
         if not model.strip():
             msg = f"model must be a non-blank model id, got {model!r}"
             raise ValueError(msg)
@@ -130,10 +144,17 @@ class OpenRouterLlm:
     ) -> LlmCompletion:
         """Send one chat completion request, retrying what may be retried.
 
-        ``timeout`` bounds the whole call: every attempt, and every wait
-        between attempts. A retry happens only on a 429, 502, or 503, or a
-        connection that never reached the provider, and only while a retry is
-        left and its wait ends before the deadline.
+        ``timeout`` is one budget for every attempt and every wait between
+        attempts. Each network phase (connect, TLS, each write, each socket
+        read, the headers included) is bounded separately by the budget left
+        when its attempt began; the deadline itself is checked between
+        attempts, once the headers arrive, and after each body chunk. So
+        ordinary phases can add up to several times ``timeout``, and a server
+        that trickles bytes can hold the call indefinitely: a caller that
+        needs a hard cutoff runs the call under its own cancellation. A retry
+        happens only on a 429, 502, or 503, or a connection that never
+        reached the provider, and only while a retry is left and its wait ends
+        before the deadline.
 
         Raises:
             ValueError: If an argument breaks ``check_completion_request``.
@@ -143,16 +164,13 @@ class OpenRouterLlm:
             LlmProviderError: If the provider failed, could not be reached, or
                 did not answer with a chat completion.
         """
-        check_completion_request(
+        checked = check_completion_request(
             messages, model=model, max_tokens=max_tokens, timeout=timeout
         )
         resolved = self._model if model is None else model
         payload = {
             "model": resolved,
-            "messages": [
-                {"role": message["role"], "content": message["content"]}
-                for message in messages
-            ],
+            "messages": [dict(message) for message in checked],
             "max_tokens": max_tokens,
             "stream": False,
         }
@@ -188,14 +206,13 @@ class OpenRouterLlm:
         requested_model: str,
     ) -> LlmCompletion | _Failure:
         """Send the request once and classify what came back."""
+        client = self._client(remaining)
+        if isinstance(client, _Failure):
+            return client
         headers = {"Authorization": f"Bearer {self._api_key}"}
         try:
             with (
-                httpx.Client(
-                    transport=self._transport,
-                    timeout=httpx.Timeout(remaining),
-                    follow_redirects=False,
-                ) as client,
+                client,
                 client.stream(
                     "POST",
                     OPENROUTER_CHAT_COMPLETIONS_URL,
@@ -206,18 +223,31 @@ class OpenRouterLlm:
                 if not response.is_success:
                     return _failure_for_status(response)
                 body = self._read_body(response, deadline, timeout)
-        except httpx.TimeoutException as error:
-            return _Failure(LlmTimeoutError(_timeout_message(timeout)), error)
-        except httpx.ConnectError as error:
-            # Nothing reached the provider, so nothing was billed: safe to retry.
-            failure = LlmProviderError(_UNREACHABLE_MESSAGE)
-            return _Failure(failure, error, is_retryable=True)
-        except httpx.TransportError as error:
-            # The request may have been processed and billed: never retried.
-            return _Failure(LlmProviderError(_UNREACHABLE_MESSAGE), error)
+        except httpx.RequestError as error:
+            return _failure_for_request_error(error, timeout)
         if isinstance(body, _Failure):
             return body
         return _parse_completion(body, requested_model)
+
+    def _client(self, remaining: float) -> httpx.Client | _Failure:
+        """Open the attempt's client, each network phase bounded by ``remaining``.
+
+        Without an injected transport, httpx reads proxy settings from the
+        environment here, and refuses one it cannot use.
+        """
+        try:
+            return httpx.Client(
+                transport=self._transport,
+                timeout=httpx.Timeout(remaining),
+                follow_redirects=False,
+            )
+        except (ImportError, ValueError) as error:
+            # Name only the cause's class: a proxy URL can carry credentials.
+            msg = (
+                "The HTTP client for the LLM provider could not be built from "
+                f"the environment's proxy settings ({type(error).__name__})"
+            )
+            return _Failure(LlmConfigurationError(msg), error)
 
     def _read_body(
         self, response: httpx.Response, deadline: float, timeout: float
@@ -225,8 +255,12 @@ class OpenRouterLlm:
         """Read a 2xx body, stopping at the deadline or the size cap.
 
         ``httpx`` has no whole-response timeout, so the deadline is checked
-        after every chunk; one read can still block for the attempt's budget.
+        once the headers have arrived and again after every chunk; one read
+        can still block for the attempt's budget.
         """
+        if self._monotonic() > deadline:
+            # The headers arrived late: skip a body there is no time for.
+            return _Failure(LlmTimeoutError(_timeout_message(timeout)))
         body = bytearray()
         for chunk in response.iter_bytes():
             if self._monotonic() > deadline:
@@ -242,6 +276,22 @@ def _timeout_message(timeout: float) -> str:
     return f"The LLM request did not finish within {timeout:g} seconds"
 
 
+def _failure_for_request_error(error: httpx.RequestError, timeout: float) -> _Failure:
+    """Classify an ``httpx`` failure raised while sending or reading."""
+    if isinstance(error, httpx.TimeoutException):
+        return _Failure(LlmTimeoutError(_timeout_message(timeout)), error)
+    if isinstance(error, httpx.ConnectError):
+        # Nothing reached the provider, so nothing was billed: safe to retry.
+        failure = LlmProviderError(_UNREACHABLE_MESSAGE)
+        return _Failure(failure, error, is_retryable=True)
+    if isinstance(error, httpx.TransportError):
+        # The request may have been processed and billed: never retried.
+        return _Failure(LlmProviderError(_UNREACHABLE_MESSAGE), error)
+    # Not a transport failure: a 2xx body that failed to decode, or a redirect
+    # loop. The request was answered, so it is not retried.
+    return _Failure(LlmProviderError(_UNREADABLE_MESSAGE), error)
+
+
 def _backoff(retry_index: int) -> float:
     """Return the wait before retry ``retry_index`` (0-based): 0.5 s, 1.0 s, ...
 
@@ -251,8 +301,12 @@ def _backoff(retry_index: int) -> float:
     return min(BASE_BACKOFF_SECONDS * 2.0**retry_index, MAX_BACKOFF_SECONDS)
 
 
-def _error_for_status(status: int) -> LlmError:
-    """Map an HTTP status, or a status-like error code, to the error it means."""
+def _error_for_status(status: int, *, in_body: bool = False) -> LlmError:
+    """Map an HTTP status, or a status-like error code, to the error it means.
+
+    ``in_body`` marks a code read from an error object inside a 2xx: it need
+    not be an HTTP status at all, so the fallback message does not call it one.
+    """
     if status in _KEY_REJECTED_STATUSES:
         msg = f"The LLM provider rejected the configured key or account (HTTP {status})"
         return LlmConfigurationError(msg)
@@ -262,6 +316,8 @@ def _error_for_status(status: int) -> LlmError:
         return LlmRateLimitError(
             "The LLM provider is rate-limiting requests (HTTP 429)"
         )
+    if in_body:
+        return LlmProviderError(f"The LLM provider returned error code {status}")
     return LlmProviderError(f"The LLM provider returned HTTP {status}")
 
 
@@ -303,7 +359,8 @@ def _parse_completion(body: bytes, requested_model: str) -> LlmCompletion | _Fai
     """
     try:
         data = json.loads(body)
-    except ValueError:
+    except ValueError, RecursionError:
+        # RecursionError: a body nested deeper than the parser can follow.
         return _Failure(LlmProviderError(_NOT_A_COMPLETION_MESSAGE))
     if not isinstance(data, dict):
         return _Failure(LlmProviderError(_NOT_A_COMPLETION_MESSAGE))
@@ -311,7 +368,7 @@ def _parse_completion(body: bytes, requested_model: str) -> LlmCompletion | _Fai
         code = error.get("code")
         if isinstance(code, bool) or not isinstance(code, int):
             return _Failure(LlmProviderError("The LLM provider returned an error"))
-        return _Failure(_error_for_status(code))
+        return _Failure(_error_for_status(code, in_body=True))
     completion = _completion_from(data, requested_model)
     if completion is None:
         return _Failure(LlmProviderError(_NOT_A_COMPLETION_MESSAGE))
@@ -349,6 +406,14 @@ def _completion_from(
         else requested_model,
         finish_reason=finish_reason if isinstance(finish_reason, str) else None,
         usage=LlmUsage(prompt_tokens, completion_tokens),
+    )
+
+
+def _is_header_value(value: str) -> bool:
+    """Return whether ``value`` holds only visible ASCII, as a header value must."""
+    return all(
+        _FIRST_VISIBLE_ASCII <= ord(character) <= _LAST_VISIBLE_ASCII
+        for character in value
     )
 
 

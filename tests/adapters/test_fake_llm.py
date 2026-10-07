@@ -80,3 +80,21 @@ def test_fake_llm_recorded_messages_do_not_follow_later_edits():
     messages.append({"role": "user", "content": "more"})
 
     assert fake.calls[0].messages == ({"role": "user", "content": "hello"},)
+
+
+def _traceback_depth(error: BaseException) -> int:
+    depth, frame = 0, error.__traceback__
+    while frame is not None:
+        depth, frame = depth + 1, frame.tb_next
+    return depth
+
+
+def test_fake_llm_scripted_error_traceback_does_not_grow_across_calls():
+    fake = FakeLlm(error=LlmRateLimitError("slow down"))
+    depths = []
+    for _ in range(3):
+        with pytest.raises(LlmRateLimitError) as raised:
+            fake.complete([{"role": "user", "content": "hi"}], max_tokens=1, timeout=1)
+        depths.append(_traceback_depth(raised.value))
+
+    assert depths[0] == depths[1] == depths[2]

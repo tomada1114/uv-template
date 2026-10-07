@@ -104,6 +104,27 @@ def _status(code: int, headers: dict[str, str] | None = None) -> httpx.Response:
     return httpx.Response(code, json=error, headers=headers)
 
 
+def _chain(error: BaseException) -> list[BaseException]:
+    """Return ``error`` and every exception chained to it, causes and contexts."""
+    seen: list[BaseException] = []
+    pending: list[BaseException | None] = [error]
+    while pending:
+        current = pending.pop()
+        if current is None or any(current is known for known in seen):
+            continue
+        seen.append(current)
+        pending.extend([current.__cause__, current.__context__])
+    return seen
+
+
+def _assert_never_carries(error: BaseException, *secrets: str) -> None:
+    """Fail when any secret shows in the str, repr, or args of the whole chain."""
+    for linked in _chain(error):
+        shown = [str(linked), repr(linked), *(repr(arg) for arg in linked.args)]
+        for secret in secrets:
+            assert not any(secret in text for text in shown), linked
+
+
 @pytest.fixture
 def clock() -> _FakeClock:
     return _FakeClock()
@@ -162,6 +183,62 @@ def test_openrouter_llm_invalid_max_retries_raises_value_error(max_retries):
         ValueError, match=r"^max_retries must be a non-negative integer, got "
     ):
         OpenRouterLlm(API_KEY, model=MODEL, max_retries=max_retries)
+
+
+@pytest.mark.parametrize(
+    "api_key",
+    [
+        pytest.param("sk-or-v1-s\u00e9cret", id="non-ascii"),
+        pytest.param("sk-or-v1-\u5bc6\u9470", id="cjk"),
+        pytest.param("sk-or-v1\x00secret", id="control"),
+        pytest.param("sk-or-v1 secret", id="inner-space"),
+    ],
+)
+def test_openrouter_llm_key_not_a_header_value_raises_configuration_error(api_key):
+    with pytest.raises(
+        LlmConfigurationError, match=r"visible ASCII characters"
+    ) as raised:
+        OpenRouterLlm(api_key, model=MODEL)
+
+    assert raised.value.__cause__ is None
+    assert raised.value.__suppress_context__
+    _assert_never_carries(raised.value, api_key, api_key.strip()[9:])
+
+
+@pytest.mark.parametrize(
+    ("proxy", "cause"),
+    [
+        pytest.param(
+            "socks5://user:proxy-secret@proxy.invalid:1080", "ImportError", id="socks"
+        ),
+        pytest.param(
+            "ftp://user:proxy-secret@proxy.invalid:21", "ValueError", id="bad-scheme"
+        ),
+    ],
+)
+@pytest.mark.parametrize("variable", ["HTTPS_PROXY", "ALL_PROXY"])
+def test_complete_unusable_proxy_setting_raises_configuration_error(
+    monkeypatch, proxy, cause, variable
+):
+    for name in (
+        "HTTPS_PROXY",
+        "https_proxy",
+        "ALL_PROXY",
+        "all_proxy",
+        "NO_PROXY",
+        "no_proxy",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(variable, proxy)
+    # No transport: httpx reads proxies from the environment only for its own
+    # transport. The client fails while it is built, before any connection.
+    llm = OpenRouterLlm(API_KEY, model=MODEL, sleep=lambda _: None)
+
+    with pytest.raises(LlmConfigurationError, match=rf"\({cause}\)$") as raised:
+        _complete(llm)
+
+    assert "proxy.invalid" not in str(raised.value)
+    assert "proxy-secret" not in str(raised.value)
 
 
 def test_openrouter_llm_model_property_is_the_configured_model():
@@ -346,6 +423,35 @@ def test_complete_retry_after_header_sets_the_delay(
 
 
 @pytest.mark.parametrize(
+    ("retry_after", "sleeps"),
+    [
+        pytest.param("2", [2.0, 2.0], id="seconds"),
+        pytest.param("8", [8.0, 8.0], id="at-the-cap"),
+    ],
+)
+def test_complete_503_retry_after_within_the_cap_sets_the_delay(
+    make_llm, clock, retry_after, sleeps
+):
+    provider = _Provider(_status(503, {"Retry-After": retry_after}))
+
+    with pytest.raises(LlmProviderError, match=r"^The LLM provider returned HTTP 503$"):
+        _complete(make_llm(provider), timeout=60)
+
+    assert len(provider.requests) == 3
+    assert clock.sleeps == sleeps
+
+
+def test_complete_502_retry_after_is_ignored_for_the_computed_backoff(make_llm, clock):
+    provider = _Provider(_status(502, {"Retry-After": "5"}))
+
+    with pytest.raises(LlmProviderError, match=r"^The LLM provider returned HTTP 502$"):
+        _complete(make_llm(provider), timeout=60)
+
+    assert len(provider.requests) == 3
+    assert clock.sleeps == [0.5, 1.0]
+
+
+@pytest.mark.parametrize(
     ("status", "error"),
     [
         pytest.param(429, LlmRateLimitError, id="429"),
@@ -430,6 +536,66 @@ def test_complete_body_streamed_past_the_deadline_raises_timeout_error(make_llm,
         _complete(make_llm(provider), timeout=30)
 
     assert len(provider.requests) == 1
+
+
+def test_complete_headers_arriving_past_the_deadline_raise_before_the_body_is_read(
+    make_llm, clock
+):
+    body_read: list[bool] = []
+
+    def _body() -> Iterator[bytes]:
+        body_read.append(True)
+        yield json.dumps(_completion_body()).encode()
+
+    class _LateHeadersProvider(_Provider):
+        def __call__(self, request: httpx.Request) -> httpx.Response:
+            clock.now += 31
+            return super().__call__(request)
+
+    provider = _LateHeadersProvider(httpx.Response(200, content=_body()))
+
+    with pytest.raises(
+        LlmTimeoutError, match=r"^The LLM request did not finish within 30 seconds$"
+    ):
+        _complete(make_llm(provider), timeout=30)
+
+    assert body_read == []
+    assert len(provider.requests) == 1
+
+
+@pytest.mark.parametrize(
+    ("exception", "error", "pattern"),
+    [
+        pytest.param(
+            httpx.ReadError, LlmProviderError, r"could not be reached$", id="read"
+        ),
+        pytest.param(
+            httpx.RemoteProtocolError,
+            LlmProviderError,
+            r"could not be reached$",
+            id="remote-protocol",
+        ),
+        pytest.param(
+            httpx.ReadTimeout, LlmTimeoutError, r"within 30 seconds$", id="timeout"
+        ),
+    ],
+)
+def test_complete_transport_error_mid_body_is_mapped_and_not_retried(
+    make_llm, clock, exception, error, pattern
+):
+    def _broken_body() -> Iterator[bytes]:
+        yield b'{"id": "gen-1",'
+        msg = "connection lost mid-body"
+        raise exception(msg)
+
+    provider = _Provider(httpx.Response(200, content=_broken_body()))
+
+    with pytest.raises(error, match=pattern) as raised:
+        _complete(make_llm(provider), timeout=30)
+
+    assert len(provider.requests) == 1
+    assert clock.sleeps == []
+    assert isinstance(raised.value.__cause__, exception)
 
 
 def test_complete_time_spent_in_attempts_counts_against_the_budget(make_llm, clock):
@@ -584,7 +750,27 @@ def test_complete_other_transport_error_raises_provider_error_without_retry(
     ("code", "error", "pattern"),
     [
         pytest.param(429, LlmRateLimitError, r"HTTP 429", id="429"),
-        pytest.param(502, LlmProviderError, r"returned HTTP 502", id="502"),
+        pytest.param(
+            502,
+            LlmProviderError,
+            r"^The LLM provider returned error code 502$",
+            id="502",
+        ),
+        pytest.param(
+            0, LlmProviderError, r"^The LLM provider returned error code 0$", id="zero"
+        ),
+        pytest.param(
+            200,
+            LlmProviderError,
+            r"^The LLM provider returned error code 200$",
+            id="200",
+        ),
+        pytest.param(
+            1001,
+            LlmProviderError,
+            r"^The LLM provider returned error code 1001$",
+            id="non-http",
+        ),
         pytest.param(401, LlmConfigurationError, r"\(HTTP 401\)", id="401"),
         pytest.param(504, LlmTimeoutError, r"timed out \(HTTP 504\)", id="504"),
         pytest.param("oops", LlmProviderError, r"returned an error", id="non-int"),
@@ -678,6 +864,40 @@ def test_complete_body_exactly_at_the_size_cap_is_read(make_llm):
     assert completion.text == "hi"
 
 
+def test_complete_2xx_body_that_fails_to_decode_raises_provider_error(make_llm, clock):
+    reply = httpx.Response(
+        # An iterator, so the response stays a stream until the adapter reads it.
+        200,
+        content=iter([b"not gzip at all"]),
+        headers={"Content-Encoding": "gzip"},
+    )
+    provider = _Provider(reply)
+
+    with pytest.raises(
+        LlmProviderError, match=r"^The LLM provider's response could not be read$"
+    ) as raised:
+        _complete(make_llm(provider))
+
+    assert len(provider.requests) == 1
+    assert clock.sleeps == []
+    assert isinstance(raised.value.__cause__, httpx.DecodingError)
+
+
+def test_complete_2xx_body_nested_too_deep_raises_provider_error(make_llm):
+    depth = 200_000
+    nested = b"[" * depth + b"]" * depth
+    assert len(nested) <= MAX_RESPONSE_BYTES
+    provider = _Provider(httpx.Response(200, content=nested))
+
+    with pytest.raises(
+        LlmProviderError,
+        match=r"^The LLM provider returned a response that is not a chat completion$",
+    ):
+        _complete(make_llm(provider))
+
+    assert len(provider.requests) == 1
+
+
 # --- client-safe messages --------------------------------------------------
 
 
@@ -702,7 +922,4 @@ def test_complete_error_message_never_carries_the_key_or_provider_text(make_llm,
     with pytest.raises(LlmError) as raised:
         _complete(make_llm(_Provider(reply)))
 
-    message = str(raised.value)
-    assert API_KEY not in message
-    assert PROVIDER_ERROR_TEXT not in message
-    assert "hello" not in message
+    _assert_never_carries(raised.value, API_KEY, PROVIDER_ERROR_TEXT, "hello")

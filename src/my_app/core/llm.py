@@ -7,11 +7,9 @@ values into a provider's wire format and back.
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Final, Literal, TypedDict
-
-if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+from typing import Final, Literal, TypedDict, TypeGuard, cast
 
 type LlmRole = Literal["system", "user", "assistant"]
 LLM_ROLES: Final = frozenset({"system", "user", "assistant"})
@@ -71,16 +69,17 @@ class LlmCompletion:
 
 
 def check_completion_request(
-    messages: Sequence[LlmMessage],
+    messages: Iterable[LlmMessage],
     *,
     model: str | None,
     max_tokens: int,
     timeout: float,
-) -> None:
+) -> tuple[LlmMessage, ...]:
     """Reject arguments no ``LlmPort`` may send, before any request is made.
 
-    Every adapter calls this first, so a bad argument fails the same way
-    whichever adapter is wired in. The arguments come from code, not from a
+    Every adapter calls this first and sends the messages it returns, so a bad
+    argument fails the same way whichever adapter is wired in, and a one-shot
+    iterator is read once, here. The arguments come from code, not from a
     user, so a bad one is a bug: a ``ValueError`` with its traceback, never an
     ``AppError``. A service that forwards user input validates it first.
 
@@ -88,43 +87,101 @@ def check_completion_request(
         messages: The conversation; at least one message.
         model: A model id, or None for the adapter's configured model.
         max_tokens: The most tokens the answer may use; at least 1.
-        timeout: The whole call's budget in seconds; positive and finite.
+        timeout: The call's budget in seconds; positive and finite.
+
+    Returns:
+        The messages, read once into a tuple holding only each message's
+        ``role`` and ``content``.
 
     Raises:
         ValueError: On the first argument that breaks its rule, checked in
-            the order above.
+            the order above; a string that cannot be encoded as UTF-8 (a lone
+            surrogate) is refused, as no provider could be sent it.
     """
-    if not messages:
-        msg = "messages must not be empty"
-        raise ValueError(msg)
-    for index, message in enumerate(messages):
-        # Read as untrusted: the type says LlmMessage, but nothing checks a
-        # caller that builds its messages from JSON or plain dicts.
-        fields: Mapping[str, object] = message
-        role = fields.get("role")
-        if role not in LLM_ROLES:
-            allowed = ", ".join(sorted(LLM_ROLES))
-            msg = f"messages[{index}] role must be one of {allowed}, got {role!r}"
+    checked = _check_messages(messages)
+    if model is not None:
+        if not _is_str(model):
+            msg = f"model must be a string or None, got {type(model).__name__}"
             raise ValueError(msg)
-        content = fields.get("content")
-        if not _is_str(content):
-            msg = (
-                f"messages[{index}] content must be a string, "
-                f"got {type(content).__name__}"
-            )
+        if not model.strip():
+            msg = f"model must be a non-blank model id, got {model!r}"
             raise ValueError(msg)
-    if model is not None and not model.strip():
-        msg = f"model must be a non-blank model id, got {model!r}"
-        raise ValueError(msg)
+        if not _is_utf8(model):
+            msg = "model must be encodable as UTF-8"
+            raise ValueError(msg)
     if not _is_int(max_tokens) or max_tokens < 1:
         msg = f"max_tokens must be a positive integer, got {max_tokens!r}"
         raise ValueError(msg)
     if not _is_positive_finite_number(timeout):
         msg = f"timeout must be a positive finite number of seconds, got {timeout!r}"
         raise ValueError(msg)
+    return checked
 
 
-def _is_str(value: object) -> bool:
+def _check_messages(messages: Iterable[LlmMessage]) -> tuple[LlmMessage, ...]:
+    """Read ``messages`` once and check each one; see ``check_completion_request``.
+
+    Read as untrusted: the type says LlmMessage, but nothing checks a caller
+    that builds its messages from JSON or plain dicts.
+    """
+    untrusted: object = messages
+    if not _is_message_iterable(untrusted):
+        msg = f"messages must be a sequence of messages, got {type(untrusted).__name__}"
+        raise ValueError(msg)
+    elements: tuple[object, ...] = tuple(untrusted)
+    if not elements:
+        msg = "messages must not be empty"
+        raise ValueError(msg)
+    checked: list[LlmMessage] = []
+    for index, element in enumerate(elements):
+        if not _is_mapping(element):
+            msg = f"messages[{index}] must be a mapping, got {type(element).__name__}"
+            raise ValueError(msg)
+        role = element.get("role")
+        if role not in LLM_ROLES:
+            allowed = ", ".join(sorted(LLM_ROLES))
+            msg = f"messages[{index}] role must be one of {allowed}, got {role!r}"
+            raise ValueError(msg)
+        content = element.get("content")
+        if not _is_str(content):
+            msg = (
+                f"messages[{index}] content must be a string, "
+                f"got {type(content).__name__}"
+            )
+            raise ValueError(msg)
+        if not _is_utf8(content):
+            msg = f"messages[{index}] content must be encodable as UTF-8"
+            raise ValueError(msg)
+        checked.append(LlmMessage(role=cast("LlmRole", role), content=content))
+    return tuple(checked)
+
+
+def _is_message_iterable(value: object) -> TypeGuard[Iterable[object]]:
+    """Return whether ``value`` can hold messages: an iterable, but no string.
+
+    A str or bytes is iterable, but its characters are not messages. Like
+    ``_is_str``, a helper keeps the caller's ``ValueError`` unprompted.
+    """
+    return isinstance(value, Iterable) and not isinstance(
+        value, str | bytes | bytearray
+    )
+
+
+def _is_mapping(value: object) -> TypeGuard[Mapping[str, object]]:
+    """Return whether ``value`` is a mapping, as a message must be."""
+    return isinstance(value, Mapping)
+
+
+def _is_utf8(value: str) -> bool:
+    """Return whether ``value`` encodes as UTF-8; a lone surrogate does not."""
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+def _is_str(value: object) -> TypeGuard[str]:
     """Return whether ``value`` is a string.
 
     A bad argument is a ``ValueError`` here whatever its kind, so this stays a

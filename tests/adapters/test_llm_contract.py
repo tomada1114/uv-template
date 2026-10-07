@@ -161,6 +161,31 @@ def test_complete_unicode_content_is_sent_unchanged(harness):
             r"content must be a string",
             id="no-content",
         ),
+        pytest.param(
+            {"messages": "hello"}, r"messages must be a sequence", id="str-messages"
+        ),
+        pytest.param(
+            {"messages": b"hello"}, r"messages must be a sequence", id="bytes-messages"
+        ),
+        pytest.param(
+            {"messages": 42}, r"messages must be a sequence", id="int-messages"
+        ),
+        pytest.param(
+            {"messages": ["hello"]},
+            r"messages\[0\] must be a mapping",
+            id="str-message",
+        ),
+        pytest.param(
+            {"messages": [{"role": "user", "content": "lone \ud800 surrogate"}]},
+            r"messages\[0\] content must be encodable as UTF-8",
+            id="surrogate-content",
+        ),
+        pytest.param({"model": 42}, r"model must be a string", id="int-model"),
+        pytest.param(
+            {"model": "x\udc00"},
+            r"model must be encodable as UTF-8",
+            id="surrogate-model",
+        ),
         pytest.param({"model": ""}, r"non-blank model id", id="empty-model"),
         pytest.param({"model": "  "}, r"non-blank model id", id="blank-model"),
         pytest.param({"max_tokens": 0}, r"max_tokens must be", id="zero-tokens"),
@@ -189,3 +214,11 @@ def test_complete_invalid_argument_raises_before_any_request(
         harness.port.complete(**call)
 
     assert harness.requests_sent() == 0
+
+
+def test_complete_one_shot_iterator_of_messages_is_sent_whole(harness):
+    messages = iter([{"role": "user", "content": "hello"}])
+
+    harness.port.complete(messages, max_tokens=16, timeout=5)
+
+    assert harness.sent_messages() == [{"role": "user", "content": "hello"}]

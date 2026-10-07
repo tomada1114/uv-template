@@ -121,8 +121,12 @@ class LlmPort(Protocol):
             model: The model to ask; None means the model this adapter was
                 built with.
             max_tokens: The most tokens the answer may use.
-            timeout: The budget in seconds for the whole call, retries and
-                the waits between them included.
+            timeout: The call's budget in seconds, retries and the waits
+                between them included. It is enforced between steps, not as
+                a hard cutoff: an adapter bounds each network phase by the
+                budget left and checks the deadline between phases, so a
+                pathologically slow server can still exceed it. A caller that
+                needs a hard cutoff runs the call under its own cancellation.
 
         Returns:
             The answer, the model that gave it, and the tokens it used.

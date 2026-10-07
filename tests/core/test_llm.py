@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -53,6 +53,20 @@ def test_default_llm_timeout_is_sixty_seconds():
 )
 def test_check_completion_request_valid_request_passes(messages):
     _check(messages, model=None)
+
+
+def test_check_completion_request_returns_the_messages_as_a_tuple():
+    # Any: an untyped caller's one-shot iterator of plain dicts, with an extra key.
+    messages: Any = iter([{"role": "user", "content": "hello", "name": "extra"}])
+
+    checked = check_completion_request(
+        messages,
+        model=None,
+        max_tokens=1,
+        timeout=1,
+    )
+
+    assert checked == ({"role": "user", "content": "hello"},)
 
 
 @pytest.mark.parametrize(

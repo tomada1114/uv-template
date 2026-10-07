@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 from my_app.core.llm import (
     LlmCompletion,
-    LlmMessage,
     LlmUsage,
     check_completion_request,
 )
@@ -17,6 +16,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from my_app.core.errors import LlmError
+    from my_app.core.llm import LlmMessage
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,15 +83,12 @@ class FakeLlm:
                 nothing is recorded.
             LlmError: The scripted ``error``, when one was given.
         """
-        check_completion_request(
+        checked = check_completion_request(
             messages, model=model, max_tokens=max_tokens, timeout=timeout
         )
         resolved = self._model if model is None else model
         call = FakeLlmCall(
-            messages=tuple(
-                LlmMessage(role=message["role"], content=message["content"])
-                for message in messages
-            ),
+            messages=checked,
             model=resolved,
             max_tokens=max_tokens,
             timeout=timeout,
@@ -99,7 +96,9 @@ class FakeLlm:
         with self._lock:
             self._calls.append(call)
         if self._error is not None:
-            raise self._error
+            # One instance is raised on every call: drop the traceback the
+            # last raise left on it, or it grows by one frame per call.
+            raise self._error.with_traceback(None)
         return LlmCompletion(
             text=self._reply, model=resolved, finish_reason="stop", usage=self._usage
         )
