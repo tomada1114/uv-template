@@ -83,6 +83,9 @@ AGENTS.md's "Enforcement layers" names the layers. Keeping them in step is this 
 - CI's `Spell Check` runs the pinned typos pre-commit hook with `--all-files`,
   sharing its revision, config, and file selection with local checks. Dependabot's
   `pre-commit` entry updates remote hook revisions; local hooks use the project lock.
+  Dependabot supports remote pre-commit hooks
+  (https://github.blog/changelog/2026-03-10-dependabot-now-supports-pre-commit-hooks/,
+  checked 2026-10-07).
 - CI runs zizmor through the pinned pre-commit hook with `--all-files`, sharing
   its version and file selection with local checks, including Dependabot and composite
   action definitions. Update the hook revision rather than introducing a separate CI pin.

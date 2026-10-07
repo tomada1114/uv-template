@@ -53,6 +53,9 @@ The `pre-commit` entry groups remote hooks into one monthly `hooks` PR with the
 same seven-day cooldown as Actions. Review each changed `rev:` and its upstream
 release notes; a grouped title may hide a major. Hook selection, arguments, stages,
 or repository changes need a separate decision. The survey reports `pre_commit`.
+Dependabot supports grouped remote hook updates
+(https://github.blog/changelog/2026-03-10-dependabot-now-supports-pre-commit-hooks/,
+checked 2026-10-07).
 
 A row whose ecosystem is `other` is not something this repository's Dependabot config
 asks for — typically a security update the repository settings enabled for another
