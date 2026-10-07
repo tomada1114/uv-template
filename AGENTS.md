@@ -148,7 +148,7 @@ Skills are authored under `.agents/skills/` (Codex CLI) and mirrored into
 | `designing-clis` | adding or changing a `my-app` command, its arguments, or its output, and the CliRunner tests for it |
 | `designing-core-logic` | adding a use case, domain rule, port, adapter, or `MY_APP_*` setting, or wiring the composition root |
 | `designing-errors` | adding a failure mode, or choosing the HTTP status or exit code a domain error becomes |
-| `managing-dependencies` | adding, bumping, or removing a package, or moving the `exclude-newer` cutoff |
+| `managing-dependencies` | adding, bumping, or removing a package, or changing the `exclude-newer` window, its Dependabot cooldown, or a one-package exception |
 | `merging-dependency-prs` | landing open Dependabot pull requests (GitHub Actions and `uv` bumps) |
 | `placing-tests` | adding a test file or a fixture, running one test, or a coverage run below the floor |
 | `recording-architecture-decisions` | a change owes an ADR, or an ADR under `docs/architecture/` is proposed, accepted, or superseded |

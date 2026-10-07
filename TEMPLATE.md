@@ -23,8 +23,10 @@ marks which steps are a human's. Its `references/bootstrap.md` documents
   `target-version`, mypy `python_version`, `.python-version`, the
   devcontainer image, and every CI workflow). Lower it everywhere at once if
   the new project needs to support older interpreters.
-- Python dependencies are updated manually; the `managing-dependencies`
-  skill holds the `exclude-newer` procedure.
+- Python dependencies arrive as monthly Dependabot `uv` PRs under a 14-day
+  cooldown equal to `[tool.uv] exclude-newer = "14 days"`; a human merges
+  them with the `merging-dependency-prs` skill, and `managing-dependencies`
+  holds the window and its one-package exception.
 - `just verify` (lock check, skills mirror, lint, skill tests, tests) is the
   non-mutating gate for a PR or a completion claim; `just check` mutates the
   tree first (`fmt`) and is for local iteration only.

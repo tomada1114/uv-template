@@ -4,17 +4,18 @@ description: >
   Covers whether a Python package may be added to pyproject.toml and how a dependency
   change lands: the sign-off and review record a new package needs, [project]
   dependencies versus [dependency-groups] dev, >=X.Y ranges with uv.lock pinning,
-  uv lock and uv sync --all-groups --locked, the [tool.uv] exclude-newer cooldown and
-  its monthly update procedure, an exclude-newer-package exception for a security fix,
-  and OSV-Scanner and Dependency Review. Use when adding, bumping, or removing a
-  package, moving the cutoff, or uv lock --check fails.
+  uv lock and uv sync --all-groups --locked, the relative [tool.uv] exclude-newer
+  window and the Dependabot uv cooldown that must equal it, an exclude-newer-package
+  exception for a security fix, and OSV-Scanner and Dependency Review. Use when adding,
+  bumping, or removing a package, changing the window or an exception, or uv lock
+  --check fails.
 ---
 
 # Managing Dependencies
 
 **Owns:** whether a package may exist in this repository, which group it joins, how its
-version is declared and locked, and the `exclude-newer` cooldown. **Does not own:**
-landing a Dependabot pull request for a GitHub Action (`merging-dependency-prs`);
+version is declared and locked, and the `exclude-newer` window. **Does not own:**
+landing a Dependabot pull request, a `uv` one included (`merging-dependency-prs`);
 whether a dependency owes an ADR (`recording-architecture-decisions`); editing a
 security workflow (`changing-gates`).
 
@@ -23,8 +24,8 @@ security workflow (`changing-gates`).
 Any new package — runtime or dev — needs the review record below and the owner's yes
 **before** `uv add` runs. Propose it with the record and stop; a decline ends the
 change. No standing exception covers it (AGENTS.md's "Standing exceptions"). A bump
-inside an existing range and a removal are not new packages; they follow the procedure
-below.
+inside an existing range and a removal are not new packages; they follow the update
+path below.
 
 ## The review record
 
@@ -53,7 +54,7 @@ has not happened yet.
   `--group dev` only.
 - Declare a range, `>=X.Y`, never an exact pin; `uv.lock` pins the exact versions.
 - Add with `uv add <package>` or `uv add --group dev <package>` rather than typing a
-  version: under the cooldown below, a hand-typed recent version may not resolve.
+  version: under the window below, a hand-typed recent version may not resolve.
 
 ## `uv.lock`
 
@@ -73,51 +74,66 @@ uv run --locked pytest tests/<layer>/   # the layer that uses the package
 just verify
 ```
 
-## The `exclude-newer` cooldown
+## The `exclude-newer` window
 
-`[tool.uv] exclude-newer` makes `uv lock` and `uv sync` ignore any package version
-published after the given timestamp, so a dependency cannot be resolved until it has
-survived in the wild for a while.
+`[tool.uv] exclude-newer = "14 days"` makes `uv lock` and `uv sync` ignore any package
+version published less than 14 days ago, so a dependency cannot be resolved until it has
+survived in the wild for a while. The value is relative: `uv lock` records it in
+`uv.lock` as `exclude-newer-span = "P14D"` and resolves it against the current time, and
+locked versions move only when the lock is re-resolved (`--upgrade`, a changed
+dependency), so `uv lock --check` stays stable from one day to the next.
 
-This repository updates Python dependencies **by hand**, under that cooldown, and
-`.github/dependabot.yml` covers GitHub Actions only — a bot bump younger than the cutoff
-would not resolve here anyway. Whether Dependabot's `uv` ecosystem, with a cooldown of
-its own, should take this over is an open question tracked in issue #92; until it is
-decided, the procedure below is the only update path.
+### How updates arrive
 
-**The update procedure** — run it before every release, and at least monthly even if no
-dependency changed, so the cutoff does not drift too far behind:
+**Dependabot proposes, a human merges via `merging-dependency-prs`.** The `uv` entry in
+`.github/dependabot.yml` runs monthly with `cooldown.default-days: 14`: one grouped PR
+for minor and patch updates, one PR per major, each moving `pyproject.toml` and
+`uv.lock` together and labelled `dependencies`. The cooldown equals `exclude-newer` on
+purpose — uv's Dependabot guide recommends it — so Dependabot never proposes a version
+the window refuses to lock. Change the two together or not at all; shortening either
+loosens a gate, which is the owner's decision.
 
-1. Set `exclude-newer` in `pyproject.toml` to roughly "today minus 14 days".
-2. Run `uv lock --upgrade` to move dependencies up to the new cutoff.
-3. Run `just check`, then `just verify`.
-4. Commit `pyproject.toml` and `uv.lock` together, in one commit of their own.
+Why — decided in the template's issue #92, option D: the update path used to be a
+monthly hand move of a fixed cutoff date, and that date was 77 days old when the
+decision was made. A procedure that depends on someone remembering it does not hold; a
+relative window leaves no date to move, and the floor still bounds what a hand-run
+command resolves.
+
+- **A hand-run upgrade stays allowed** — before a release, or to take one package early
+  within the window: `uv lock --upgrade` or `uv lock --upgrade-package <package>`, then
+  `just check` and `just verify`, then `pyproject.toml` and `uv.lock` in one commit of
+  their own. The same 14-day window bounds it.
+- **Security updates skip Dependabot's cooldown, not the window.** A fix younger than 14
+  days does not lock: Dependabot's job fails or its PR fails CI's `uv sync --locked`.
+  Wait out the window, or take the exception below.
 
 <!-- template-only -->
-`scripts/bootstrap.py` sets the cutoff to today minus 14 days in a new project, so the
-procedure starts from there.
+`scripts/bootstrap.py` leaves `exclude-newer` as it is: a relative window needs no date
+moved in a new project.
 <!-- /template-only -->
 
 ### An exception for one package
 
-When a security fix is younger than the cutoff, `[tool.uv] exclude-newer-package` may
-give that one package (and any package the fix needs) a later timestamp. The entry's
-comment names the advisory, why waiting is riskier, and the date after which the entry
-is dropped — the current `virtualenv` entry is the model. Never a blanket exception and
-never a later global cutoff to let one package through; drop the entry once the global
-cutoff passes its date.
+When a security fix is younger than the window, `[tool.uv] exclude-newer-package` may
+give that one package (and any package the fix needs) an absolute timestamp just after
+its release, such as `exclude-newer-package = { virtualenv = "2026-09-22T00:00:00Z" }`.
+The entry's comment names the advisory, why waiting is riskier, and the date after
+which the entry is dropped — the day the fix turns 14 days old and the window admits it.
+Never a blanket exception and never a shorter global window to let one package through;
+drop the entry once its date passes.
 
 ## What the scanners catch
 
 - **OSV-Scanner** (`.github/workflows/osv-scanner.yml`) scans `uv.lock` on every pull
   request that touches it and weekly: a known advisory against a version already locked,
-  which the cooldown cannot catch.
+  which the window cannot catch.
 - **Dependency Review** (`.github/workflows/dependency-review.yml`) judges the packages a
   pull request changes: a new advisory or a license outside its allow-list. Its
   `fail-on-scopes: runtime` means only a runtime package fails it.
-- **The cooldown** catches the opposite case: a version too new to have a track record,
-  advisory or not. None of the three substitutes for another.
+- **The `exclude-newer` window** catches the opposite case: a version too new to have a
+  track record, advisory or not. None of the three substitutes for another.
 
-A red scanner is a finding about a package this project installs. Update the package by
-the procedure above, or add a one-package exception; never relax the scanner — that is
-weakening a gate (AGENTS.md's "Security and human approval").
+A red scanner is a finding about a package this project installs. Update the package (a
+Dependabot `uv` PR, or a hand-run `uv lock --upgrade-package`) or add a one-package
+exception; never relax the scanner — that is weakening a gate (AGENTS.md's "Security
+and human approval").

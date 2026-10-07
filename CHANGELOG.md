@@ -153,6 +153,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Python dependencies arrive by Dependabot: `.github/dependabot.yml` gains a
+  monthly `uv` entry with `cooldown.default-days: 14`, one group for minor and
+  patch updates (each major its own PR), `labels: ["dependencies"]` (the
+  `github-actions` entry pins the same label), and an open-PR limit of 3.
+  `[tool.uv] exclude-newer` is now the relative `"14 days"`, equal to that
+  cooldown, instead of a fixed date moved by hand each month, and the expired
+  `virtualenv`/`python-discovery` `exclude-newer-package` entry is gone.
+  `managing-dependencies` replaces its monthly procedure with "Dependabot
+  proposes, a human merges via `merging-dependency-prs`", which now surveys
+  and reviews `uv` PRs (`survey_prs.py` classifies `dependabot/uv/...`
+  branches as `uv`); `scripts/bootstrap.py` no longer rewrites
+  `exclude-newer`
 - CI, CodeQL, and OSV-Scanner key their concurrency group on the commit SHA
   outside a pull request, and CI cancels only superseded pull-request runs, so
   no push to main is cancelled or replaced while pending; `check-pr-title.yml`
@@ -209,10 +221,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The PR template checklist is three items (`just check`, docs, breaking
   changes) instead of seven, and the bug report form requires only
   Description, Reproduction, and Version
-- Dependabot now covers GitHub Actions only, monthly and grouped into a
-  single PR. The `pip` ecosystem cannot manage PEP 735
+- Dependabot drops the `pip` ecosystem and groups GitHub Actions into a
+  single monthly PR. The `pip` ecosystem cannot manage PEP 735
   `[dependency-groups]` plus `uv.lock`, and `exclude-newer` blocked the
-  bumps it proposed; Python dependencies are updated manually instead
+  bumps it proposed; Python dependencies now arrive through the `uv`
+  ecosystem (the entry above)
 - zizmor findings are now exempted with inline `# zizmor: ignore[...]`
   comments instead of line numbers in `.github/zizmor.yml` (removed), which
   stopped matching whenever a workflow shifted by a line
