@@ -103,3 +103,29 @@ def test_todo_without_supplied_container_reads_settings_from_env(tmp_path, monke
 
     assert result.exit_code == ExitCode.OK
     assert result.stdout == "1 [ ] buy milk\n"
+
+
+@pytest.mark.parametrize("command", ["add", "list", "complete", "delete"])
+def test_todo_subcommand_help_sqlite_url_creates_no_database(
+    command, tmp_path, monkeypatch
+):
+    database = tmp_path / "sub" / "help.db"
+    monkeypatch.setenv("MY_APP_DATABASE_URL", f"sqlite:///{database}")
+
+    result = CliRunner().invoke(app, ["todo", command, "--help"])
+
+    assert result.exit_code == ExitCode.OK
+    assert "Usage:" in result.stdout
+    assert result.stderr == ""
+    assert not database.parent.exists()
+
+
+@pytest.mark.parametrize("command", ["add", "list", "complete", "delete"])
+def test_todo_subcommand_help_invalid_setting_prints_help(command, monkeypatch):
+    monkeypatch.setenv("MY_APP_DATABASE_URL", "postgresql://x")
+
+    result = CliRunner().invoke(app, ["todo", command, "--help"])
+
+    assert result.exit_code == ExitCode.OK
+    assert "Usage:" in result.stdout
+    assert result.stderr == ""
