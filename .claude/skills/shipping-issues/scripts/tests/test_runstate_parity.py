@@ -8,6 +8,7 @@ Run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -38,6 +39,16 @@ URLS = [
     ("ssh://git@github.com/acme/widgets.git", "acme/widgets"),
     ("ssh://git@github.com:2222/acme/widgets.git", "acme/widgets"),
     ("ssh://git@github.com:2222/acme/widgets.git/", "acme/widgets"),
+    ("github-work:acme/widgets.git", "acme/widgets"),
+    ("gh:acme/widgets", "acme/widgets"),
+    ("git@github.com:/acme/widgets.git", "acme/widgets"),
+    ("git://github.com/acme/widgets.git", "acme/widgets"),
+    ("git+ssh://git@github.com/acme/widgets.git", "acme/widgets"),
+    ("ssh+git://git@github.com/acme/widgets.git", "acme/widgets"),
+    ("file:///acme/widgets", None),
+    ("file:///acme/widgets.git", None),
+    ("ftp://github.com/acme/widgets", None),
+    ("./local:acme/widgets", None),
     ("https://github.com/acme", None),
     ("https://github.com/group/sub/widgets.git", None),
     ("/srv/git/widgets.git", None),
@@ -66,6 +77,7 @@ def preflight(repo: Path, env: dict[str, str]) -> dict[str, str]:
 class RunstateParityTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.repo = self.tmp / "repo"
         self.repo.mkdir()
         self.home = self.tmp / "home"
