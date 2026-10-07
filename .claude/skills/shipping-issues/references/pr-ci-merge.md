@@ -82,7 +82,7 @@ merge waits for both.
 ```bash
 mkdir -p <runstate>/review
 .agents/skills/shipping-issues/scripts/review_watch.py <pr> --timeout <seconds> > <runstate>/review/<pr>.log
-grep -E '^(verdict|review_status|reviewed_sha|head_sha|reviewed_is_head|completed_at|pr_age_seconds|findings|findings_file|detail):|^  - F' <runstate>/review/<pr>.log
+grep -E '^(verdict|trigger|review_status|reviewed_sha|head_sha|reviewed_is_head|completed_at|later_review|pr_age_seconds|findings|findings_file|detail):|^  - F' <runstate>/review/<pr>.log
 ```
 
 Start it right after `link_check.sh`, alongside the CI watch: on a host that reports
@@ -112,7 +112,11 @@ Right before the merge, re-run `review_watch.py <pr> --timeout 0` into the same 
 the file `land_pr.sh --review-log` reads, and it lists any finding posted since the last
 read (numbers stay stable: a new one is appended). An untriaged finding is triaged
 before the merge, even one from an unsolicited later review — do not wait for such a
-review to finish, but do not ignore a defect it already named.
+review to finish, but do not ignore a defect it already named. The summary keeps a single
+row, rewritten for the latest review (a `Manual request` row replaced the opening one on
+PRs #154 and #156, observed 2026-10-07), so the watch remembers the opening review it saw
+complete in `<runstate>/review/<pr>-opening.json` and keeps that verdict, reporting the
+later one on `later_review:`. Leave that file in place until the PR merges.
 
 ## Watching CI
 

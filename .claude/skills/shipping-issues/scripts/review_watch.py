@@ -14,6 +14,15 @@ comments, each starting with a priority badge (`![P1 Badge]`, P0, P2, ...) and
 a bold title. A clean review leaves no review and no inline comment; the bot
 reacts 👍 on the PR, which this script reports as corroboration only.
 
+The summary keeps one row, rewritten for the latest review: after an
+`@codex review` comment it reads `Manual request` and the opening row is gone
+(PRs #154 and #156, observed 2026-10-07). So once this script sees the opening
+review ("PR opened") complete, it remembers that row in
+<runstate>/review/<pr>-opening.json, and a later, unsolicited review never
+replaces that verdict: it is reported on `later_review:`, and any finding it
+already posted is still listed. Without that memory, a later row settles only
+once it is Completed itself.
+
 This script only reads. It never asks for a review: no `@codex review`
 comment, no close/reopen, no reply to or resolution of a thread. A push does
 not start a new review, so the one review this waits for is the opening one.
@@ -52,6 +61,7 @@ Prints:
                     the merge time: a review that completed after the merge
                     is a step 10 line)
   thumbs_up: yes | no
+  later_review: <status> (<trigger>) | none   (a review after the opening one)
   pr_age_seconds / waited_seconds
   findings: <n>, then one line per finding:
     - F<n> [P<k>] <path>:<line> id=<comment id> — <title>
@@ -274,6 +284,53 @@ def collect_findings(reviews: list[dict], inline: list[dict]) -> list[dict]:
     return findings
 
 
+_RUNSTATE: list[Path | None] = []
+
+
+def review_dir() -> Path | None:
+    """<runstate>/review for the current repo, resolved once; None if unknown."""
+    if not _RUNSTATE:
+        try:
+            repo = gh(["repo", "view", "--json", "nameWithOwner",
+                       "-q", ".nameWithOwner"]).strip()
+        except ReadError:
+            repo = ""
+        _RUNSTATE.append(
+            state_dir() / SKILL_STATE_NAME / repo.replace("/", "__") / "review"
+            if re.fullmatch(r"[^/\s]+/[^/\s]+", repo) else None)
+    return _RUNSTATE[0]
+
+
+def opening_trigger(trigger: str) -> bool:
+    """The automatic review: a PR opened, or a draft marked ready."""
+    lowered = trigger.lower()
+    return "opened" in lowered or "ready" in lowered
+
+
+def load_opening(pr: str) -> dict | None:
+    folder = review_dir()
+    if folder is None:
+        return None
+    try:
+        row = json.loads((folder / f"{pr}-opening.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if isinstance(row, dict) and row.get("sha") and status_class(row.get("status", "")) == "completed":
+        return row
+    return None
+
+
+def save_opening(pr: str, row: dict) -> None:
+    folder = review_dir()
+    if folder is None:
+        return
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / f"{pr}-opening.json").write_text(json.dumps(row), encoding="utf-8")
+    except OSError:
+        pass  # memory is a convenience; the verdict above stands without it
+
+
 def poll(pr: str, bot: str, grace: int) -> dict:
     """One full read of the PR's review state. Raises ReadError."""
     data = read_pr(pr)
@@ -281,7 +338,7 @@ def poll(pr: str, bot: str, grace: int) -> dict:
     age = pr_age_seconds(data.get("createdAt"))
     state = {"head": head, "age": age, "summary": None, "findings": [],
              "verdict": None, "detail": "", "thumbs_up": False,
-             "reviewed_is_head": None}
+             "reviewed_is_head": None, "later": None}
     if data.get("isDraft"):
         state["verdict"] = "ERROR"
         state["detail"] = (f"PR #{pr} is a draft: Codex reviews a PR when it opens "
@@ -315,6 +372,20 @@ def poll(pr: str, bot: str, grace: int) -> dict:
         state["detail"] = "the review summary has no status row yet"
         return state
 
+    # The row shows the latest review only. A later one (a manual request)
+    # never replaces an opening review this watch already saw complete.
+    if not opening_trigger(row["trigger"]):
+        state["later"] = row
+        remembered = load_opening(pr)
+        if remembered is not None:
+            row = remembered
+            state["summary"] = row
+        elif status_class(row["status"]) == "running":
+            state["detail"] = (f"a later review ({row['trigger']}) is "
+                               f"{row['status']!r} and this watch never saw the "
+                               "opening review complete, so it waits for that one")
+            return state
+
     kind = status_class(row["status"])
     if kind == "failed":
         state["verdict"] = "ERROR"
@@ -341,6 +412,8 @@ def poll(pr: str, bot: str, grace: int) -> dict:
                                f"a commit of PR #{pr}")
             return state
     state["verdict"] = "FINDINGS" if state["findings"] else "CLEAN"
+    if opening_trigger(row["trigger"]):
+        save_opening(pr, row)
     return state
 
 
@@ -352,14 +425,9 @@ def state_dir() -> Path:
 
 
 def default_findings_file(pr: str) -> Path:
-    try:
-        repo = gh(["repo", "view", "--json", "nameWithOwner",
-                   "-q", ".nameWithOwner"]).strip()
-    except ReadError:
-        repo = ""
-    if re.fullmatch(r"[^/\s]+/[^/\s]+", repo):
-        return (state_dir() / SKILL_STATE_NAME / repo.replace("/", "__")
-                / "review" / f"{pr}-findings.md")
+    folder = review_dir()
+    if folder is not None:
+        return folder / f"{pr}-findings.md"
     fd, name = tempfile.mkstemp(prefix=f"review-{pr}-", suffix=".md")
     os.close(fd)
     return Path(name)
@@ -409,6 +477,8 @@ def report(verdict: str, args: argparse.Namespace, state: dict | None,
     completed = row.get("at") if status_class(row.get("status") or "") == "completed" else ""
     print(f"completed_at: {completed or 'none'}")
     print(f"thumbs_up: {'yes' if state.get('thumbs_up') else 'no'}")
+    later = state.get("later")
+    print(f"later_review: {later['status'] + ' (' + later['trigger'] + ')' if later else 'none'}")
     print(f"pr_age_seconds: {age if age is not None else 'unknown'}")
     print(f"waited_seconds: {waited}")
     print(f"findings: {len(findings)}")

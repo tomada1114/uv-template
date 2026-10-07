@@ -490,5 +490,79 @@ class VerdictTest(unittest.TestCase):
                 self.assertNotIn("--field", call)
 
 
+class LaterReviewTest(unittest.TestCase):
+    """The summary keeps ONE row, rewritten for the latest review: on PRs #154
+    and #156 (read 2026-10-07) a `@codex review` comment left a single
+    `Manual request` row. So the watch remembers the opening review it saw
+    settle, and a later, unsolicited review cannot replace that verdict."""
+
+    def _two_runs(self, second_comments, *, second_extra=None):
+        """Run 1 sees the opening review complete; run 2 sees the row rewritten."""
+        pr = "7"
+        later = second_comments
+        responses = completed(pr, commits=(HEAD, FIXED), extra=second_extra or {})
+        sequences = {
+            ISSUE_COMMENTS(pr): [lines(summary()), later],
+            PR_VIEW(pr): [pr_json(), pr_json(head=FIXED)],
+        }
+        with FakeGh(responses, sequences=sequences) as fake:
+            argv = [sys.executable, str(SCRIPT), pr, "--timeout", "0", "--interval", "0"]
+            first = subprocess.run(argv, env=fake.env, text=True, capture_output=True)
+            second = subprocess.run(argv, env=fake.env, text=True, capture_output=True)
+        return first, second
+
+    def test_a_later_running_review_keeps_the_settled_opening_verdict(self):
+        later = lines(summary(summary_body(status="🔄 **Running** since",
+                                           sha=f"`{FIXED[:7]}`", trigger="Manual request")))
+        first, second = self._two_runs(later)
+
+        self.assertEqual(field(first.stdout, "verdict"), "CLEAN", first.stdout)
+        self.assertEqual(second.returncode, 0, second.stdout)
+        self.assertEqual(field(second.stdout, "verdict"), "CLEAN")
+        self.assertEqual(field(second.stdout, "trigger"), "PR opened")
+        self.assertEqual(field(second.stdout, "reviewed_sha"), "564ca82")
+        self.assertEqual(field(second.stdout, "later_review"), "Running (Manual request)")
+
+    def test_findings_a_later_review_already_posted_are_still_collected(self):
+        pr = "7"
+        later = lines(summary(summary_body(status="🔄 **Running** since",
+                                           sha=f"`{FIXED[:7]}`", trigger="Manual request")))
+        first, second = self._two_runs(later, second_extra={
+            REVIEWS(pr): lines(review(rid=77, commit=FIXED)),
+            INLINE(pr): lines(inline(9, "Found by the later review", review_id=77)),
+        })
+
+        # Run 1 already saw these findings (the fake answers both runs alike);
+        # what matters is that run 2 still reports them under the opening verdict.
+        self.assertEqual(field(second.stdout, "verdict"), "FINDINGS", second.stdout)
+        self.assertEqual(field(second.stdout, "trigger"), "PR opened")
+        self.assertIn("Found by the later review", second.stdout)
+
+    def test_a_later_running_review_never_seen_settle_before_is_waited_for(self):
+        # No memory of the opening review (another machine, a fresh state
+        # dir): the only trusted completion left is the later review's own.
+        pr = "7"
+        later = summary(summary_body(status="🔄 **Running** since",
+                                     sha=f"`{FIXED[:7]}`", trigger="Manual request"))
+        proc, _, _ = run_script([pr, "--timeout", "0"], completed(pr, extra={
+            ISSUE_COMMENTS(pr): lines(later),
+        }))
+
+        self.assertEqual(field(proc.stdout, "verdict"), "PENDING_TIMEOUT", proc.stdout)
+        self.assertIn("Manual request", field(proc.stdout, "detail"))
+
+    def test_a_completed_later_review_settles_when_the_opening_was_never_seen(self):
+        pr = "7"
+        later = summary(summary_body(sha=f"`{FIXED[:7]}`", trigger="Manual request"))
+        proc, _, _ = run_script([pr, "--timeout", "0"], completed(
+            pr, commits=(HEAD, FIXED), extra={
+                PR_VIEW(pr): pr_json(head=FIXED),
+                ISSUE_COMMENTS(pr): lines(later),
+            }))
+
+        self.assertEqual(field(proc.stdout, "verdict"), "CLEAN", proc.stdout)
+        self.assertEqual(field(proc.stdout, "trigger"), "Manual request")
+
+
 if __name__ == "__main__":
     unittest.main()
