@@ -272,6 +272,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Security Audit no longer lets a dispatched scan replace a pending scheduled
+  one (or the reverse): outside pull requests its concurrency group is keyed
+  per run. Dependency Review's concurrency comment now describes what it does
+  (cancelling superseded PR runs) instead of a copied ci.yml comment.
 - Switched to PEP 639 license metadata (`license-files`, dropped the
   redundant OSI trove classifier)
 - `CONTRIBUTING.md`'s manual mypy command now includes `tests`, matching

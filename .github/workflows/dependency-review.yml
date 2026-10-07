@@ -8,8 +8,8 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Only superseded PR runs are cancelled; main pushes and scheduled or
-  # dispatched scans always finish.
+  # Runs only on pull requests: a newer push to the same PR cancels the
+  # superseded run.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
