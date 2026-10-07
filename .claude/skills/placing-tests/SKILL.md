@@ -65,7 +65,8 @@ just test                                                              # whole s
 
 `[tool.pytest.ini_options]` runs with `--import-mode=importlib`, `--strict-markers`,
 and `--strict-config`: an unregistered marker or a misspelled option is an error, not a
-warning. `just test` adds `-n auto`, so the suite runs across processes. The map from a
+warning. `filterwarnings = ["error"]` makes any warning, a `DeprecationWarning` above
+all, fail the test that raised it. `just test` adds `-n auto`, so the suite runs across processes. The map from a
 changed path to its narrowest check is AGENTS.md's "Validating a change".
 
 ## CI shards

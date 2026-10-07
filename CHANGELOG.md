@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- pytest turns every warning into an error (`filterwarnings = ["error"]`), so a
+  deprecation fails the run before the upgrade that removes it. `TestClient` now
+  runs on the new `httpx2` dev dependency instead of Starlette's deprecated `httpx`
+  path
+
 - Rename the repository-local Codex workflow to `codex-shipping-issues` and require
   it for Codex issue shipping. The existing `shipping-issues` remains Claude Code
   only. Wait for the first opening-triggered review and fix its findings; after
