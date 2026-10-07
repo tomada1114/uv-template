@@ -5,6 +5,7 @@ from http import HTTPStatus
 from importlib.metadata import version
 from typing import TYPE_CHECKING
 
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 
@@ -39,6 +40,10 @@ def test_healthz_returns_ok(client):
 
     assert response.status_code == HTTPStatus.OK
     assert response.json() == {"status": "ok"}
+
+
+def test_testclient_runs_on_httpx2_not_the_deprecated_httpx():
+    assert issubclass(TestClient, httpx2.Client)
 
 
 def test_openapi_reports_the_installed_version(client):

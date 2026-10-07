@@ -41,6 +41,7 @@ Issues = "https://github.com/your-username/uv-template/issues"
 [dependency-groups]
 dev = [
     "httpx>=0.28",
+    "httpx2>=2.13",
     "mypy>=2.3.1",
     "pre-commit>=4.6.2",
     "pytest>=8.0",
@@ -301,6 +302,10 @@ addopts = [
     "--strict-markers",
     "--strict-config",
 ]
+# Any warning fails the run, so a deprecation surfaces here before the upgrade
+# that removes the deprecated path. Silence one only by a narrow entry with a
+# reason comment and a follow-up issue (changing-gates).
+filterwarnings = ["error"]
 
 # --------------------------------------------------------------------------- #
 #  coverage
