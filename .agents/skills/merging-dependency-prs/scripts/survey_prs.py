@@ -49,6 +49,10 @@ PASSING_STATES = frozenset({"SUCCESS", "NEUTRAL", "SKIPPED"})
 # Not concluded yet: the answer is "come back later", not either verdict.
 PENDING_STATES = frozenset({"PENDING", "IN_PROGRESS", "QUEUED", "WAITING", "EXPECTED"})
 UNKNOWN_STATE = "UNKNOWN"
+# Branch-name ecosystem segments that .github/dependabot.yml configures.
+KNOWN_ECOSYSTEMS = frozenset({"github_actions", "uv"})
+# Files every uv PR may share; that overlap lands one PR at a time.
+UV_MANIFEST_FILES = frozenset({"uv.lock", "pyproject.toml"})
 
 
 class GhError(Exception):
@@ -172,16 +176,26 @@ def ecosystem_of(branch: str) -> str:
     """Classify a Dependabot branch name into an ecosystem.
 
     `.github/dependabot.yml` configures `github-actions` and `uv`; Dependabot
-    names a branch `dependabot/<ecosystem>/<dependency or group>`, so `uv` is
-    matched on that segment alone, never on a package called `uv`. Anything
-    else (a security update the repository settings enabled, say) is `other`.
+    names a branch `dependabot/<ecosystem>/<dependency or group>`, so both are
+    matched on that segment alone, never on a dependency or group name that
+    happens to contain `uv` or `github_actions`. Anything else (a security
+    update the repository settings enabled, say) is `other`.
     """
-    if "github_actions" in branch:
-        return "github_actions"
     parts = branch.split("/")
-    if len(parts) > 2 and parts[0] == "dependabot" and parts[1] == "uv":
-        return "uv"
+    if len(parts) > 2 and parts[0] == "dependabot" and parts[1] in KNOWN_ECOSYSTEMS:
+        return parts[1]
     return "other"
+
+
+def lands_one_at_a_time(path: str, nums: list[int], rows: list[Row]) -> bool:
+    """Whether a contested path is only uv PRs' lock or manifest.
+
+    Two `uv` PRs always contest `uv.lock` (and often `pyproject.toml`); they
+    land one at a time while Dependabot regenerates the next lock, so that
+    overlap alone does not call for a combined branch.
+    """
+    uv_numbers = {row["number"] for row in rows if row["ecosystem"] == "uv"}
+    return path in UV_MANIFEST_FILES and set(nums) <= uv_numbers
 
 
 def contested_files(rows: list[Row]) -> dict[str, list[int]]:
@@ -248,11 +262,20 @@ def report(rows: list[Row]) -> None:
         if row["failing_checks"]:
             emit(f"        FAILING: {', '.join(row['failing_checks'])}")
         emit(f"        files: {', '.join(row['files']) or '(none)'}")
-    contested = contested_files(rows)
-    if contested:
+    contested = sorted(contested_files(rows).items())
+    one_at_a_time = [
+        (path, nums) for path, nums in contested if lands_one_at_a_time(path, nums, rows)
+    ]
+    combined = [item for item in contested if item not in one_at_a_time]
+    if one_at_a_time:
+        emit()
+        emit("Overlapping uv files (land one at a time; Dependabot rebases the next):")
+        for path, nums in one_at_a_time:
+            emit(f"  {path}: {', '.join(f'#{n}' for n in nums)}")
+    if combined:
         emit()
         emit("Overlapping files (favor a combined branch):")
-        for path, nums in sorted(contested.items()):
+        for path, nums in combined:
             emit(f"  {path}: {', '.join(f'#{n}' for n in nums)}")
 
 
