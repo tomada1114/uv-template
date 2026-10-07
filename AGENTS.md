@@ -253,5 +253,7 @@ Each layer catches what the one before it cannot; `changing-gates` owns them.
   is committed: one person's trust would bind every repository made from this
   template. Keep them in `~/.claude/settings.json`, `~/.codex/config.toml`, or
   the gitignored `.claude/settings.local.json` and `.codex/rules/local.rules`.
+  The one committed hook, `.claude/settings.json`'s cloud-only SessionStart
+  hook, grants no trust: it runs `just install`, nothing else.
 - Only a human changes the live ruleset (`just ruleset`, an admin step) or the
   repository's security settings; `starting-an-app` lists what a new one enables.
