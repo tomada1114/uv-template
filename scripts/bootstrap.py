@@ -120,10 +120,6 @@ FINISHING_COMMANDS = (
     ("uv", "run", "--locked", "ruff", "format", "--quiet", "."),
 )
 
-# `uv lock`/`uv sync` refuse anything published after this cutoff, so a fresh
-# project starts two weeks behind the index rather than at the template's date.
-EXCLUDE_NEWER_LAG_DAYS = 14
-EXCLUDE_NEWER_PATTERN = re.compile(r'exclude-newer = "[^"]*"')
 LICENSE_LINE_PATTERN = re.compile(
     rf"Copyright \(c\) \d{{4}} {re.escape(PLACEHOLDER_AUTHOR)}"
 )
@@ -474,15 +470,8 @@ class _Site:
         return content.replace(self.text, new)
 
 
-def _edit_pyproject(text: str, names: Names, today: dt.date) -> str:
-    """Write the metadata with TOML quoting and move the dependency cutoff."""
-    if len(EXCLUDE_NEWER_PATTERN.findall(text)) != 1:
-        msg = "pyproject.toml: expected exactly one exclude-newer setting"
-        raise BootstrapError(msg)
-    cutoff = today - dt.timedelta(days=EXCLUDE_NEWER_LAG_DAYS)
-    text = EXCLUDE_NEWER_PATTERN.sub(
-        f'exclude-newer = "{cutoff.isoformat()}T00:00:00Z"', text
-    )
+def _edit_pyproject(text: str, names: Names, _today: dt.date) -> str:
+    """Write the metadata with TOML quoting."""
     text = _Site("pyproject.toml", f'name = "{PLACEHOLDER_AUTHOR}"').replace(
         text, f"name = {json.dumps(names.author, ensure_ascii=False)}"
     )

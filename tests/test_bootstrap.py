@@ -258,10 +258,9 @@ def test_bootstrap_writes_the_year_and_author_into_the_license(sample_app):
     assert f"Copyright (c) {year} Jane Doe\n" in license_text
 
 
-def test_bootstrap_moves_exclude_newer_to_two_weeks_ago(sample_app):
-    cutoff = dt.datetime.now(tz=dt.UTC).date() - dt.timedelta(days=14)
+def test_bootstrap_keeps_the_relative_exclude_newer_window(sample_app):
     pyproject = (sample_app / "pyproject.toml").read_text(encoding="utf-8")
-    assert f'exclude-newer = "{cutoff.isoformat()}T00:00:00Z"' in pyproject
+    assert tomllib.loads(pyproject)["tool"]["uv"]["exclude-newer"] == "14 days"
 
 
 # --- REQ-002: no email address ---------------------------------------------
