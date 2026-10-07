@@ -125,16 +125,6 @@ LICENSE_LINE_PATTERN = re.compile(
     rf"Copyright \(c\) \d{{4}} {re.escape(PLACEHOLDER_AUTHOR)}"
 )
 
-CHANGELOG_SKELETON = """# Changelog
-
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
-"""
-
 # The contact slots: the template's sentence, which points at the repository's
 # private vulnerability reporting and issue tracker, and the sentence that
 # replaces it when --contact-url is given.
@@ -508,17 +498,11 @@ def _edit_conduct(text: str, names: Names, _today: dt.date) -> str:
     return _Site("CODE_OF_CONDUCT.md", CONDUCT_CONTACT_TEMPLATE).replace(text, new)
 
 
-def _reset_changelog(_text: str, _names: Names, _today: dt.date) -> str:
-    """Start the app's changelog empty; the template's history is not its own."""
-    return CHANGELOG_SKELETON
-
-
 FILE_EDITS: dict[str, Callable[[str, Names, dt.date], str]] = {
     "pyproject.toml": _edit_pyproject,
     "LICENSE": _edit_license,
     "SECURITY.md": _edit_security,
     "CODE_OF_CONDUCT.md": _edit_conduct,
-    "CHANGELOG.md": _reset_changelog,
 }
 
 

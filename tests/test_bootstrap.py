@@ -285,7 +285,6 @@ def test_bootstrap_writes_no_email_address(sample_app):
         "README.md",
         "SECURITY.md",
         "CODE_OF_CONDUCT.md",
-        "CHANGELOG.md",
         bootstrap.ORIGIN_FILE,
     )
     found = {path: EMAIL.findall(texts[path]) for path in metadata}
@@ -413,10 +412,10 @@ def test_main_invalid_input_leaves_the_tree_byte_identical(clone, capsys, argv_t
             id="contact-slot-drifted",
         ),
         pytest.param(
-            "CHANGELOG.md",
-            "# Changelog\n",
-            "# Changelog\n\n<!-- template-only -->\n",
-            r"CHANGELOG\.md:3: template-only block never closed",
+            "SECURITY.md",
+            "# Security Policy\n",
+            "# Security Policy\n\n<!-- template-only -->\n",
+            r"SECURITY\.md:3: template-only block never closed",
             id="unclosed-block",
         ),
         pytest.param(
@@ -593,12 +592,6 @@ def test_bootstrap_keep_bootstrap_keeps_its_files_untouched(clone):
     kept = (*KEEPABLE, f".agents/{SKILL_REFERENCE}", f".claude/{SKILL_REFERENCE}")
     for relative in kept:
         assert after[relative] == before[relative], relative
-
-
-def test_bootstrap_resets_the_changelog(sample_app):
-    changelog = (sample_app / "CHANGELOG.md").read_text(encoding="utf-8")
-    assert changelog == bootstrap.CHANGELOG_SKELETON
-    assert changelog.rstrip().endswith("## [Unreleased]")
 
 
 def test_bootstrap_new_history_records_an_unknown_commit_and_the_tree(

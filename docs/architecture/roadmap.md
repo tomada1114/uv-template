@@ -21,8 +21,8 @@ homes and repeats neither:
 It records direction and authorizes nothing. An issue is implemented because it is
 filed, tiered, and picked, never because a line here names it. It is not an ADR either:
 it takes no status and no number, and a decision a line depends on is recorded as an
-ADR ([the index](README.md)) and linked from here. What has shipped is in
-`CHANGELOG.md`, not on this page.
+ADR ([the index](README.md)) and linked from here. Merged pull requests and closed
+issues record what has shipped; `git log` shows the local history.
 
 The owner decides what the page says; an agent proposes a change to it in a pull
 request, and the change lands only once the owner has approved it.

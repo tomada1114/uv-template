@@ -627,7 +627,6 @@ class MainEndToEndTest(DigestRunner, unittest.TestCase):
 
 - [ ] Full local verification passes on the committed tree (`just verify`)
 - [ ] Docs updated, if a user-facing behavior, command, or setting changed
-- [ ] `CHANGELOG.md` updated, if this is a user-facing change
 - [ ] Breaking changes called out in the Summary
 """
         rc, out, err = self._run(["--json"], [gh_issue(123)], [gh_pr(10, body=body)])

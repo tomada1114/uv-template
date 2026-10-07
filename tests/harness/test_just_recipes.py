@@ -1,7 +1,7 @@
 """(c) Every ``just <recipe>`` the agent- and human-facing documents name exists.
 
 A renamed or removed recipe must not leave a document pointing a reader at
-nothing. Read: every top-level ``*.md`` but CHANGELOG.md (AGENTS.md, CLAUDE.md,
+nothing. Read: every top-level ``*.md`` (AGENTS.md, CLAUDE.md,
 README.md, CONTRIBUTING.md, TEMPLATE.md, SECURITY.md, ...), ``docs/**/*.md``
 but the ADRs and the roadmap, the skills, the agent definitions
 (``.claude/agents/*.md``, ``.codex/agents/*.toml``), everything under
@@ -11,7 +11,7 @@ repository and skill scripts (``scripts/*.py``,
 file or directory names nothing, and a present file that is not UTF-8 fails the
 check.
 
-Not read, because they record intent or history rather than instruct: CHANGELOG.md,
+Not read, because they record intent or history rather than instruct:
 the ADRs (``docs/architecture/adr/**``, which may decide to add or drop a
 recipe), the roadmap (``docs/architecture/roadmap.md``), and the product and
 planning documents (``docs/product/**``), whose "done when" names a recipe that
@@ -74,7 +74,6 @@ DOCUMENT_GLOBS = (
 )
 # Intent or history, not instructions: see the module docstring.
 UNREAD_GLOBS = (
-    "CHANGELOG.md",
     "docs/architecture/adr/**/*",
     "docs/architecture/roadmap.md",
     "docs/product/**/*",
@@ -548,9 +547,6 @@ def test_recipe_findings_other_justfile_is_reported(
         ),
         pytest.param(
             "docs/product/requirements.md", "Later: `just docs`.\n", id="product-docs"
-        ),
-        pytest.param(
-            "CHANGELOG.md", "## [1.0.0]\n\n- Removed `just docs`.\n", id="changelog"
         ),
         pytest.param(
             ".devcontainer/devcontainer.json",

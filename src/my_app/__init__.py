@@ -4,11 +4,3 @@ The layers depend inward only: ``api`` and ``cli`` call ``core`` services that
 ``composition`` wires to an ``adapters`` repository; ``core`` imports none of
 them.
 """
-
-from __future__ import annotations
-
-from importlib.metadata import version
-
-__version__ = version("my-app")
-
-__all__ = ["__version__"]
