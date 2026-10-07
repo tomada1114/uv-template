@@ -134,8 +134,19 @@ class EcosystemTest(unittest.TestCase):
             sp.ecosystem_of("dependabot/github_actions/actions-abc"), "github_actions"
         )
 
+    def test_uv_branch(self):
+        self.assertEqual(sp.ecosystem_of("dependabot/uv/ruff-0.16.0"), "uv")
+
+    def test_grouped_uv_branch(self):
+        self.assertEqual(
+            sp.ecosystem_of("dependabot/uv/python-minor-patch-1a2b3c4d5e"), "uv"
+        )
+
+    def test_uv_as_a_package_name_is_not_the_uv_ecosystem(self):
+        self.assertEqual(sp.ecosystem_of("dependabot/pip/uv-0.12.1"), "other")
+
     def test_anything_else_is_other(self):
-        self.assertEqual(sp.ecosystem_of("dependabot/uv/ruff-0.16.0"), "other")
+        self.assertEqual(sp.ecosystem_of("dependabot/pip/requests-2.33.0"), "other")
 
 
 class SelectRowsTest(unittest.TestCase):

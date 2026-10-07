@@ -171,10 +171,17 @@ def check_summary(rollup: list[Row] | None) -> tuple[str, list[str]]:
 def ecosystem_of(branch: str) -> str:
     """Classify a Dependabot branch name into an ecosystem.
 
-    `.github/dependabot.yml` configures only `github-actions`; anything else
-    (a security update the repository settings enabled, say) is `other`.
+    `.github/dependabot.yml` configures `github-actions` and `uv`; Dependabot
+    names a branch `dependabot/<ecosystem>/<dependency or group>`, so `uv` is
+    matched on that segment alone, never on a package called `uv`. Anything
+    else (a security update the repository settings enabled, say) is `other`.
     """
-    return "github_actions" if "github_actions" in branch else "other"
+    if "github_actions" in branch:
+        return "github_actions"
+    parts = branch.split("/")
+    if len(parts) > 2 and parts[0] == "dependabot" and parts[1] == "uv":
+        return "uv"
+    return "other"
 
 
 def contested_files(rows: list[Row]) -> dict[str, list[int]]:
