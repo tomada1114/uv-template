@@ -83,12 +83,16 @@ therefore be removed by deleting files, without touching the core:
 - **Drop the API:** delete `src/my_app/api/`, `src/my_app/cli/serve.py` and
   its registration line in `src/my_app/cli/main.py`, `tests/api/`, and
   `tests/cli/test_serve.py`; remove the `fastapi` and `uvicorn` dependencies,
-  the `httpx` dev dependency, and the `just dev` recipe; run `uv lock`. Delete
-  the `.agents/skills/building-api-routes/` skill and its row in `AGENTS.md`'s
-  Skills table, then run `just agents-sync`.
+  the `httpx` dev dependency, and the `just dev` recipe; run `uv lock`. Remove
+  the lines that name `just dev` (this README's Development block and
+  `AGENTS.md`'s Quick Reference); `just check-harness` fails while one remains.
+  Delete the `.agents/skills/building-api-routes/` skill and its row in
+  `AGENTS.md`'s Skills table, then run `just agents-sync`.
 - **Drop the CLI:** delete `src/my_app/cli/` and `tests/cli/`; remove
   `[project.scripts]`, the `typer` dependency, and the `just run` recipe; run
-  `uv lock`. `uvicorn` stays, for `just dev`. Delete the
+  `uv lock`, and remove the lines that name `just run` (this README's
+  Development block and `AGENTS.md`'s Quick Reference). `uvicorn` stays, for
+  `just dev`. Delete the
   `.agents/skills/designing-clis/` skill and its row in `AGENTS.md`'s Skills
   table, then run `just agents-sync`.
 

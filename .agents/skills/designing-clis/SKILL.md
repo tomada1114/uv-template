@@ -27,8 +27,10 @@ never a core change:
   `pyproject.toml`;
 - remove the `typer` runtime dependency, then run `uv lock`. Keep `uvicorn`: `just dev`
   serves the API with it;
-- remove the `just run` recipe, and in `pyproject.toml`'s ruff config the `typer.*`
-  entries and the `src/my_app/cli/**` per-file-ignore;
+- remove the `just run` recipe and the lines that name it (README's Development block,
+  AGENTS.md's Quick Reference; `just check-harness` fails while one remains), and in
+  `pyproject.toml`'s ruff config the `typer.*` entries and the `src/my_app/cli/**`
+  per-file-ignore;
 - delete `.agents/skills/designing-clis/`, remove its row from AGENTS.md's Skills
   table, and run `just agents-sync`.
 
