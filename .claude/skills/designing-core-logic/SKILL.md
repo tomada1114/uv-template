@@ -24,22 +24,30 @@ exposing a service over HTTP (`building-api-routes`) or as a command
 
 `api/` and `cli/` call services from `core/`, which they receive only from
 `composition.build_container`; `adapters/` implement the ports `core/` declares; `core/`
-imports nothing outside the standard library and itself.
+imports only itself and the deterministic standard-library modules allowed by
+`ALLOWED_STDLIB` in `tests/core/test_imports.py`.
 
+- Enforced by: `tests/core/test_imports.py`, the authoritative allowlist. It rejects
+  every import outside the core and the allowlist, including third-party modules,
+  other application layers, relative escapes, and imports inside `TYPE_CHECKING`.
+  The check walks subpackages too. Adding an allowed module is a reviewed decision:
+  it must do no I/O and read no clock, randomness, or environment; otherwise use a port.
 - Enforced by: `pyproject.toml` `[tool.ruff.lint.flake8-tidy-imports.banned-api]`
-  (`TID251`), which bans fastapi, typer, uvicorn, sqlite3, and httpx everywhere, while
-  its per-file-ignores switch off all of `TID251` for `api/**`, `cli/**`,
-  `adapters/**`, and `tests/**`. The ban therefore bites in `core/`, `settings.py`,
-  `composition.py`, and `scripts/`.
-- Enforced by: `tests/core/test_imports.py`, which is stricter for `core/`: it rejects
-  every third-party import (Pydantic included) and any reach into another layer,
-  across subpackages too. Its `BANNED_MODULES` covers what that rule cannot: standard
-  library modules that do I/O, such as `sqlite3`.
+  (`TID251`), a fast subset for common framework and driver mistakes. Its
+  per-file-ignores let the outer layers use those dependencies.
+- Enforced by: the AST call check in `tests/core/test_imports.py`, which rejects bare
+  calls to `open`, `input`, `print`, `breakpoint`, `exec`, `eval`, `compile`, and
+  `__import__`, plus `now`, `utcnow`, or `today` on a receiver name or attribute ending
+  in `datetime` or `date`. It also rejects `date.fromtimestamp` on recognizable
+  `date` receivers, `datetime.fromtimestamp` on recognizable `datetime` receivers
+  without an explicit timezone, and any attribute call to `astimezone` without an
+  explicit timezone. Positional or keyword `tz` arguments count as explicit unless
+  they are literal `None`. This is a structural check, not alias or data-flow/type
+  analysis: review must ensure supplied timezones are non-None and `astimezone`
+  receivers are timezone-aware.
 
 A new framework or driver the core must not touch gets a `banned-api` entry in the same
-change that adds it; the per-file-ignores already let the outer layers use it. A banned
-standard-library I/O module also goes into `BANNED_MODULES`, since the third-party rule
-does not catch it.
+change that adds it; the per-file-ignores already let the outer layers use it.
 
 ## Models hold the invariants
 
@@ -88,8 +96,10 @@ adapter has every method.
 
 ## Time and other outside inputs are injected
 
-The core never calls `datetime.now()`, reads the environment, or opens a file. The
-current time arrives through `Clock`, which any zero-argument callable returning a
+The core takes time, randomness, environment values, and I/O through injected ports.
+The import allowlist and structural call check above enforce the stated boundaries;
+review covers indirect calls and aliases the AST check cannot resolve. Current time
+arrives through `Clock`, which any zero-argument callable returning a
 timezone-aware `datetime` satisfies; a naive one is rejected by the model's invariant
 check as a bug. Production passes `composition.utc_now`; tests pass the `fixed_clock`
 fixture from `tests/conftest.py`, so a timestamp in an assertion is exact. Any other

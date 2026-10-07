@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `shipping-issues` gains `references/cloud-sessions.md` for a run in a Claude Code
+  cloud session: stop and have the owner reconnect GitHub when every push fails (never
+  route around it), expect the proxy to refuse branch deletion and unpinned GraphQL
+  calls, let CI's OSV-Scanner stand in for a blocked `api.osv.dev`, and rebuild run
+  state from GitHub on a fresh VM
 - A repository-local Codex issue workflow through regular PRs, current-head
   review and CI, and explicitly authorized merges, without personal global skills.
   The initial opening-triggered review is addressed before current-head CI and
@@ -340,6 +345,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `CODECOV_TOKEN` that every spawned repo would have to provision
 
 ### Fixed
+
+- To-do subcommand help no longer creates a SQLite database or fails when
+  configuration is invalid; services are initialized only when a command runs
 
 - `shipping-issues`' `link_check.sh` read every PR body as having no closing
   keyword under mawk 1.3.4 (Ubuntu 24.04's default awk, and the Claude Code

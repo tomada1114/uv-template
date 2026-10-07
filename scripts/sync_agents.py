@@ -160,6 +160,10 @@ def main(argv: list[str] | None = None, root: Path = REPO_ROOT) -> int:
         for difference in differences:
             print(f"  {difference.kind}: {difference.relative}", file=sys.stderr)
         print(
+            "Expected: identical file contents and executable permissions in both trees.",
+            file=sys.stderr,
+        )
+        print(
             f"Next: edit {SOURCE_DIRECTORY}/ only, then run `just agents-sync` "
             "and stage both trees.",
             file=sys.stderr,
