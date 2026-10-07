@@ -160,11 +160,14 @@ not a stylistic choice.
 
 - **Any issue left open behind a merged PR.** This is the failure mode the skill exists
   to prevent; it can never be implied, only stated.
-- **How each merged PR was reviewed** — by whom (an `architect` review, an inline
-  review, a self-review of a diff this session wrote, or on Claude Code `/code-review`
-  with its effort), the findings, what was fixed vs. rejected — and any `REJECTED`
-  finding this session did not resolve. A run that shipped unreviewed must not read like
-  one that passed. Never present re-reading your own diff as an independent review.
+- **How each merged PR was reviewed** — the PR review's verdict and the commit it read
+  (`reviewed_sha:`), every finding with its classification (accepted, rejected, out of
+  scope) and reason, which commit fixed the accepted ones, any `REJECTED` line from a
+  fix run this session did not resolve, and that the fixes were verified locally and by
+  current-head CI without a second review. A review that completed after its PR merged
+  (`completed_at:` later than the merge) is named, so it can be checked. A PR held on
+  `NO_REVIEW` or a review `ERROR` is named with the PR left open. A run that shipped
+  unreviewed must not read like one that passed.
 - **Acceptance criteria that shipped `not-met`, and why that was accepted.** If none
   did, say the criteria were met. If the issue carried none, say that — rather than
   implying it passed a check it never had.

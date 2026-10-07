@@ -1,14 +1,17 @@
 # Review fix (brief)
 
-Used at [SKILL.md step 4](../SKILL.md#4-review-the-branch) — only for findings this
-session has already read and accepted, one brief per branch that has any, handed to
-**`executor`** or followed inline in that branch's own `{workdir}`. Zero accepted
-findings → nothing to run.
+Used at [SKILL.md step 5](../SKILL.md#5-wait-for-the-pr-review) — only for the PR
+review's findings this session has already read and accepted
+([triage](implement-and-review.md#triaging-the-reviews-findings)), one brief per PR that
+has any, handed to **`executor`** or followed inline in that branch's own `{workdir}`.
+Zero accepted findings → nothing to run.
 
 ```
-Branch {branch} implements issue #{n} in {owner}/{repo} and is, or is about to
-become, a PR. A review has already run against it and I have triaged the findings
-myself; below are the ones I accepted. Apply exactly these and nothing else.
+Branch {branch} implements issue #{n} in {owner}/{repo} and is open as PR
+#{pr}. The PR's automatic review has already run against it and I have triaged
+its findings myself; below are the ones I accepted. Apply exactly these and
+nothing else. The review itself is not yours to answer: do not reply to,
+resolve, or comment on any review thread, and do not ask for another review.
 
 Work only inside {workdir} — not any sibling checkout or worktree of the same
 repository. Branch {branch} is already checked out there; do not switch
@@ -23,8 +26,9 @@ That read is the ONLY GitHub command you are permitted to run.
 </context>
 
 <findings>
-{one per line, pre-numbered by me as `F<n> file:line — what is wrong — why it
-matters`. Findings I rejected are not listed here and must not be inferred.}
+{one per line, numbered as review_watch.py numbered them, as `F<n> file:line —
+what is wrong — why it matters`, in my words. Findings I rejected or ruled out of
+scope are not listed here and must not be inferred.}
 </findings>
 
 Project conventions: read {workdir}/AGENTS.md (and the host's own instruction

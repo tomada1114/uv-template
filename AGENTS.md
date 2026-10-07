@@ -158,7 +158,7 @@ Skills are authored under `.agents/skills/` (Codex CLI) and mirrored into
 | `placing-tests` | adding a test file or a fixture, running one test, or a coverage run below the floor |
 | `recording-architecture-decisions` | a change owes an ADR, or an ADR under `docs/architecture/` is proposed, accepted, or superseded |
 | `running-the-app` | running the CLI or a server of your own to observe a change, and stopping that server afterwards |
-| `shipping-issues` | Claude Code only: shipping the next issue or the whole backlog: rank, implement, review, PR, CI, merge |
+| `shipping-issues` | Claude Code only: shipping the next issue or the whole backlog: rank, implement, PR, the PR's own review and its findings, CI, merge |
 | `smart-commit` | grouping working-tree changes into commits, or a pre-commit hook refuses a commit |
 | `starting-an-app` | setting up an app cut from this template: the Product section, the bootstrap pull request, labels, ruleset, security settings, dropping an entry point or the sample domain, the first ADRs; in the template, the bootstrap itself |
 | `steering-the-roadmap` | asked what to work on next, or the Now / Next / Later roadmap moves |

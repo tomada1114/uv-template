@@ -1,14 +1,15 @@
-# PR, CI and merge (steps 5–7)
+# PR, review, CI and merge (steps 4–7)
 
-The detail behind [SKILL.md steps 5–7](../SKILL.md#5-open-the-pr): from a reviewed,
-pushed branch to a merged PR, a closed issue, and a checkout back on the default branch.
-This stretch is serial in both modes: one PR at a time, in the batch's
-dependency-then-priority order — finish an issue's PR → CI → merge before opening the
-next.
+The detail behind [SKILL.md steps 4–7](../SKILL.md#4-open-the-pr): from an implemented,
+pushed branch to a reviewed and merged PR, a closed issue, and a checkout back on the
+default branch. This stretch is serial in both modes: one PR at a time, in the batch's
+dependency-then-priority order — finish an issue's PR → review → CI → merge before
+opening the next.
 
 ## Table of Contents
 
 - [Opening the PR](#opening-the-pr)
+- [Waiting for the PR review](#waiting-for-the-pr-review)
 - [Watching CI](#watching-ci)
 - [Waiting inside the command timeout](#waiting-inside-the-command-timeout)
 - [Merging](#merging)
@@ -20,7 +21,10 @@ Commits but nothing pushed → push from this session
 (`git -C <workdir> push -u origin <branch>`). No commits at all → no branch: record
 `--event blocked --field issue=<n>`, report `SKIPPED(<why>)`, and in `all` mode move on.
 
-Open a PR from `<branch>` against `<default_branch>`, titled `<PR-TITLE>`. The body must
+Open a regular PR — never a draft, which gets no automatic review — from `<branch>`
+against `<default_branch>`, titled `<PR-TITLE>`. A merge commit from bringing the branch
+up to date (`git merge origin/<default_branch>`) before opening is fine: the review reads
+the PR's head as it is when the PR opens. The body must
 carry **`Closes #N`** after the summary (a bare `#N` closes nothing) and target the
 **default branch** (auto-close only fires there) — build it from `PR-SUMMARY`,
 `Closes #N`, `TEST-PLAN`. Record
@@ -30,7 +34,7 @@ carry **`Closes #N`** after the summary (a bare `#N` closes nothing) and target 
 .agents/skills/shipping-issues/scripts/link_check.sh <pr> --issue <n> --fix
 ```
 
-Run it before step 6's watch starts: every body edit it makes fires the PR's `edited`
+Run it before step 6's watch starts (a body edit starts no review): every body edit it makes fires the PR's `edited`
 event, which re-runs the PR-title and labeling workflows, and a run cancelled by the
 next edit must not land inside a watch. `land_pr.sh` re-checks the link at merge time
 without `--fix`; this earlier call is not redundant, because it is the only one that
@@ -52,10 +56,63 @@ reads the body first and never adds a second keyword:
 keyword", or "closes #M but not the target issue #N", means the body still lacks the
 keyword (its `fix:` line says the edit failed): re-run `--fix`, or add `Closes #N` to
 the body by hand. "has a closing keyword for #N, but GitHub has not linked it" means the
-re-saves left the link missing: go on to step 6 anyway. Step 7's `land_pr.sh` then
+re-saves left the link missing: go on to steps 5 and 6 anyway. Step 7's `land_pr.sh` then
 refuses the merge with `result: NOT_LINKED`, and the PR is held for the human
 ([landing-outcomes.md](landing-outcomes.md)): merging it with `--no-link-check` is their
 decision, never this run's.
+
+## Waiting for the PR review
+
+The PR's review is the Codex GitHub integration's, posted by
+`chatgpt-codex-connector[bot]`. It runs once, when the PR opens (or a draft is marked
+ready, or someone comments `@codex review`); **a push starts nothing**. So this run waits
+for exactly one review, the opening one, and never asks for another: no `@codex review`
+comment, no close/reopen, no change to review settings. Fixes pushed after it get no
+second cloud review — local verification and current-head CI cover them, and the step 10
+report says so.
+
+What it looked like on PRs #170 and #171, both opened by a run of this skill (observed
+2026-10-07): the summary comment appeared about 15 s after the PR opened with a
+`🔄 **Running**` row naming the 7-character head commit and the trigger `PR opened`,
+and was edited in place to `✅ **Completed**` about 2.5 minutes later. CI took about 3
+minutes, so the two finish close together — and on #170 the merge on CI's `PASS` landed
+at 19:26:55Z, 24 s **before** the review completed at 19:27:19Z. That race is why the
+merge waits for both.
+
+```bash
+mkdir -p <runstate>/review
+.agents/skills/shipping-issues/scripts/review_watch.py <pr> --timeout <seconds> > <runstate>/review/<pr>.log
+grep -E '^(verdict|review_status|reviewed_sha|head_sha|reviewed_is_head|completed_at|pr_age_seconds|findings|findings_file|detail):|^  - F' <runstate>/review/<pr>.log
+```
+
+Start it right after `link_check.sh`, alongside the CI watch: on a host that reports
+background completion, both go in the background (`review_watch.py` with its default
+`--timeout 900`), and neither blocks the other — both only read. Otherwise run them in
+foreground slices, one after the other, under the host's command timeout
+([waiting](#waiting-inside-the-command-timeout)); `NO_REVIEW` is measured from the PR's
+opening, so review slices need no running total. **Merge only when both are terminal.**
+Bodies of findings go to `findings_file:` and stay out of this context until triage.
+
+What counts as done is the trusted bot's own record: a summary comment by exactly that
+login, `Completed`, naming a commit of this PR. `CLEAN` is that plus no review and no
+inline comment from the bot; its 👍 on the PR (`thumbs_up:`) corroborates, and neither
+its presence nor its absence decides anything. Silence, green CI, a display name, or a
+reaction alone is never completion. When `reviewed_is_head: no`, fixes were pushed after
+the review: the verdict is still that review's.
+
+| `verdict:`        | Next                                                                                                                                                                                                                                                                                 |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `CLEAN`           | Nothing to fix. Merge once CI is `PASS` for the current head.                                                                                                                                                                                                                         |
+| `FINDINGS`        | [Triage every finding](implement-and-review.md#triaging-the-reviews-findings), [fix the accepted ones](implement-and-review.md#fixing-the-accepted-findings) in the branch's own checkout, verify, push, and watch CI again for the new head. Out of scope → step 8.                 |
+| `PENDING_TIMEOUT` | Not a verdict — run the watch again; past 1800 s of `pr_age_seconds` with the review still running, treat it as `ERROR`.                                                                                                                                                             |
+| `NO_REVIEW`       | [Hold the PR](recovery.md#the-pr-review-did-not-settle): open, unmerged, a step 10 blocker. Never a local review instead.                                                                                                                                                              |
+| `ERROR`           | [recovery.md#the-pr-review-did-not-settle](recovery.md#the-pr-review-did-not-settle).                                                                                                                                                                                                |
+
+Right before the merge, re-run `review_watch.py <pr> --timeout 0` into the same log: it is
+the file `land_pr.sh --review-log` reads, and it lists any finding posted since the last
+read (numbers stay stable: a new one is appended). An untriaged finding is triaged
+before the merge, even one from an unsolicited later review — do not wait for such a
+review to finish, but do not ignore a defect it already named.
 
 ## Watching CI
 
@@ -75,7 +132,7 @@ mode. Record (`--event ci ...`).
 
 | `verdict:`           | Next                                                                                                                                      |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `PASS`               | [Merge](#merging), in the same turn.                                                                                                      |
+| `PASS`               | [Merge](#merging) in the same turn, once the review has settled.                                                                          |
 | `FAIL`               | [recovery.md#ci-fails](recovery.md#ci-fails) with [agent-ci-repair.md](agent-ci-repair.md), at most 3 attempts; re-watch after each push. |
 | `TIMEOUT`            | Not a verdict on the code — [wait again](#waiting-inside-the-command-timeout), up to 1800 s in total; past that, treat it as `ERROR`.     |
 | `NO_CHECKS`, `ERROR` | [recovery.md#no_checks-error-and-other-non-verdicts](recovery.md#no_checks-error-and-other-non-verdicts).                                 |
@@ -99,14 +156,17 @@ before that. Pick the first of these the host supports:
    draining [step 8b](../SKILL.md#8b-unblock-held-designs-in-the-background)'s
    background queue. A `TIMEOUT` after the full 1800 s is `ERROR`.
 
-Never stand in for either with `sleep` or a poll loop of your own: the script's own
-timeout and verdicts are what make a stalled CI a reported outcome rather than a hung
-run.
+`review_watch.py` waits the same two ways, alongside `ci_watch.sh`: its default
+`--timeout 900` is the single background call, and in slices each one re-reads the PR.
+Never stand in for either with `sleep` or a poll loop of your own: the scripts' own
+timeouts and verdicts are what make a stalled CI or a missing review a reported outcome
+rather than a hung run.
 
 ## Merging
 
 ```bash
-.agents/skills/shipping-issues/scripts/land_pr.sh <pr> --issue <n> --head-sha <head_sha>
+.agents/skills/shipping-issues/scripts/land_pr.sh <pr> --issue <n> --head-sha <head_sha> \
+    --review-log <runstate>/review/<pr>.log
 ```
 
 `<head_sha>` is the `head_sha:` line of the `PASS` in `<runstate>/ci/<pr>.log` — the
@@ -116,10 +176,18 @@ unverified commit (`MERGE_REFUSED`: watch CI again). When the log has no `head_s
 line, omit the flag: the script then pins to the head it reads just before it checks the
 merge state.
 
-Merge as soon as CI reports `verdict: PASS` — call `land_pr.sh` in that same turn. Do
-not ask whether to merge, and do not report the green CI and wait: green CI is the
-approval. Read `result:` and `issue:`. Every result, and the two that must never read as
-success: [landing-outcomes.md](landing-outcomes.md). Record (`--event merged ...`).
+`--review-log` makes the script refuse the merge (`REVIEW_UNSETTLED`) unless the log is
+this PR's and says `CLEAN` or `FINDINGS`. It cannot tell whether findings were
+addressed — that is the triage above — only that the review exists.
+
+Merge as soon as CI reports `verdict: PASS` for the current head and the review has
+settled — `CLEAN`, or `FINDINGS` triaged with every accepted fix pushed and covered by
+that `PASS` — and call `land_pr.sh` in that same turn. Do not ask whether to merge, and
+do not report the green CI and wait: green CI on a reviewed PR is the approval. Read
+`result:` and `issue:`. Every result, and the two that must never read as success:
+[landing-outcomes.md](landing-outcomes.md). Record (`--event merged ...`). A review whose
+`completed_at:` is later than the merge — a merge made without the guard, or by someone
+else — is a step 10 line, so it can be checked.
 
 ## After the merge
 

@@ -2,11 +2,11 @@
 
 What this skill keeps out of the main context, why the run count is what it is, and why
 each brief goes to the tier it goes to. Read it when deciding whether to delegate a
-step, before changing a run count, or before choosing how a branch is reviewed.
+step, before changing a run count, or when asked why no local review runs.
 
 ## Table of Contents
 
-- [Review: who reads the diff](#review-who-reads-the-diff)
+- [Review: the pull request's own](#review-the-pull-requests-own)
 - [What the startup costs](#what-the-startup-costs)
 - [Run budget](#run-budget)
 - [Tier assignment](#tier-assignment)
@@ -26,44 +26,22 @@ ever — because the answer is written back to GitHub. On a labeled backlog the 
 ranking step is `--select`, three lines, no spawn at all. Never re-read bodies to
 reconstruct a priority a label already carries; if a label looks wrong, fix the label.
 
-## Review: who reads the diff
+## Review: the pull request's own
 
-Only for [step 4](../SKILL.md#4-review-the-branch)'s local pass.
+The review is the pull request's: the Codex GitHub integration reviews a PR when it
+opens, and its result arrives within minutes (2–7 minutes on this repository's PRs #159,
+#160 and #170, observed 2026-10-07). No local pass runs before the PR — no review
+brief, no `/code-review` — because a second reviewer reading the same diff first costs a
+spawn per branch and a full read of the diff, for findings the PR's review returns
+anyway. What the run spends instead is a wait
+([step 5](../SKILL.md#5-wait-for-the-pr-review)), which overlaps CI, and the main context
+reads one line per finding: `review_watch.py` keeps the bodies in a file.
 
-**The standing review is a read-only, fresh-context diff review** from
-[agent-review.md](agent-review.md): handed to `architect` where the host has named
-sub-agents — its reads stay in that agent's context, and only the numbered findings come
-back — otherwise followed inline. An inline review of a diff this session wrote itself
-is a self-review: it still runs, and the step 10 report calls it that rather than
-presenting it as independent.
-
-On Claude Code, `/code-review` is an alternative to the brief, with the effort first and
-the branch second (`/code-review medium <branch>`):
-
-| effort   | when                                                                                                                                                                       |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `medium` | **the default** for this path                                                                                                                                              |
-| `high`   | the change can lose or corrode data that already exists — a migration, a storage-layer write, a released public contract real consumers are on — or the user asked for one |
-
-Diff size or file count alone is not a reason to escalate — a big mechanical rename is
-exactly the shape the default handles well. Never `ultra`: it runs in the cloud, is
-billed per use, and the prompt that defines it says explicitly that a model cannot
-launch it itself.
-
-### Never `low`: a diff it cannot see
-
-`low` **skips test and fixture hunks**. That is wrong whenever the file under `tests/`
-_is_ the gate rather than a consumer of one — a file that lints workflow YAML, asserts
-zone or import boundaries, walks the tree for secrets or placeholders, or otherwise
-decides what "green" means — and it fails silently: a diff confined to such a file comes
-back `(none)` in a few seconds, which reads exactly like a clean review and is not one.
-The same reading applies to any review result: **a clean verdict that names what it
-skipped is not a clean verdict.** Read the sentence, not the empty findings list.
-
-Observed cost of getting this wrong: a gate change reviewed at `low` returned no
-findings; re-run at `medium` it returned four, all reproduced against the branch, one of
-them a security rule that silently accepted three of the four YAML spellings it existed
-to reject.
+The trade is explicit: fixes pushed after the opening review get no second cloud review.
+Local verification and current-head CI cover them, and the step 10 report says so. A
+repository with no PR reviewer gets `NO_REVIEW`, which holds the PR rather than falling
+back to a local review — whether such a repository should merge without one is the
+owner's decision, not this run's.
 
 ## What the startup costs
 
@@ -91,11 +69,12 @@ bounded by K.
 
 Run count scales with issue count, not with thoroughness: one triage spawn (optional),
 one implementation sub-agent per issue plus up to 2 resume/patch runs when this
-session's judgment finds the first incomplete, one review per branch, one fix run per
-branch that had accepted findings (none when a review came back clean), one repair run
-per failing CI attempt (capped at 3). This session's own judgment calls — reading the
-implementation diff, reading a fix run's diff, deciding what CI failure means — cost
-targeted reads in this context, never a spawn. Filing a follow-up (step 8) never adds a
+session's judgment finds the first incomplete, one fix run per PR whose review had
+accepted findings (none when it came back clean), one repair run per failing CI attempt
+(capped at 3). The PR's review itself costs no run here, only a wait. This session's
+own judgment calls — reading the implementation diff, triaging the review's findings,
+reading a fix run's diff, deciding what CI failure means — cost targeted reads in this
+context, never a spawn. Filing a follow-up (step 8) never adds a
 run either: whatever found it already returned the lead under `FOLLOW-UPS`, and
 confirming it costs a couple of targeted reads.
 
@@ -127,19 +106,17 @@ pins its own effort, which a per-spawn `model` cannot carry.
 | -------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | Priority research (step 2) | `executor`                                                                                                      |
 | Implementation (step 3)    | `executor`; `architect` when [foundational](#the-foundation-exception-architect-for-what-the-backlog-builds-on) |
-| Review (step 4)            | `architect`                                                                                                     |
-| Review fix (step 4)        | `executor`                                                                                                      |
+| Review fix (step 5)        | `executor`                                                                                                      |
 | CI repair (step 6)         | `executor` for attempts 1–2; `architect` from attempt 3                                                         |
 | Design decision (step 8b)  | `architect`                                                                                                     |
 
 Implementation, priority research and review fixes are fully specified work with a clear
 pass/fail — the `executor` shape — with one standing exception below. CI repair
 escalates once the same failure survives two attempts in a row: persistent failure is a
-sign the spec (or the fix) needs more judgment, not more mechanical retries. Review and
-bug finding is `architect` work with genuinely unresolved spec. Design decisions are
-`architect` for the same reason and more so — deciding an approach nobody has decided is
-the least mechanical work this skill delegates, and a bad decision recorded on an issue
-outlives the run that made it. It is also the only brief here that writes to GitHub (one
+sign the spec (or the fix) needs more judgment, not more mechanical retries. Design
+decisions are `architect` because their spec is genuinely unresolved — deciding an
+approach nobody has decided is the least mechanical work this skill delegates, and a bad
+decision recorded on an issue outlives the run that made it. It is also the only brief here that writes to GitHub (one
 comment, one label) and the only one that writes no code at all. `worker` takes nothing
 in this skill: every brief here needs repository tools.
 
@@ -217,8 +194,7 @@ implementations. What it changes is when they happen, and what has to be set up 
 
 **Added, per issue in a parallel batch:** one dependency install and one baseline verify
 (`worktree_setup.sh`), both outside this context — the parent reads one `verdict:` line
-each. The review and its fix run are the same per branch in either mode — only where
-they write differs.
+each. A review fix run is the same per PR in either mode — only where it writes differs.
 
 **Saved:** the implementations overlap instead of queueing, which is the longest stretch
 of a run, and nothing in this context grows to pay for it — each sub-agent's exploration
