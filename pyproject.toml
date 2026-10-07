@@ -50,9 +50,13 @@ dev = [
 # --------------------------------------------------------------------------- #
 
 [tool.uv]
+# A relative `exclude-newer` (and the lock's `exclude-newer-span`) needs uv
+# 0.9.17 or later: "Add support for relative durations in `exclude-newer`"
+# (uv changelogs/0.9.x.md, 0.9.17).
+required-version = ">=0.9.17"
 # `uv lock` and `uv sync` ignore any release younger than 14 days. It must equal
 # the `uv` entry's `cooldown.default-days` in .github/dependabot.yml, so
-# Dependabot never proposes a version this window refuses to lock.
+# Dependabot almost never proposes a version this window refuses to lock.
 exclude-newer = "14 days"
 
 # --------------------------------------------------------------------------- #

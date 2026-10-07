@@ -51,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Seven process skills under `.agents/skills/` (mirrored to
   `.claude/skills/`): `writing-tests` and `placing-tests` (replacing
   `tests/AGENTS.md`), `tdd`, `managing-dependencies` (the `exclude-newer`
-  procedure and the sign-off a new package needs), `changing-gates` (what
+  window and the sign-off a new package needs), `changing-gates` (what
   weakening a gate means here, the pre-commit layer, required CI checks),
   `updating-docs`, and `writing-repo-scripts` (stdlib-only
   scripts, `ERR_*` reports on stderr, tests loaded through importlib)
@@ -116,7 +116,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   package and replaces every placeholder (`my-package`, `my_package`,
   `uv-template`, `your-username`, `Your Name`, `you@example.com`, and the
   description) across tracked files, then finishes the new project off —
-  current year in `LICENSE`, `exclude-newer` moved to today-14d,
+  current year in `LICENSE`,
   `CHANGELOG.md` reset to an empty skeleton, `uv lock` run (warn-only), and
   its own scaffolding deleted unless `--keep-bootstrap` is passed.
   `--github-user` is now required, since omitting it shipped a dead
@@ -139,8 +139,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.github/ISSUE_TEMPLATE/config.yml` disabling blank issues and linking
   security reports to GitHub Security Advisories
 - Dependabot cooldown and the `tool.uv.exclude-newer` supply-chain cutoff,
-  documented in the `pyproject.toml` convention in `AGENTS.md` together with
-  the manual Python dependency update procedure
+  documented in the `pyproject.toml` convention in `AGENTS.md`
 - `AGENTS.md` as the canonical, tool-agnostic agent guide (previously a
   symlink to `CLAUDE.md`, which breaks on Windows checkouts)
 - `.agents/hooks/guard.py` PreToolUse guard blocking writes to
@@ -229,8 +228,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - zizmor findings are now exempted with inline `# zizmor: ignore[...]`
   comments instead of line numbers in `.github/zizmor.yml` (removed), which
   stopped matching whenever a workflow shifted by a line
-- The PR title check no longer runs on `synchronize` — the title cannot
-  change on push
 - Moved coverage enforcement (`--cov-fail-under=80`) out of pytest
   `addopts` and into `just test` / CI, so a single test can be run in
   isolation without failing the coverage gate
