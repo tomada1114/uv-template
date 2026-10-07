@@ -55,6 +55,40 @@ uv run --locked mypy src scripts tests
 uv run --locked pytest -n auto --cov --cov-report=term-missing:skip-covered --cov-fail-under=80
 ```
 
+## Worktrees
+
+Install the Git hooks once in the primary checkout with `just install`. For a
+manually managed issue worktree, provision it from the primary checkout under a
+directory outside that checkout:
+
+```bash
+just worktree-setup 123 codex/123-short-description origin/main "$HOME/.local/state/linked-worktrees" 'just verify'
+```
+
+The existing `shipping-issues` provisioner creates the linked worktree, recreates its
+`.venv` from `uv.lock`, checks the shared hook, and runs the requested baseline. It
+never copies `.env*`, personal settings, or the primary checkout's `.venv`.
+
+When Codex has already created a linked worktree, run `just worktree-prepare` from
+that checkout to recreate its locked environment. This runs `uv sync` only; it does
+not reinstall the shared hook. A fresh, independent checkout should use `just install`
+instead.
+
+Cleanup requires an explicit worktree root and branch. Preview first:
+
+```bash
+just worktree-clean "$HOME/.local/state/linked-worktrees" codex/123-short-description
+```
+
+Only after reviewing the paths, apply it with `just worktree-clean-apply` and the same
+arguments. The cleaner delegates to the `shipping-issues` helper, which keeps a branch
+unless its exact tip is the head of a merged PR, no PR is open for the branch, and the
+worktree has no uncommitted changes. It does not delete remote branches or bypass those
+checks. Applying cleanup also removes ignored files such as `.venv` and caches; copy
+anything worth keeping before applying. For worktrees whose lifecycle is owned by
+Codex itself and is not visible to `git worktree list`, use Codex's worktree controls
+after checking the work is preserved.
+
 ## Pull Request Process
 
 1. Fork the repository and create a branch from `main`

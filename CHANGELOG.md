@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A Codex issue-to-draft-PR workflow and linked-worktree commands. Worktree
+  cleanup previews one selected branch by default and leaves dirty worktrees or
+  branches with commits beyond the merged PR head in place
 - An optional LLM layer. The core gains `LlmPort` (`complete(messages, *,
   model=None, max_tokens, timeout)` returning text, the answering model, the
   finish reason, and token usage) and the `LlmError` family; the adapters are

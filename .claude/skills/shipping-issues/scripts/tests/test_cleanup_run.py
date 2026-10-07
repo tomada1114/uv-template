@@ -384,6 +384,45 @@ class CleanupRunTest(unittest.TestCase):
         self.assertNotIn(str(merged_wt), worktrees)
         self.assertIn(str(unmerged_wt), worktrees)
 
+    def test_branch_flag_limits_worktree_pass_to_named_branches(self):
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td).resolve()
+            repo = td / "repo"
+            repo.mkdir()
+            make_repo(repo)
+            add_local_origin(repo, td)
+            wtroot = td / "wtroot"
+            wtroot.mkdir()
+            selected_wt = wtroot / "selected"
+            other_wt = wtroot / "other"
+            git(repo, "worktree", "add", "-q", str(selected_wt), "-b", "feat/selected")
+            git(repo, "worktree", "add", "-q", str(other_wt), "-b", "feat/other")
+
+            proc, _calls = run_script(
+                [
+                    "--worktree-root",
+                    str(wtroot),
+                    "--merged-only",
+                    "--branch",
+                    "feat/selected",
+                ],
+                repo,
+                {MERGED_LIST: "feat/selected\nfeat/other", OPEN_LIST: ""},
+            )
+
+            worktrees = git(repo, "worktree", "list").stdout
+            branches = git(
+                repo, "branch", "--format=%(refname:short)"
+            ).stdout.splitlines()
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertNotIn(str(selected_wt), worktrees)
+        self.assertIn(str(other_wt), worktrees)
+        self.assertIn("feat/selected", proc.stdout)
+        self.assertIn("branch not selected with --branch", proc.stdout)
+        self.assertNotIn("feat/selected", branches)
+        self.assertIn("feat/other", branches)
+
     def test_dirty_worktree_skipped_then_removed_with_force(self):
         with tempfile.TemporaryDirectory() as td:
             td = Path(td).resolve()

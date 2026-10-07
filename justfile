@@ -137,70 +137,19 @@ clean:
     find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
     find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
 
-# Only merged branches are touched, so a worktree another session is still
-# working in (open PR) is never removed; uncommitted work is kept and listed.
-# Remove agent worktrees under .claude/worktrees whose PR is merged (--dry-run to preview)
-worktree-clean *ARGS:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    dry=0
-    args="{{ARGS}}"
-    for a in $args; do
-      case "$a" in
-        --dry-run) dry=1 ;;
-        *) echo "unknown flag: $a (usage: just worktree-clean [--dry-run])" >&2; exit 2 ;;
-      esac
-    done
+# Install dependencies in a Codex-managed linked worktree without rewriting
+# the shared pre-commit hook; install hooks once in the primary checkout.
+worktree-prepare:
+    uv sync --all-groups --locked
 
-    repo_root=$(git rev-parse --show-toplevel)
-    wt_root="$repo_root/.claude/worktrees"
-    if [ ! -d "$wt_root" ]; then echo "no agent worktrees under $wt_root"; exit 0; fi
+# Create one issue worktree using the existing shipping-issues provisioner.
+worktree-setup ISSUE BRANCH BASE ROOT VERIFY:
+    bash .agents/skills/shipping-issues/scripts/worktree_setup.sh --issue {{ISSUE}} --branch {{BRANCH}} --base {{BASE}} --root {{ROOT}} --verify {{VERIFY}}
 
-    default_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')
-    default_branch=${default_branch:-main}
-    git fetch --prune --quiet || true
+# Preview cleanup of one named branch. Only merged PR heads with clean worktrees qualify.
+worktree-clean ROOT BRANCH:
+    uv run --locked python scripts/worktree_cleanup.py --root {{ROOT}} --branch {{BRANCH}}
 
-    merged_refs=""
-    open_refs=""
-    if command -v gh >/dev/null 2>&1; then
-      merged_refs=$(gh pr list --state merged --limit 200 --json headRefName -q '.[].headRefName' | sort -u || true)
-      open_refs=$(gh pr list --state open --limit 200 --json headRefName -q '.[].headRefName' | sort -u || true)
-    fi
-
-    # Merged per gh (squash merges leave no ancestry), else contained in the
-    # default branch. An open PR on the same ref always wins: still in flight.
-    is_merged() {
-      _br=$1
-      if printf '%s\n' "$open_refs" | grep -qxF "$_br"; then return 1; fi
-      if printf '%s\n' "$merged_refs" | grep -qxF "$_br"; then return 0; fi
-      git merge-base --is-ancestor "$_br" "origin/$default_branch" 2>/dev/null
-    }
-
-    removed=0; kept=0; freed=0
-    while IFS= read -r wt; do
-      case "$wt" in "$wt_root"/*) ;; *) continue ;; esac
-      br=$(git -C "$wt" symbolic-ref --short HEAD 2>/dev/null || true)
-      if [ -z "$br" ]; then
-        echo "KEPT (detached HEAD): $wt"; kept=$((kept + 1)); continue
-      fi
-      if ! is_merged "$br"; then
-        echo "KEPT (no merged PR): $wt [$br]"; kept=$((kept + 1)); continue
-      fi
-      if [ -n "$(git -C "$wt" status --porcelain)" ]; then
-        echo "KEPT (uncommitted changes — salvage first): $wt [$br]"; kept=$((kept + 1)); continue
-      fi
-      size=$(du -sm "$wt" 2>/dev/null | cut -f1); size=${size:-0}
-      if [ "$dry" -eq 1 ]; then
-        echo "DRY: would remove $wt [$br] (${size}MB)"
-      else
-        if ! git worktree remove "$wt"; then
-          echo "KEPT (worktree remove failed): $wt [$br]"; kept=$((kept + 1)); continue
-        fi
-        git branch -D "$br" >/dev/null 2>&1 || true
-        echo "removed: $wt [$br] (${size}MB)"
-      fi
-      removed=$((removed + 1)); freed=$((freed + size))
-    done < <(git worktree list --porcelain | sed -n 's|^worktree ||p')
-
-    if [ "$dry" -eq 0 ]; then git worktree prune; fi
-    echo "worktree-clean: ${removed} removed, ${kept} kept, ~${freed}MB"
+# Apply the previewed cleanup of one named branch; no --force or remote deletion.
+worktree-clean-apply ROOT BRANCH:
+    uv run --locked python scripts/worktree_cleanup.py --root {{ROOT}} --branch {{BRANCH}} --apply
