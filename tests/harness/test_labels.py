@@ -6,9 +6,15 @@ GitHub creates it with no colour or description); one declared twice, case
 aside (GitHub compares label names case-insensitively), is two conflicting
 definitions. Applied labels are read from ``.github/workflows/pr-label.yml``
 (``label=<name>`` and literal ``--add-label``/``--label`` values in its
-``run:`` steps), each issue form's top-level ``labels``, and each
-``.github/dependabot.yml`` update's ``labels`` (Dependabot's default
-``dependencies`` when an entry sets none). Each of those files is optional.
+``run:`` steps), each issue form's top-level ``labels`` and each Markdown issue
+template's front-matter ``labels``, and each ``.github/dependabot.yml``
+update's ``labels`` (Dependabot's default ``dependencies`` when an entry sets
+none; the ecosystem label Dependabot adds itself is not modelled). Applied and
+declared names are compared case-insensitively, as GitHub does.
+
+Each of those files is optional — an app may delete pr-label.yml — but one that
+is present and cannot be read fails closed: a pr-label.yml with no label this
+check can read, or a Markdown template without front matter.
 """
 
 from __future__ import annotations
@@ -84,10 +90,28 @@ def _pr_label_labels(root: Path) -> list[tuple[str, str]]:
     return applied
 
 
+def _front_matter(path: Path) -> str:
+    lines = path.read_text(encoding="utf-8").splitlines()
+    try:
+        end = lines.index("---", 1) if lines and lines[0] == "---" else -1
+    except ValueError:
+        end = -1
+    if end < 0:
+        msg = f"{path.name}: an issue template without a --- front matter block"
+        raise UnreadableYamlError(msg)
+    return "\n".join(lines[1:end])
+
+
 def _issue_form_labels(root: Path) -> list[tuple[str, str]]:
     applied: list[tuple[str, str]] = []
-    for path in sorted((root / ISSUE_FORMS).glob("*.y*ml")):
-        top = mapping(content_lines(path.read_text(encoding="utf-8")), path)
+    templates = (root / ISSUE_FORMS).glob("*")
+    for path in sorted(p for p in templates if p.suffix in {".yml", ".yaml", ".md"}):
+        text = (
+            _front_matter(path)
+            if path.suffix == ".md"
+            else path.read_text(encoding="utf-8")
+        )
+        top = mapping(content_lines(text), path)
         if "labels" in top:
             relative = path.relative_to(root).as_posix()
             applied.extend(
@@ -127,8 +151,9 @@ def label_findings(root: Path) -> list[str]:
         return [f"{LABELS}: {exc}"]
     counts = Counter(name.casefold() for name in declared)
     findings = [
-        f"{LABELS}: {name!r} is declared more than once (case-insensitively)"
-        for name in sorted({name for name in declared if counts[name.casefold()] > 1})
+        f"{LABELS}: {sorted(n for n in declared if n.casefold() == key)} name one "
+        "label (GitHub ignores case); declare it once"
+        for key in sorted(key for key, count in counts.items() if count > 1)
     ]
     applied = [
         *_pr_label_labels(root),
@@ -138,7 +163,7 @@ def label_findings(root: Path) -> list[str]:
     findings.extend(
         f"{where}: applies label {label!r}, which {LABELS} does not declare"
         for where, label in sorted(set(applied))
-        if label not in declared
+        if label.casefold() not in counts
     )
     return findings
 
@@ -148,12 +173,6 @@ def label_findings(root: Path) -> list[str]:
 
 def test_labels_applied_on_repository_are_declared_once() -> None:
     assert label_findings(REPO_ROOT) == []
-
-
-def test_pr_label_labels_reads_repository_mapping() -> None:
-    labels = {label for _, label in _pr_label_labels(REPO_ROOT)}
-
-    assert {"enhancement", "bug", "chore", "ci", "dependencies"} <= labels
 
 
 # --- fixtures ---
@@ -203,10 +222,19 @@ def test_label_findings_declared_labels_pass(make_root: MakeRoot) -> None:
             PR_LABEL: PR_LABEL_TEXT.format(extra="deps) label=dependencies ;;"),
             f"{ISSUE_FORMS}/bug.yml": 'name: Bug\nlabels: ["bug", "priority: P2"]\n',
             f"{ISSUE_FORMS}/config.yml": "blank_issues_enabled: false\n",
+            f"{ISSUE_FORMS}/task.md": "---\nname: Task\nlabels: BUG, Priority: P2\n---\nBody\n",
+            f"{ISSUE_FORMS}/blank.md": "---\nname: Blank\nlabels: ''\n---\n",
             DEPENDABOT: "version: 2\nupdates:\n  - package-ecosystem: pip\n",
         }
     )
 
+    assert label_findings(root) == []
+
+
+def test_label_findings_without_pr_label_workflow_passes(make_root: MakeRoot) -> None:
+    root = make_root({DEPENDABOT: "version: 2\nupdates:\n  - package-ecosystem: pip\n"})
+
+    assert not (root / PR_LABEL).exists()
     assert label_findings(root) == []
 
 
@@ -247,6 +275,12 @@ def test_label_findings_declared_labels_pass(make_root: MakeRoot) -> None:
             id="issue-form-comma-string",
         ),
         pytest.param(
+            {f"{ISSUE_FORMS}/task.md": "---\nname: Task\nlabels: triage\n---\nBody\n"},
+            f"{ISSUE_FORMS}/task.md: applies label 'triage', which {LABELS} does "
+            "not declare",
+            id="markdown-template",
+        ),
+        pytest.param(
             {
                 DEPENDABOT: "version: 2\nupdates:\n  - package-ecosystem: pip\n"
                 "    labels: [python]\n"
@@ -265,7 +299,8 @@ def test_label_findings_declared_labels_pass(make_root: MakeRoot) -> None:
                 LABELS: LABELS_TEXT
                 + '- name: Bug\n  color: d73a4a\n  description: "x"\n'
             },
-            f"{LABELS}: 'Bug' is declared more than once (case-insensitively)",
+            f"{LABELS}: ['Bug', 'bug'] name one label (GitHub ignores case); "
+            "declare it once",
             id="declared-twice-by-case",
         ),
         pytest.param(
@@ -285,7 +320,7 @@ def test_label_findings_undeclared_or_duplicate_label_fails(
         {DEPENDABOT: "version: 2\nupdates:\n  - package-ecosystem: pip\n", **files}
     )
 
-    assert finding in label_findings(root)
+    assert label_findings(root) == [finding]
 
 
 def test_label_findings_without_labels_file_fails(tmp_path: Path) -> None:
@@ -309,6 +344,11 @@ def test_label_findings_without_labels_file_fails(tmp_path: Path) -> None:
             {f"{ISSUE_FORMS}/f.yml": "labels: [bug,\n  triage]\n"},
             r"f\.yml: a value and a block under one key",
             id="issue-form-multi-line-flow-list",
+        ),
+        pytest.param(
+            {f"{ISSUE_FORMS}/task.md": "name: Task\nlabels: triage\n"},
+            r"task\.md: an issue template without a --- front matter block",
+            id="markdown-template-without-front-matter",
         ),
     ],
 )
