@@ -132,25 +132,52 @@ _BACKTICK_RUN_RE = re.compile(r"`+")
 # An HTML comment block (CommonMark HTML block type 2): a line that starts,
 # after up to three spaces, with `<!--`. It runs to the line holding `-->`.
 _HTML_COMMENT_OPEN_RE = re.compile(r"^ {0,3}<!--")
+# A list item's first line: a bullet or an ordered marker, then a space or tab.
+_LIST_ITEM_RE = re.compile(r"^ {0,3}(?:[-+*]|\d{1,9}[.)])(?:[ \t]|$)")
+
+
+def _indent_width(line: str) -> int:
+    """Leading whitespace in columns, a tab advancing to the next multiple of 4."""
+    width = 0
+    for char in line:
+        if char == " ":
+            width += 1
+        elif char == "\t":
+            width += 4 - width % 4
+        else:
+            break
+    return width
 
 
 def _code_spans(body: str) -> list[tuple[int, int]]:
-    """The [start, end) offsets of `body`'s fenced code blocks and inline code
-    spans, so a quoted ship-contract example is not read as the contract.
+    """The [start, end) offsets of `body`'s fenced and indented code blocks
+    and inline code spans, so a quoted ship-contract example or closing
+    keyword is not read as real.
 
     A fence closes on a line of the same character at least as long as the
     opener (an unclosed fence runs to the end). An inline span is a backtick
     run closed by the next run of the same length within one paragraph: a
     blank line, a fence, or an HTML comment block ends the paragraph, so a
     stray backtick before a contract block cannot pair with one after it (an
-    unmatched run is literal text). Indented code blocks, other HTML blocks,
-    and backslash-escaped backticks are not modelled."""
+    unmatched run is literal text).
+
+    An indented code block starts on a line indented four or more columns (a
+    tab counts to the next multiple of 4) that does not continue a paragraph:
+    an indented line straight after paragraph text is a lazy continuation of
+    it. It runs across blank lines until a non-blank line indented less. Once
+    a list item has been seen, indented lines are read as its continuation
+    rather than code until a blank line is followed by an unindented,
+    non-list line. Code nested inside list items, other HTML blocks, and
+    backslash-escaped backticks are not modelled."""
     spans: list[tuple[int, int]] = []
     paragraphs: list[tuple[int, int]] = []
     pos = 0
     fence: tuple[str, int, int] | None = None  # (char, length, start)
     in_comment = False
     para_start: int | None = None
+    indented: tuple[int, int] | None = None  # (start, end of last non-blank line)
+    in_list = False
+    after_blank = True
 
     def end_paragraph(at: int) -> None:
         nonlocal para_start
@@ -160,6 +187,22 @@ def _code_spans(body: str) -> list[tuple[int, int]]:
 
     for line in body.splitlines(keepends=True):
         stripped = line.rstrip("\r\n")
+        blank = not stripped.strip()
+        indent = _indent_width(stripped)
+        if indented is not None:
+            if blank or indent >= 4:
+                if not blank:
+                    indented = (indented[0], pos + len(line))
+                after_blank = blank
+                pos += len(line)
+                continue
+            spans.append(indented)
+            indented = None
+        if fence is None and not in_comment and not blank:
+            if _LIST_ITEM_RE.match(stripped):
+                in_list = True
+            elif after_blank and indent == 0:
+                in_list = False
         if fence is not None:
             char, length, start = fence
             close = re.fullmatch(r" {0,3}(%s{%d,})\s*" % (re.escape(char), length), stripped)
@@ -174,13 +217,18 @@ def _code_spans(body: str) -> list[tuple[int, int]]:
         elif _HTML_COMMENT_OPEN_RE.match(stripped):
             end_paragraph(pos)
             in_comment = "-->" not in stripped[stripped.index("<!--") + 4:]
-        elif not stripped.strip():
+        elif blank:
             end_paragraph(pos)
+        elif indent >= 4 and para_start is None and not in_list:
+            indented = (pos, pos + len(line))
         elif para_start is None:
             para_start = pos
+        after_blank = blank
         pos += len(line)
     if fence is not None:
         spans.append((fence[2], len(body)))
+    if indented is not None:
+        spans.append(indented)
     end_paragraph(len(body))
     for start, end in paragraphs:
         runs = list(_BACKTICK_RUN_RE.finditer(body, start, end))
@@ -266,8 +314,10 @@ def parse_ship_contract(body: str) -> dict[str, Any] | None:
     }
 
 
+# `(?<![\w-])` rather than `\b`: a hyphenated word such as `hot-fix #1` or
+# `pre-fixes #1` is not a closing keyword, though its suffix would be.
 CLOSING_RE = re.compile(
-    r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s*"
+    r"(?<![\w-])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s*"
     r"(?:(?P<url>https?://[^/\s]+/(?P<url_repo>[\w.-]+/[\w.-]+)/issues/)"
     r"|(?:(?P<repo>[\w.-]+/[\w.-]+))?#)(?P<number>\d+)\b", re.IGNORECASE
 )
