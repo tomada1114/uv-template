@@ -14,9 +14,9 @@ agent-specific hook is committed.
 path or secret-shaped content. Its module docstring and constants are the list; in
 summary:
 
-- **Paths:** `.env` and `.env.*` except `.env.example`; `.envrc` and `.envrc.*`;
-  anything under `secrets/`; `*.pem`, `*.key`, `id_rsa*`;
-  `.claude/settings.local.json` at any depth; `.codex/rules/local.rules`.
+- **Paths:** `.env` and `.env.*`, `.envrc` and `.envrc.*`, except names ending
+  `.example`, `.sample`, or `.template`; anything under `secrets/`; `*.pem`, `*.key`,
+  `id_rsa*`; `.claude/settings.local.json` at any depth; `.codex/rules/local.rules`.
 - **Content:** an AWS access key; a GitHub, Anthropic, OpenAI project, OpenRouter,
   Slack, or Stripe live token; a PEM private-key header.
 - It judges the index, not the working tree, so a partially staged file is judged as it

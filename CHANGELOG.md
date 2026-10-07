@@ -111,9 +111,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `just ruleset` (`scripts/apply_ruleset.py`), an admin-run upsert that never
   deletes
 - `scripts/check_staged.py`, a pre-commit hook (`check-staged`) that refuses
-  a commit staging a secret-shaped path (`.env*` except `.env.example`,
-  `.envrc*`, `secrets/**`, `*.pem`, `*.key`, `id_rsa*`, personal agent
-  settings) or credential-shaped content, read from the index; it also runs on
+  a commit staging a secret-shaped path (`.env*` and `.envrc*` except
+  `.example`, `.sample`, and `.template` copies, `secrets/**`, `*.pem`,
+  `*.key`, `id_rsa*`, personal agent settings) or credential-shaped content, read from the index; it also runs on
   merge commits (`pre-merge-commit`). `just install` now fails when the git
   hooks are missing (opt-out: `ALLOW_MISSING_GIT_HOOKS=1`; `CI=true` only
   warns). **Existing checkouts: re-run `just install`** to add the new

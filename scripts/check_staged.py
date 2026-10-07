@@ -69,8 +69,11 @@ BLOB_TYPE: Final = "blob"
 FRAME_TERMINATOR: Final = b"\n"
 
 ENV_FILE_NAME: Final = ".env"
-ENV_EXAMPLE_NAME: Final = ".env.example"
 DIRENV_FILE_NAME: Final = ".envrc"
+# A `.env.*` or `.envrc.*` name ending in one of these is a copy meant to be
+# committed, as in scripts/bootstrap.py's ENV_EXAMPLE_SUFFIXES; its content is
+# still scanned.
+SAMPLE_SUFFIXES: Final = (".example", ".sample", ".template")
 SECRETS_DIRECTORY: Final = "secrets"
 KEY_FILE_SUFFIXES: Final = (".pem", ".key")
 SSH_KEY_PREFIX: Final = "id_rsa"
@@ -120,7 +123,10 @@ class ExitCode(enum.IntEnum):
 class BlockedPath(str, enum.Enum):
     """Why a staged path is refused on its name alone."""
 
-    ENV_FILE = "an environment file (.env, .env.*) can hold real values; commit .env.example instead"
+    ENV_FILE = (
+        "an environment file (.env, .env.*) can hold real values; "
+        "commit a .example, .sample, or .template copy instead"
+    )
     DIRENV_FILE = "a direnv file (.envrc, .envrc.*) can export real values"
     SECRETS_DIRECTORY = "files under a secrets/ directory hold credentials"
     KEY_FILE = "a .pem or .key file is a key or certificate container"
@@ -313,14 +319,19 @@ def _is_under_secrets_directory(path: PurePosixPath) -> bool:
     return SECRETS_DIRECTORY in path.parts[:-1]
 
 
+def _is_variant_of(path: PurePosixPath, name: str) -> bool:
+    """Return whether `path` is `name` or a `name.*` variant that is not a sample."""
+    if path.name == name:
+        return True
+    return path.name.startswith(f"{name}.") and not path.name.endswith(SAMPLE_SUFFIXES)
+
+
 def _is_env_file(path: PurePosixPath) -> bool:
-    return path.name == ENV_FILE_NAME or (
-        path.name.startswith(f"{ENV_FILE_NAME}.") and path.name != ENV_EXAMPLE_NAME
-    )
+    return _is_variant_of(path, ENV_FILE_NAME)
 
 
 def _is_direnv_file(path: PurePosixPath) -> bool:
-    return path.name == DIRENV_FILE_NAME or path.name.startswith(f"{DIRENV_FILE_NAME}.")
+    return _is_variant_of(path, DIRENV_FILE_NAME)
 
 
 def _is_key_file(path: PurePosixPath) -> bool:

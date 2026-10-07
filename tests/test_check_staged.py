@@ -221,6 +221,9 @@ def _install_pre_commit(repo: GitRepo) -> None:
         pytest.param(".ENV", "ENV_FILE", id="env-upper-case"),
         pytest.param(".envrc", "DIRENV_FILE", id="envrc"),
         pytest.param(".envrc.private", "DIRENV_FILE", id="envrc-variant"),
+        pytest.param(".envrc.local", "DIRENV_FILE", id="envrc-local"),
+        pytest.param(".env.example.local", "ENV_FILE", id="env-example-not-last"),
+        pytest.param(".env.sampler", "ENV_FILE", id="env-sample-prefix-only"),
         pytest.param("secrets/token.txt", "SECRETS_DIRECTORY", id="secrets-root"),
         pytest.param("deploy/secrets/db.yml", "SECRETS_DIRECTORY", id="secrets-nested"),
         pytest.param("server.pem", "KEY_FILE", id="pem"),
@@ -249,6 +252,11 @@ def test_blocked_path_reason_secret_shaped_path_is_refused(
     [
         pytest.param(".env.example", id="env-example"),
         pytest.param("config/.env.example", id="nested-env-example"),
+        pytest.param(".env.sample", id="env-sample"),
+        pytest.param(".env.template", id="env-template"),
+        pytest.param(".env.test.example", id="env-variant-example"),
+        pytest.param("config/.ENV.SAMPLE", id="env-sample-upper-case"),
+        pytest.param(".envrc.example", id="envrc-example"),
         pytest.param(".environment", id="env-prefix-only"),
         pytest.param("src/env.py", id="env-module"),
         pytest.param("docs/secrets.md", id="secrets-file-not-directory"),
@@ -334,6 +342,13 @@ def test_check_env_file_is_refused_by_name(make_repo: Callable[..., GitRepo]) ->
 def test_check_env_example_passes(make_repo: Callable[..., GitRepo]) -> None:
     repo = make_repo()
     repo.stage(".env.example", "API_KEY=\n")
+
+    assert repo.run_check().returncode == 0
+
+
+def test_check_env_sample_passes(make_repo: Callable[..., GitRepo]) -> None:
+    repo = make_repo()
+    repo.stage(".env.sample", "API_KEY=\n")
 
     assert repo.run_check().returncode == 0
 
