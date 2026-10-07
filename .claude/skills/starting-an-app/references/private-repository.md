@@ -1,8 +1,8 @@
 # A private repository
 
 The detail behind `starting-an-app`'s ruleset step. The workflows and the contact
-routes assume a public repository. `AGENTS.md`'s "GitHub settings a new repository must
-enable" › "Security settings" says which workflows need a paid GitHub security product
+routes assume a public repository. [github-settings.md](github-settings.md) ›
+"Security settings" says which workflows need a paid GitHub security product
 on a private repository and which run anywhere; this page is the order to act on it.
 Do these steps after the bootstrap commit and before `just ruleset`.
 
@@ -30,8 +30,8 @@ repository.
 
 ## 4. Replace the public contact routes
 
-Private vulnerability reporting works only on a public repository (`AGENTS.md`'s
-"GitHub settings a new repository must enable" › "Security settings"), so every route
+Private vulnerability reporting works only on a public repository
+([github-settings.md](github-settings.md) › "Security settings"), so every route
 that points at it leads nowhere:
 
 - `SECURITY.md`: replace the "Report it privately through GitHub's private

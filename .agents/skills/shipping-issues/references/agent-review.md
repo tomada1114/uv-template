@@ -15,7 +15,9 @@ you are reading it in a context that did not write it.
 
 The branch {branch} is checked out at {workdir}. Read the project's own
 conventions first — {workdir}/AGENTS.md (and the host's own instruction
-file, if any) — then the specification and the diff against {base}:
+file, if any), plus the skills its Skills table names for the areas the diff
+touches, its tests, and its commits — then the specification and the diff
+against {base}:
 
   GIT_OPTIONAL_LOCKS=0 git -C {workdir} diff {base}...HEAD
 

@@ -14,8 +14,8 @@ description: >
 **Owns:** landing already-open Dependabot PRs: survey, review, approval scope, landing
 mode, the combined branch, and cleanup. **Does not own:** updating Python dependencies
 — `.github/dependabot.yml` covers GitHub Actions only, and `pyproject.toml` / `uv.lock`
-move by the manual procedure in `AGENTS.md` › "`[tool.uv] exclude-newer`" — nor whether
-a package may be added at all (`AGENTS.md` › "Conventions: pyproject.toml").
+move by the manual `exclude-newer` procedure in `managing-dependencies` — nor whether
+a package may be added at all (`managing-dependencies`).
 
 ## Operating contract
 

@@ -27,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `continue-on-error`, `|| true`, or a concurrency that can cancel a push run on
   main. The Product check stays `tests/test_product_section.py`, which the
   recipe also runs
+- Seven process skills under `.agents/skills/` (mirrored to
+  `.claude/skills/`): `writing-tests` and `placing-tests` (replacing
+  `tests/AGENTS.md`), `tdd`, `managing-dependencies` (the `exclude-newer`
+  procedure and the sign-off a new package needs), `changing-gates` (what
+  weakening a gate means here, the pre-commit layer, required CI checks),
+  `updating-docs`, and `writing-repo-scripts` (stdlib-only
+  scripts, `ERR_*` reports on stderr, tests loaded through importlib)
 - The `starting-an-app` skill: the order of work from "Use this template" to the
   first feature, which steps are a human's (ruleset, security settings, secrets),
   `just labels`, choosing the API, the CLI, or both, removing the sample to-do
@@ -130,9 +137,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no push to main is cancelled or replaced while pending; `check-pr-title.yml`
   and `pr-label.yml` move their `pull-requests` scope from the top level onto
   the job, leaving `permissions: {}` at the top
-- `create-pr` and `smart-commit` drop their `allowed-tools` and `metadata`
-  frontmatter keys, which `tests/harness/test_skills.py` now rejects, and
-  `authoring-skills` names the harness wherever it said no check enforced a rule
+- `authoring-skills` names the harness wherever it said no check enforced a rule
+- `AGENTS.md` keeps only what every task needs — Overview, Product, Quick
+  Reference, Validating a change, Architecture, Skills, Sub-agents, Security
+  and human approval, Enforcement layers — and its conventions and
+  procedures moved into skills; the GitHub settings a new repository enables
+  moved to `starting-an-app`'s `references/github-settings.md`.
+  `tests/AGENTS.md` is gone. `create-pr` and `smart-commit` are refreshed
+  from the sibling templates: frontmatter is `name` and `description` only,
+  and smart-commit carries a recovery table for each pre-commit hook
 - **Breaking:** `scripts/bootstrap.py` is rebuilt for the application template.
   It replaces `my-app`, `my_app`, `My App` (the new display-name placeholder),
   `MY_APP_`, `your-username/uv-template`, and `Your Name`; validates every value

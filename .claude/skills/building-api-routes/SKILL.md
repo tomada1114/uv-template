@@ -20,11 +20,19 @@ a route calls (`designing-core-logic`); trying a route against a live server
 
 ## A project without the API
 
-This skill describes the HTTP entry point only. A project that drops the API deletes
-`.agents/skills/building-api-routes/` with it, runs `just agents-sync`, and removes the
-skill's row from AGENTS.md's Skills table, alongside the files and configuration
-AGENTS.md's "Architecture" lists for that removal. Then it prunes what sibling skills
-say about the API:
+This skill describes the HTTP entry point only. Dropping the API is a deletion, never a
+core change:
+
+- delete `src/my_app/api/`, `src/my_app/cli/serve.py` and its `app.command()(serve)`
+  line in `src/my_app/cli/main.py`, `tests/api/`, and `tests/cli/test_serve.py`;
+- remove the `fastapi` and `uvicorn` runtime dependencies and the `httpx` dev
+  dependency, then run `uv lock`;
+- remove the `just dev` recipe, and in `pyproject.toml`'s ruff config the `fastapi.*`
+  entries and the `src/my_app/api/**` per-file-ignore;
+- delete `.agents/skills/building-api-routes/`, remove its row from AGENTS.md's Skills
+  table, and run `just agents-sync`.
+
+Then prune what sibling skills say about the API:
 
 - `designing-errors`: "The HTTP mapping", step 4 of "Adding a failure mode", and the
   API half of "Two kinds of failure" and "Configuration errors";
@@ -33,7 +41,9 @@ say about the API:
 - `running-the-app`: "Running a server of your own" and the server tier of "Evidence,
   cheapest first";
 - `designing-clis`: "`serve` and imports";
-- `writing-python`: the examples that quote `api/` files.
+- `writing-python`: the examples that quote `api/` files;
+- `writing-tests`, `placing-tests`, `tdd`, and `updating-docs`: their mentions of the
+  `client` fixture, `tests/api/`, a route, or an HTTP status.
 
 ## How a request flows
 

@@ -16,10 +16,9 @@ description: >
 rename, the Product section and roadmap as steps, the app's shape, removing the sample,
 the first ADRs, and the new repository's GitHub setup. **Does not own:** what the
 roadmap says (`steering-the-roadmap`); how an ADR is written
-(`recording-architecture-decisions`); labels and issue bodies (`triaging-issues`); the
-list of GitHub settings and why each matters (`AGENTS.md`'s "GitHub settings a new
-repository must enable"); which files go with each entry point (`AGENTS.md`'s
-"Architecture").
+(`recording-architecture-decisions`); labels and issue bodies (`triaging-issues`);
+what makes a CI job a required check (`changing-gates`); which files go with each entry
+point (`building-api-routes`, `designing-clis`).
 
 Steps marked **human** are a person's: an agent never runs them, and only drafts or
 lists them for the owner. Steps that write to GitHub run only with the owner's sign-off
@@ -61,7 +60,7 @@ example an agent skill that cuts repositories from templates) follows the same o
    `chore: bootstrap <app> from the template` commit, so the rename stays one reviewable
    diff. Push the branch and open a pull request; merge it once CI is green. A pull
    request rather than a push to `main`, because it is how every change lands here
-   (`AGENTS.md`'s "Git Workflow"), CI checks the bootstrap before `main` holds it, and
+   (`AGENTS.md`'s "Enforcement layers"), CI checks the bootstrap before `main` holds it, and
    it works the same before and after step 9's ruleset. Pushing, opening, and merging
    are remote writes.
 5. **Fill `docs/architecture/roadmap.md`** in its own pull request, with the Now, Next,
@@ -72,14 +71,15 @@ example an agent skill that cuts repositories from templates) follows the same o
    applying a missing label loses it silently. It writes to GitHub. **BACKGROUND:**
    `triaging-issues`, for what each label means.
 7. **Security settings and secrets** (**human**, the repository's admin): turn on what
-   `AGENTS.md`'s "GitHub settings a new repository must enable" › "Security settings"
+   [references/github-settings.md](references/github-settings.md) › "Security settings"
    lists. The template's workflows need no secret beyond the `GITHUB_TOKEN` GitHub
    provides; a secret the app adds later (a deploy key, an API key) is set by a person
    in the repository's settings and never committed — `check-staged` refuses one.
 8. **Replace the sample**, in the order of the sections below: the app's shape, the
    first ADRs, then the to-do domain.
 9. **Ruleset, last** (**human**, an admin): `just ruleset` applies
-   `.github/rulesets/main.json`. From then on every change needs a pull request with
+   `.github/rulesets/main.json` ([references/github-settings.md](references/github-settings.md)
+   › "Main branch ruleset"). From then on every change needs a pull request with
    the required checks green, so the ruleset must name only jobs the app still runs.
    On a **private repository**, first **REQUIRED:**
    [references/private-repository.md](references/private-repository.md).
@@ -93,10 +93,10 @@ the answer into the Product section's core interaction:
 - **Both**, when people use it at a terminal and other programs call it over HTTP.
 - **API only**, for a service. **CLI only**, for a tool run by hand or by a scheduler.
 
-Dropping an entry point is a list of deletions, never a core change: `AGENTS.md`'s
-"Architecture" names every file, dependency, recipe, ruff entry, and skill
-(`building-api-routes` or `designing-clis`) that goes with each, and README's
-"Architecture" holds the same list for readers. Run `uv lock` after
+Dropping an entry point is a list of deletions, never a core change: the "A project
+without the API" section of `building-api-routes` and "A project without the CLI" of
+`designing-clis` name every file, dependency, recipe, ruff entry, and skill that goes
+with each, and README's "Architecture" holds the same list for readers. Run `uv lock` after
 removing a dependency, then `just verify`.
 
 ## Record the first ADRs

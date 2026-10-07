@@ -13,8 +13,8 @@ description: >
 
 **Owns:** how a skill in this repository is authored, mirrored, and kept from silently
 failing to load. **Does not own:** the content of any individual skill; the conventions
-for code under `src/` and `scripts/` (`AGENTS.md`'s "Conventions: src/**/*.py,
-scripts/**/*.py").
+for code under `src/` and `scripts/` (`writing-python`, `writing-repo-scripts`); which
+document a change owes (`updating-docs`).
 
 ## The single source of truth
 
@@ -30,8 +30,9 @@ scripts/**/*.py").
 - Drift between the two trees fails `just agents-check` (part of `just verify`),
   `tests/test_sync_agents.py`, the `agents-check` pre-commit hook, and CI's
   `Lint & Type Check` job — all compare the trees byte for byte, not just spot-check
-  `name`. The pre-commit hook judges the working tree, so a commit that stages only one
-  of the two trees still passes there; `just verify` and CI judge the commit.
+  `name`. The pre-commit hook and `just agents-check` judge the working tree, so a
+  commit that stages only one of the two trees still passes there; they match the
+  commit only when the tree is clean. CI judges the commit.
 
 ## Layout
 
@@ -53,12 +54,11 @@ block scalar (`description: >`). Do not add any third key — no `paths`, no `gl
 field would gate auto-invocation on a glob, but Codex CLI has no such field: it ignores
 an unknown key and matches only on `description`. The same skill would then auto-fire
 on different terms per host, so a portable skill keeps `description` as its one trigger
-surface. `create-pr` and `smart-commit` predate this rule and still
-carry a `references/platform-notes.md` annex; do not copy that shape into a new skill.
+surface.
 
 - `name` is byte-identical to the directory name: lowercase letters, digits, and
   hyphens.
-- English only, per `AGENTS.md`'s "Important Reminders".
+- English only, per `AGENTS.md`'s "Overview".
 - The description is a retrieval string describing the situation that should load the
   skill (file globs, command names, error strings, decisions), never a summary of the
   skill's internal workflow. Both hosts select a skill on the description's _meaning_,
@@ -92,17 +92,19 @@ that date. A link that only explains a concept needs no date. An observed fact s
 "observed with `<command>`, YYYY-MM-DD". A claim that is neither is dropped.
 
 One home per rule: a rule stated in both `AGENTS.md` and a skill costs context twice and
-the two copies drift apart. The one exception is a prohibition an agent needs even while
-its own declared task is something else entirely (for example, never lower the coverage
-threshold or weaken a gate to make a run pass) — that stays in `AGENTS.md`, where every
-agent reads it regardless of task, and a task-specific skill holds only the reasoning an
-agent doing that task needs.
+the two copies drift apart. `AGENTS.md` holds only what every task needs, in its nine
+sections — Overview, Product, Quick Reference, Validating a change, Architecture,
+Skills, Sub-agents, Security and human approval, Enforcement layers — and a procedure
+or a convention for one kind of change is a skill. The one exception is a prohibition
+an agent needs even while its own declared task is something else entirely (for
+example, never lower the coverage threshold or weaken a gate to make a run pass) — that
+stays in `AGENTS.md`, where every agent reads it regardless of task, and a
+task-specific skill holds only the reasoning an agent doing that task needs.
 
-Every new skill opens with a two-line ownership block (`**Owns:**` / `**Does not
-own:**`) naming what it decides and what a named sibling decides. `create-pr` and
-`smart-commit` predate the convention. Cross-reference a sibling
-skill by its name in backticks, never by path, and an `AGENTS.md` rule by its section
-name in quotes, never by line number. A pointer that sends the reader to a sibling skill
+Every skill opens with a two-line ownership block (`**Owns:**` / `**Does not own:**`)
+naming what it decides and what a named sibling decides. Cross-reference a sibling skill
+by its name in backticks, never by path, and an `AGENTS.md` rule by its section name in
+quotes, never by line number. A pointer that sends the reader to a sibling skill
 as a step of the task carries one of two markers and no other: `**REQUIRED:** <skill>`
 when the task cannot be finished correctly without it, `**BACKGROUND:** <skill>` when it
 only explains why.
@@ -130,7 +132,7 @@ cannot read Claude Code plugins; `just agents-check`, the review of a pull reque
 CI never see a plugin skill; a plugin update changes behavior without a pull request
 unless pinned; and a public template cannot ask its users to trust a personal
 marketplace. A personal marketplace belongs in your own settings (`AGENTS.md`'s
-"Personal settings"). A shared plugin pinned by ref is an option only for a
+"Enforcement layers"). A shared plugin pinned by ref is an option only for a
 stack-agnostic skill copied across repositories that demonstrably drifts.
 
 ## Size and structure

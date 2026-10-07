@@ -19,7 +19,8 @@ Read, in this order:
   - the issue and its thread:
     gh issue view {n} --repo {owner}/{repo} --json title,body,labels,comments
   - the project's own conventions: {workdir}/AGENTS.md (and the host's own
-    instruction file, if any)
+    instruction file, if any), plus the skills its Skills table names for the
+    areas the issue touches
   - the code the issue names, and the nearest thing this repo already does that
     solves a similar problem — your design has to look like it, not like a
     greenfield design

@@ -23,9 +23,8 @@ marks which steps are a human's. Its `references/bootstrap.md` documents
   `target-version`, mypy `python_version`, `.python-version`, the
   devcontainer image, and every CI workflow). Lower it everywhere at once if
   the new project needs to support older interpreters.
-- Python dependencies are updated manually; see
-  the `pyproject.toml` convention in `AGENTS.md` for the `exclude-newer`
-  procedure.
+- Python dependencies are updated manually; the `managing-dependencies`
+  skill holds the `exclude-newer` procedure.
 - `just verify` (lock check, skills mirror, lint, skill tests, tests) is the
   non-mutating gate for a PR or a completion claim; `just check` mutates the
   tree first (`fmt`) and is for local iteration only.
@@ -93,8 +92,9 @@ paths and credential-shaped content straight from the index, on every
 `git commit` and every merge commit, and `just install` fails when the git
 hooks are missing. Commits git makes without running hooks — `git rebase`
 replays, `git cherry-pick`, `git revert` — are left to the weekly full-history
-scan of the Security Audit workflow (gitleaks). What the old agent hooks did and where each behavior went is the
-replacement table under "Pre-commit layer" in `AGENTS.md`.
+scan of the Security Audit workflow (gitleaks). What the old agent hooks did
+and where each behavior went is the replacement table in the `changing-gates`
+skill's `references/pre-commit-layer.md`.
 
 ### Why 80% coverage minimum?
 

@@ -102,7 +102,7 @@ prompt follow-up that closes the blocker.
 
 ## A problem found outside the task
 
-`AGENTS.md` › "Important Reminders" says an improvement spotted outside the current
+`AGENTS.md` › "Overview" says an improvement spotted outside the current
 scope is noted, not made. Noting it means an issue with a type label, a `path:line`, and a close
 condition, exactly as "What an issue body must contain" asks. Filing is a remote write:
 it is yours only under a skill that lists it (`shipping-issues` files its own

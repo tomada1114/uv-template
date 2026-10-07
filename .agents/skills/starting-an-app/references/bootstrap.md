@@ -38,8 +38,8 @@ uv run --locked python scripts/bootstrap.py todo-api \
 Without `--contact-url`, the contact sentences keep pointing at the repository itself:
 `SECURITY.md`'s fallback route at the issue tracker (ask for a private contact, give no
 detail), and `CODE_OF_CONDUCT.md`'s reports at the private vulnerability reporting form.
-Private vulnerability reporting works only on a public repository (`AGENTS.md`'s
-"GitHub settings a new repository must enable"), so on a private one pass
+Private vulnerability reporting works only on a public repository
+([github-settings.md](github-settings.md)), so on a private one pass
 `--contact-url` or follow [private-repository.md](private-repository.md).
 
 There is no `--email`, and argparse rejects one (exit 2, see below): an app cut from the template is

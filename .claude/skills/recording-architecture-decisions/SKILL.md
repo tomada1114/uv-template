@@ -17,8 +17,7 @@ ADR's shape, numbering, and statuses, amending versus superseding, keeping the i
 true, and how a fact is written into any of it. **Does not own:** the project's
 direction (`steering-the-roadmap`, which owns `docs/architecture/roadmap.md`); how a
 skill is written (`authoring-skills`); whether a dependency may be added
-(`AGENTS.md`'s "Conventions: pyproject.toml"); the decisions themselves — those are the
-ADRs.
+(`managing-dependencies`); the decisions themselves — those are the ADRs.
 
 ## What the tree is for
 
@@ -32,6 +31,7 @@ is not an ADR and takes no status: when an ADR moves a boundary it describes, th
 records why and the "Architecture" section is updated to describe the result, in the
 same pull request.
 
+<!-- template-only -->
 ## The template or a project
 
 The template repository ships the index empty, on purpose. Its own reasoning lives in
@@ -41,6 +41,7 @@ The template repository ships the index empty, on purpose. Its own reasoning liv
   hits a trigger below updates `TEMPLATE.md`'s "Design Philosophy", not the tree. Never
   seed the template's index with an ADR.
 - In a project, the same change owes an ADR.
+<!-- /template-only -->
 
 ## When a change owes an ADR
 
@@ -48,8 +49,8 @@ A decision owes one when it is expensive to reverse, or when someone outside the
 will build on it. The triggers, each with why it is expensive:
 
 - **A runtime dependency** — a package under `[project] dependencies` is installed by
-  every user and constrains every later upgrade; the checklist in `AGENTS.md`'s
-  "Conventions: pyproject.toml" is the evidence the ADR cites. A dev-only tool in
+  every user and constrains every later upgrade; the review record in
+  `managing-dependencies` is the evidence the ADR cites. A dev-only tool in
   `[dependency-groups]` owes none unless it changes a gate.
 - **A package boundary** — a new top-level package or layer under `src/`, or a change to
   what may import what. It fixes a dependency direction every later module obeys.
@@ -129,7 +130,7 @@ approval"; this is their application to prose.
 
 ## Writing
 
-English, per `AGENTS.md`'s "Important Reminders". Spend words on trade-offs and on what
+English, per `AGENTS.md`'s "Overview". Spend words on trade-offs and on what
 the code cannot say; do not restate it. Name a module, a symbol, or a `pyproject.toml`
 key rather than a `path:line`, which rots with the next edit. Keep sketches small enough
 to check by eye — a `Protocol`, a table layout, a config shape — because nothing runs a
