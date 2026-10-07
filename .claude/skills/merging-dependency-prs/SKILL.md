@@ -157,7 +157,9 @@ These require a separate decision even if a batch was approved:
   dependency included. It needs `managing-dependencies`' review record and the owner's
   yes, like any new package.
 - A `pyproject.toml` change beyond an existing dependency's range: a new entry, a
-  `[tool.*]` table, a move of `exclude-newer`, or an `exclude-newer-package` entry.
+  `[tool.*]` table, a move of `exclude-newer`, or a new or extended
+  `exclude-newer-package` entry. Removing a stale one, as the review checklist plans, is
+  not.
 - A security update younger than the 14-day window, which `uv lock` refuses — usually
   seen as a failed Dependabot job and an open alert rather than as a PR
   ([F3](references/failure-modes.md)): whether to add a one-package exception is the

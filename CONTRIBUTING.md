@@ -8,8 +8,8 @@ your development environment and submit changes.
 Install these tools:
 
 - [Python 3.14+](https://www.python.org/)
-- [uv](https://docs.astral.sh/uv/getting-started/installation/) 0.9.17 or later
-  (`pyproject.toml`'s `required-version`; the relative `exclude-newer` needs it)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) 0.11.8 or later
+  (`pyproject.toml`'s `required-version`; the relative `exclude-newer` and its lockfile form need it)
 - [Just](https://just.systems/man/en/installation.html) (optional — you can run
   `uv run` commands directly)
 

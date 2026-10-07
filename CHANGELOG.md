@@ -163,7 +163,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   proposes, a human merges via `merging-dependency-prs`", which now surveys
   and reviews `uv` PRs (`survey_prs.py` classifies `dependabot/uv/...`
   branches as `uv`); `scripts/bootstrap.py` no longer rewrites
-  `exclude-newer`
+  `exclude-newer`. `[tool.uv] required-version = ">=0.11.8"` now refuses an
+  older uv, which cannot read the relative window's lockfile form
 - CI, CodeQL, and OSV-Scanner key their concurrency group on the commit SHA
   outside a pull request, and CI cancels only superseded pull-request runs, so
   no push to main is cancelled or replaced while pending; `check-pr-title.yml`
