@@ -64,8 +64,51 @@ deletions (README's Architecture section), not a refactor.
 
 The runtime dependencies are exactly what those entry points need — FastAPI,
 uvicorn, Typer, and pydantic-settings — and the SQLite adapter uses the
-stdlib `sqlite3` driver rather than an ORM. Anything else is yours to add
+stdlib `sqlite3` driver rather than an ORM. The one other package, `httpx`,
+sits in the optional `ai` extra for the LLM adapter below, so an app that
+never installs it carries nothing extra. Anything else is yours to add
 deliberately.
+
+### Why an optional LLM layer behind a port?
+
+Many apps cut from this template will call a language model, and the same
+mistake the core avoids for HTTP frameworks applies here: a provider's SDK
+leaking into the business rules. So the LLM is one more port. `LlmPort` and
+its values (`core/llm.py`) are plain Python, and adapters implement it: a
+`FakeLlm` for tests, a `ClosedLlm` for an app with no key, and
+`OpenRouterLlm`. The fake and OpenRouter adapters pass one contract suite.
+
+- **OpenRouter as the one provider.** One key reaches many vendors' models,
+  and the model is a setting (`MY_APP_LLM_MODEL`), so trying another model is
+  not a code change. A second provider is a second adapter.
+- **Raw `httpx` over the `openai` SDK.** `httpx` and everything it needs were
+  already locked for `TestClient`, so the layer adds no locked package. The
+  SDK would add several, for one POST, and bring its own retry and timeout
+  layer that would double the adapter's (the sibling nextjs-app-template's
+  issue #73 had to fight exactly that).
+- **An extra, not a group or a hard dependency.** An extra is package
+  metadata a wheel carries (`pip install 'my-app[ai]'`); a dependency group
+  never reaches a built package; a hard dependency would make every app carry
+  it.
+- **Closed by default.** Without `OPENROUTER_API_KEY`, `build_llm` returns
+  `ClosedLlm`, a route built on it answers 503, and neither `httpx` nor the
+  adapter is imported. The key alone opens it: a billed endpoint is never
+  open by accident. No sample route ships, so there is no billed endpoint to
+  protect until an app writes one. 503 rather than 500, because here a 500
+  means a bug and an unconfigured feature is not one.
+- **Bounded retries inside one deadline.** Two retries on 429, 502, 503, or
+  a failed connect, waiting 0.5 s then 1.0 s or the provider's `Retry-After`
+  up to 8 s; a longer `Retry-After` ends the call. `timeout` bounds the whole
+  call, retries included, so retries never multiply it; callers default to 60
+  s. The 60 s and the 8 s cap follow the sibling nextjs-app-template's
+  OpenRouter adapter (its issues #63, #71, and #73).
+- **No live call in the suite.** It would bill, flake, and need a key in CI,
+  and a skipped test is a weakened gate. The OpenRouter adapter runs the
+  contract suite over `httpx.MockTransport`; the `integrating-llm` skill
+  documents the owner's manual live check.
+
+The decision is the template's issue #97. A project that keeps the layer
+records its own ADR; one that does not follows the skill's removal list.
 
 ### Why Just over Make?
 
