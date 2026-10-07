@@ -10,8 +10,9 @@ check names, run URLs and conclusions separately; green CI is not review evidenc
 ## Observe the opening review
 
 Discover connected review and PR actions. Read submitted reviews, inline threads,
-resolution state, PR conversation and task metadata where available. Follow pagination
-or use a permitted fallback if the connector's normalized response omits required data.
+resolution state, PR conversation and task metadata where available. Follow MCP
+pagination or discover another MCP action when normalized responses omit data.
+If required evidence remains unavailable, report it; never use `gh` or direct HTTP.
 
 If the user or repository records automatic Codex review only on opening, open a regular
 PR and observe that initial run. Record opening time, head/base and review activity.

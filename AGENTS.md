@@ -197,6 +197,10 @@ model is inherited. `tests/test_agent_tiers.py` holds their instructions equal.
   The ruleset blocks a force-push to or deletion of `main` only once a human has
   applied it with `just ruleset`; nothing else blocks a force-push or
   `gh pr merge --admin`, so this instruction is the rule itself.
+- In Codex, use GitHub MCP for all remote GitHub operations; never invoke `gh`
+  directly or through live-GitHub helpers, and never use a direct HTTP fallback.
+  Report missing MCP capabilities. Local checkout, commit and push use Git;
+  repository checks using mocked CLI fixtures remain permitted.
 - Never bypass a git hook — no `--no-verify`, no `SKIP=<hook id>`, no edit to
   `.git/hooks/`. `--no-verify` switches off the secret gate of the
   [enforcement layers](#enforcement-layers) along with everything else.

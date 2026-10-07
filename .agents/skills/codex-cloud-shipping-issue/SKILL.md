@@ -44,10 +44,11 @@ or a resume; ask only for necessary writes outside it.
 ## 1. Establish the checkout and environment
 
 Resolve repository identity and default branch through the connected GitHub
-integration, including its authenticated-user check. Prefer connected actions for
-remote reads and writes; local Git owns checkout, commit and push. Use `gh` only for
-capabilities the connector cannot supply, after a harmless read succeeds. A CLI
-failure does not invalidate successful connector evidence; never read credentials.
+MCP integration, including its authenticated-user check. Use MCP exclusively for
+remote GitHub reads and writes; local Git owns checkout, commit and push. Do not
+run `gh`, authentication probes or helpers that invoke it for live GitHub data.
+No CLI or direct HTTP fallback: report missing capabilities/evidence and preserve
+state. Mocked CLI fixtures in required checks remain permitted. Never read credentials.
 
 Inspect branch, status, worktrees, local author identity and remote base. Preserve
 unrelated changes. Use the managed worktree assigned to this chat. If the primary
@@ -73,8 +74,8 @@ report the missing evidence without narrowing acceptance.
 Use the supplied issue number, otherwise select one ready issue by actual dependency
 state then existing priority labels. Read the full body, every comment, related PRs
 and dependency issues through the connector. Do not backfill labels or create tracker
-writes. The local `shipping-issues` plan helper is optional; its CLI authentication
-failure does not block connector-based selection.
+writes. Select through MCP; do not run the `shipping-issues` plan helper, which
+uses live `gh` operations. Local-only helpers and MCP-exported data are permitted.
 
 Write an acceptance-to-check map before editing. Scope and product/design decisions
 must be settled, with observable pass/fail acceptance. Resolve routine technical
@@ -121,8 +122,9 @@ attempt cap; honor explicit user deadlines and host limits.
 
 Report the issue, PR URL, head SHA, acceptance and local checks, separate Codex review
 and CI evidence, observed merge/issue state, and any missing evidence. Never report
-PR creation as verified landing. Cleanup is separate: only after a verified merge
-and explicit cleanup authority, preview with `just worktree-clean <root> <branch>`
-and apply that exact preview with `just worktree-clean-apply <root> <branch>`.
-Use the host lifecycle for a host-managed worktree. Verify checkout and registration
-outcomes; preserve dirty worktrees and commits newer than the merged PR head.
+PR creation as verified landing. Cleanup requires verified merge and explicit
+cleanup authority. Use the host lifecycle for a host-managed worktree. Do not run
+`just worktree-clean` or `just worktree-clean-apply` in Codex: their cleanup helper
+uses live `gh` operations. For manual worktrees, verify merge evidence through MCP
+and inspect local state before authorized Git cleanup. Verify checkout and
+registration outcomes; preserve dirty worktrees and newer commits.

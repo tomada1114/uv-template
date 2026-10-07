@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Codex uses GitHub MCP exclusively for remote GitHub operations, with local Git
+  for checkout, commit and push. Missing MCP capabilities are reported without
+  invoking `gh` or helpers that call it
+
 ### Added
 
 - A repository-local Codex issue workflow through regular PRs, current-head
