@@ -2,8 +2,8 @@
 name: designing-clis
 description: >
   Covers the Typer entry point in src/my_app/cli/: the my-app root app in main.py, one
-  Typer group per resource, the callback that puts the composition root's Container on
-  ctx.obj, commands wrapped in exit_on_domain_error, stdout for results and stderr for
+  Typer group per resource, the shared lazy get_container accessor that caches services
+  on ctx.obj, commands wrapped in exit_on_domain_error, stdout for results and stderr for
   errors, one-line command docstrings, the deferred FastAPI and uvicorn imports in
   serve.py, and CliRunner tests passing obj=. Use when adding or changing a command, an
   argument or option, or command output, or when removing the CLI. The skill is deleted
@@ -56,26 +56,21 @@ Then prune what sibling skills say about the CLI:
 - A command never shadows a builtin: it is registered by name over a descriptive
   function (`writing-python` owns the rule).
 
-## Services come from the group's callback
+## Services come from a shared lazy accessor
 
-The group's `@app.callback()` builds the container once per invocation and puts it on
-`ctx.obj`; every command reads it from there through a typed helper. A caller that
-already passed `obj=` — a test, through `CliRunner.invoke` — keeps its own container.
+Commands call `get_container(ctx)` from `cli/context.py` when they need services.
+The accessor reuses the nearest supplied `ctx.obj`, including a caller's `obj=` through
+`CliRunner.invoke`. With none supplied, it builds through `build_container(load_settings())`
+and caches on the invocation's root context, so sibling commands share one container.
+Groups do not build services in a callback: subcommand `--help` must work without
+reading settings or creating a database, even under invalid configuration.
+
 A command never calls `build_container` or constructs an adapter itself, and never
 builds `Settings()` directly: `load_settings()` is what turns an invalid `MY_APP_*`
 variable into exit 3 and one line instead of a traceback.
 
 Excerpts in this skill drop comments, docstrings, and enclosing code where marked; the
 real code keeps its docstrings, because ruff's `D` rules require them.
-
-```python
-@app.callback()
-def load_services(ctx: typer.Context) -> None:
-    """Create, list, complete, and delete to-dos."""
-    # ... comment elided
-    if ctx.obj is None:
-        ctx.obj = build_container(load_settings())
-```
 
 ## A command's shape
 
@@ -98,7 +93,7 @@ def complete_todo(
 ) -> None:
     """Mark a to-do as completed."""
     with exit_on_domain_error():
-        todo = _container(ctx).todos.complete(todo_id)
+        todo = get_container(ctx).todos.complete(todo_id)
     typer.echo(f"Completed {_describe(todo)}")
 ```
 
@@ -142,7 +137,7 @@ that needs a heavy optional stack defers its import the same way. `serve` binds
 1. The service method it calls exists first, with its tests. **REQUIRED:**
    `designing-core-logic`.
 2. The command goes in its group's module in the shape above; a new group is a new
-   module with its own `app` and callback, registered in `cli/main.py`.
+   module with its own `app`, registered in `cli/main.py`.
 3. Test it (below): the happy path with exact stdout, each domain error with
    `ExitCode.DOMAIN_ERROR`, and a malformed argument with `ExitCode.USAGE_ERROR`.
 4. Add it to the README's CLI/HTTP table.
@@ -165,7 +160,7 @@ that needs a heavy optional stack defers its import the same way. `serve` binds
 
 - Assert `result.exit_code` against an `ExitCode` member, `result.stdout` exactly, and
   `result.stderr` for the error line; a failure also asserts `stdout == ""`.
-- A test omits `obj=` when what it checks happens before, or instead of, the group's
+- A test omits `obj=` when what it checks happens before, or instead of, the lazy
   container: reading settings from the environment
   (`test_todo_without_supplied_container_reads_settings_from_env` in
   `tests/cli/test_todo.py`, the config-error test in `tests/cli/test_errors.py`) and

@@ -336,6 +336,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- To-do subcommand help no longer creates a SQLite database or fails when
+  configuration is invalid; services are initialized only when a command runs
+
 - `shipping-issues`' `link_check.sh` read every PR body as having no closing
   keyword under mawk 1.3.4 (Ubuntu 24.04's default awk, and the Claude Code
   cloud VM's), which panics on the `{0,3}` interval in its fence regex; it now
