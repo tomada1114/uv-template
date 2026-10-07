@@ -14,10 +14,13 @@ Per workflow under ``.github/workflows/``:
   ``false`` on a job or step, and no ``|| true`` on a non-comment line;
 - on a workflow triggered on ``push``, no concurrency (top-level or a job's)
   cancels a push run on main: ``cancel-in-progress`` is absent, ``false``, or
-  ``${{ github.event_name == 'pull_request' }}``, and the group names
-  ``github.sha``, ``github.run_id``, or ``github.run_number``, because GitHub
-  also cancels a *pending* run when a newer one joins its group. The group is
-  read as text, not evaluated.
+  ``${{ github.event_name == 'pull_request' }}``; and the group differs per
+  push run, because GitHub also cancels a *pending* run when a newer one joins
+  its group. The group is read as text, not evaluated: it passes only as the
+  idiom ``${{ github.event_name == 'pull_request' && github.ref || github.sha }}``
+  (``head_ref``/``run_id``/``run_number`` accepted in their places), or with no
+  ``github.ref``/``head_ref``/``event_name`` and a ``github.sha``, ``run_id``, or
+  ``run_number``. An inline ``concurrency: {…}`` mapping is not read and fails.
 """
 
 from __future__ import annotations
@@ -60,6 +63,14 @@ CHECKOUT = "actions/checkout"
 _PINNED = re.compile(r"^[\w.-]+/[\w.-]+(?:/[^@\s]+)?@[0-9a-f]{40}$")
 _VERSION_COMMENT = re.compile(r"^#\s*v\d")
 _OR_TRUE = re.compile(r"\|\|\s*true\b")
+# The one idiom that keeps a ref group for pull requests and a per-run group for
+# everything else. Any other reference to the ref (or the event) in a group is
+# read as possibly shared by push runs.
+_PR_REF_OR_RUN = re.compile(
+    r"\$\{\{\s*github\.event_name\s*==\s*'pull_request'\s*&&\s*"
+    r"github\.(?:ref|head_ref)\s*\|\|\s*github\.(?:sha|run_id|run_number)\s*\}\}"
+)
+_REF_OR_EVENT = re.compile(r"github\.(?:ref|head_ref|event_name)\b")
 
 
 def _pin_problems(entry: Entry, where: str) -> list[str]:
@@ -84,8 +95,19 @@ def _permissions(entry: Entry | None, path: Path) -> dict[str, str] | None:
     return {key: scalar(scope) for key, (scope, _) in mapping(block, path).items()}
 
 
+def _is_per_push_run(group: str) -> bool:
+    """Whether a concurrency group differs between any two push runs."""
+    rest = _PR_REF_OR_RUN.sub("", group)
+    if _REF_OR_EVENT.search(rest):
+        return False
+    return rest != group or any(context in rest for context in PER_RUN_CONTEXTS)
+
+
 def _concurrency_problems(entry: Entry, where: str, path: Path) -> list[str]:
     value, block = entry
+    if value.startswith(("{", "[")):
+        msg = f"{path.name}: cannot read an inline `concurrency: {value}`"
+        raise UnreadableYamlError(msg)
     if value:
         group, cancel = scalar(value), None
     else:
@@ -97,7 +119,7 @@ def _concurrency_problems(entry: Entry, where: str, path: Path) -> list[str]:
         problems.append(
             f"{where}: `cancel-in-progress: {cancel}` can cancel a push run on main"
         )
-    if not any(context in group for context in PER_RUN_CONTEXTS):
+    if not _is_per_push_run(group):
         problems.append(
             f"{where}: concurrency group {group!r} is shared by push runs, so a "
             "newer push cancels a pending one"
@@ -334,6 +356,22 @@ JOB = f"{W}: job 'build'"
             id="push-group-by-ref",
         ),
         pytest.param(
+            "github.event_name == 'pull_request' && github.ref || github.sha",
+            "github.event_name == 'push' && github.ref || github.sha",
+            f'{W}: concurrency group "${{{{ github.workflow }}}}-${{{{ '
+            "github.event_name == 'push' && github.ref || github.sha }}\" is shared "
+            "by push runs, so a newer push cancels a pending one",
+            id="push-group-inverted-idiom",
+        ),
+        pytest.param(
+            "${{ github.event_name == 'pull_request' && github.ref || github.sha }}",
+            "${{ github.ref }}-${{ github.event_name == 'pull_request' && github.sha || '' }}",
+            f'{W}: concurrency group "${{{{ github.workflow }}}}-${{{{ github.ref }}}}-'
+            "${{ github.event_name == 'pull_request' && github.sha || '' }}\" is shared "
+            "by push runs, so a newer push cancels a pending one",
+            id="push-group-ref-plus-optional-sha",
+        ),
+        pytest.param(
             "    permissions:\n      pull-requests: write\n",
             "    concurrency: deploy\n",
             f"{JOB}: concurrency group 'deploy' is shared by push runs, so a newer "
@@ -387,4 +425,43 @@ def test_hygiene_findings_unreadable_steps_fail_closed(
     text = CLEAN.replace("    steps:\n      - uses", "    steps:\n    - uses")
 
     with pytest.raises(UnreadableYamlError, match=r"w\.yml: cannot read"):
+        hygiene_findings(make_workflow(text))
+
+
+@pytest.mark.parametrize(
+    "group",
+    [
+        pytest.param("${{ github.workflow }}-${{ github.sha }}", id="sha"),
+        pytest.param("deploy-${{ github.run_id }}", id="run-id"),
+        pytest.param(
+            "${{ github.workflow }}-${{ github.event_name == 'pull_request' "
+            "&& github.head_ref || github.run_id }}",
+            id="head-ref-idiom",
+        ),
+    ],
+)
+def test_hygiene_findings_per_run_push_group_passes(
+    make_workflow: MakeWorkflow, group: str
+) -> None:
+    text = CLEAN.replace(
+        "${{ github.workflow }}-${{ github.event_name == 'pull_request' "
+        "&& github.ref || github.sha }}",
+        group,
+    )
+
+    assert hygiene_findings(make_workflow(text)) == []
+
+
+def test_hygiene_findings_inline_concurrency_mapping_fails_closed(
+    make_workflow: MakeWorkflow,
+) -> None:
+    start = CLEAN.index("concurrency:\n")
+    end = CLEAN.index("jobs:\n")
+    text = (
+        CLEAN[:start]
+        + "concurrency: {group: x-${{ github.sha }}, cancel-in-progress: true}\n\n"
+        + CLEAN[end:]
+    )
+
+    with pytest.raises(UnreadableYamlError, match=r"inline `concurrency: \{group"):
         hygiene_findings(make_workflow(text))
