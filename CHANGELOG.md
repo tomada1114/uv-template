@@ -111,13 +111,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `just ruleset` (`scripts/apply_ruleset.py`), an admin-run upsert that never
   deletes
 - `scripts/check_staged.py`, a pre-commit hook (`check-staged`) that refuses
-  a commit staging a secret-shaped path (`.env*` except `.env.example`,
-  `.envrc*`, `secrets/**`, `*.pem`, `*.key`, `id_rsa*`, personal agent
-  settings) or credential-shaped content, read from the index; it also runs on
-  merge commits (`pre-merge-commit`). `just install` now fails when the git
-  hooks are missing (opt-out: `ALLOW_MISSING_GIT_HOOKS=1`; `CI=true` only
-  warns). **Existing checkouts: re-run `just install`** to add the new
-  `pre-merge-commit` hook
+  a commit staging a secret-shaped path (`.env*` and `.envrc*` except
+  `.example`, `.sample`, and `.template` copies, `secrets/**`, `*.pem`,
+  `*.key`, `id_rsa*`, personal agent settings) or credential-shaped content,
+  read from the index; it also runs on merge commits (`pre-merge-commit`).
+  `just install` now fails when the git hooks are missing (opt-out:
+  `ALLOW_MISSING_GIT_HOOKS=1`; `CI=true` only warns). **Existing checkouts:
+  re-run `just install`** to add the new `pre-merge-commit` hook
+- `.check-staged-allow`, a committed allowlist for the `check-staged` secret
+  gate, read from the index: `path <file>` exempts one exact file from the
+  path rules and `content <file> <blob id>` exempts one exact staged content
+  from the credential patterns, each below a `#` reason comment. Globs,
+  directories, and `.` are refused (`ERR_STAGED_ALLOWLIST_TOO_BROAD`), and an
+  entry the index no longer matches — a deleted or renamed file, edited
+  content, a path no rule refuses — fails the commit
+  (`ERR_STAGED_ALLOWLIST_STALE`) until it is removed; any allowlist error
+  exits 3
 - Security scanning workflows: CodeQL (`python`, `actions`), OSV-Scanner
   on `uv.lock`, Dependency Review with a license allow-list, and a weekly
   full-history gitleaks audit with a checksum-verified binary

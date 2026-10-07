@@ -61,6 +61,8 @@ repos:
       # filenames and runs on every `git commit` and every merge commit,
       # whatever pre-commit would pass it. Stdlib-only, so `language: python`
       # runs it with pre-commit's own interpreter: it works without uv.
+      # Exemptions live in .check-staged-allow, read from the index; exclude:
+      # cannot narrow a hook that takes no filenames.
       - id: check-staged
         name: refuse staged secrets
         entry: python scripts/check_staged.py

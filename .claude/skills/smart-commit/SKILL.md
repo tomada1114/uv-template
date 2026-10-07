@@ -110,9 +110,11 @@ touched by name, then run the same `git commit` again — a new commit, never `-
 an earlier one.
 
 Never `--no-verify` (or `-n`), never `SKIP=<hook id>`, never an edit to
-`.pre-commit-config.yaml`, `scripts/check_staged.py`, or `.git/hooks/` to make this
-commit pass. AGENTS.md's "Security and human approval" holds the prohibition; a refusal
-you cannot clear is a stop, reported with the hook's output.
+`.pre-commit-config.yaml`, `scripts/check_staged.py`, `.check-staged-allow`, or
+`.git/hooks/` to make this commit pass — save removing a `.check-staged-allow` entry
+whose file this same change deleted or renamed, which narrows the exemption. AGENTS.md's
+"Security and human approval" holds the prohibition; a refusal you cannot clear is a
+stop, reported with the hook's output.
 
 ## 6. Push only when asked
 
