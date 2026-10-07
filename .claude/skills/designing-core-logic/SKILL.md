@@ -38,7 +38,13 @@ imports only itself and the deterministic standard-library modules allowed by
 - Enforced by: the AST call check in `tests/core/test_imports.py`, which rejects bare
   calls to `open`, `input`, `print`, `breakpoint`, `exec`, `eval`, `compile`, and
   `__import__`, plus `now`, `utcnow`, or `today` on a receiver name or attribute ending
-  in `datetime` or `date`. This is a structural check, not alias or data-flow analysis.
+  in `datetime` or `date`. It also rejects `date.fromtimestamp` on recognizable
+  `date` receivers, `datetime.fromtimestamp` on recognizable `datetime` receivers
+  without an explicit timezone, and any attribute call to `astimezone` without an
+  explicit timezone. Positional or keyword `tz` arguments count as explicit unless
+  they are literal `None`. This is a structural check, not alias or data-flow/type
+  analysis: review must ensure supplied timezones are non-None and `astimezone`
+  receivers are timezone-aware.
 
 A new framework or driver the core must not touch gets a `banned-api` entry in the same
 change that adds it; the per-file-ignores already let the outer layers use it.
