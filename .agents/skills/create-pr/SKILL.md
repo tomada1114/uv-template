@@ -1,156 +1,155 @@
 ---
 name: create-pr
 description: >
-  Create or update pull requests following project conventions. Runs pre-checks
-  (just verify), generates Conventional Commits title, fills PR template with
-  summary/test plan/checklist, and verifies all checklist items pass before
-  creating via gh CLI. Use PROACTIVELY when: PR creation, pull request,
-  create PR, open PR, submit PR, PR update, review request.
-allowed-tools: Bash(cat:*), Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(git rev-parse:*)
-metadata:
-  platforms: claude-code, codex
+  Use when opening or updating a pull request by hand, outside shipping-issues: asked to
+  "open a PR", "create a pull request", "push this and make a PR", or to refresh the
+  title or body of the PR already open for the current branch. Covers the preconditions
+  (not on main, a clean tree, one PR per branch), running just verify first, a
+  Conventional Commits title check-pr-title.yml accepts, filling
+  .github/PULL_REQUEST_TEMPLATE.md's Summary, Test Plan, and Checklist honestly, and
+  git push, gh pr create, and gh pr edit.
 ---
 
-# PR Creation Workflow
+# Create PR
 
-All PR titles, bodies, and commit messages MUST be written in English.
+**Owns:** opening a pull request for the current branch, or updating the one already
+open for it — the preconditions, the gate run before it, the title, the body, and the
+push. **Does not own:** shipping an issue end to end through CI and merge
+(`shipping-issues`); landing a Dependabot PR (`merging-dependency-prs`); making the
+commits the PR carries (`smart-commit`).
 
-## Dynamic Context
+**Invoking this skill is the sign-off for exactly the remote writes AGENTS.md's
+"Standing exceptions" lists for it, for this invocation only:** pushing the current
+branch to `origin`, `gh pr create` for it, and `gh pr edit` on its own open pull
+request. Nothing else — no force-push, no merge, no label, no comment, no other branch.
+A step that would need one of those stops and asks.
 
-Before Step 1, run these commands and use their output as the dynamic context:
+Every step below ends in either the next step or a stop. A stop is reported with what
+was found and what would clear it; it never becomes a PR with the problem left in it.
+
+## 1. Preconditions
+
+Gather the state before running anything:
 
 ```bash
-cat .github/PULL_REQUEST_TEMPLATE.md
-git log main..HEAD --oneline
-git diff --stat main..HEAD
-```
-
-## Step 1: Pre-flight Checks
-
-Check working tree status and whether a PR already exists for this branch.
-
-```bash
+git branch --show-current
 git status --short
-gh pr list --head "$(git rev-parse --abbrev-ref HEAD)" --json number,title,url
+git fetch origin main
+git log --oneline origin/main..HEAD
+gh pr list --head <branch> --state open --json number,url,title
 ```
 
-- If uncommitted changes exist, **abort** and prompt to commit first
-  (running `just verify` on uncommitted code can cause inconsistencies)
-- If a PR already exists, switch to **update mode** (`gh pr edit`) instead of creating a new one
-- If on `main` branch, **abort** — PRs must come from feature branches
+- **On `main`, or detached:** stop. A PR needs a branch of its own, and creating one is
+  the requester's call.
+- **Uncommitted or untracked changes:** stop. The PR would carry only what is committed,
+  so the gate would judge a tree the reviewer never sees. Commit first with
+  `smart-commit` — a commit needs its own sign-off, the request that invokes that skill,
+  which this skill does not grant — then start again.
+- **No commits ahead of `main`:** stop; there is nothing to propose.
+- **A PR already open for the branch:** update it in step 6 with `gh pr edit`. Never
+  open a second PR for the same branch — the first one's review and CI history would be
+  stranded on a duplicate.
 
-## Step 2: Quality Gate
+## 2. The gate
 
-Apply formatting, then run the non-mutating verification gate that is the
-prerequisite for PR creation.
+Run `just verify`, the non-mutating gate: lock check, skills mirror, lint and types,
+skill script tests, and the test suite with the 80% coverage floor. It never rewrites a
+file, so a pass proves the *committed* tree is green — `just check` runs `fmt` first and
+proves nothing about what was committed.
+
+- **Any failure stops the PR.** Fix it on the branch, or report it. A formatting failure
+  is fixed with `just fmt`; committing that fix needs the sign-off step 1 names (this
+  skill never commits), then the gate runs again. Never weaken a gate to make the run
+  pass (AGENTS.md's "Security and human approval").
+- **Then `git status --short` again.** Anything that changed means the branch differs
+  from what was just judged: commit it (with the sign-off step 1 names) and run the gate
+  again.
+
+`just verify` runs neither typos nor zizmor. Also run the narrowest check for what the
+branch touches from AGENTS.md's "Validating a change" when the gate does not already run
+it — `uv run --locked pre-commit run typos --files <file>` for prose,
+`uv run --locked pre-commit run zizmor --all-files` for a workflow. The Test Plan names
+each command.
+
+## 3. Read the diff for what the gates cannot judge
 
 ```bash
-just fmt
+git diff origin/main...HEAD --stat
+git diff origin/main...HEAD
 ```
 
-`fmt` can modify tracked files. If it produced changes, commit them (e.g.
-`style: apply formatting`) before proceeding — otherwise the pushed branch
-will not match the verified state.
+Each row feeds a checklist item or the Summary:
+
+| In the diff | Then |
+|---|---|
+| A new package in `pyproject.toml` | Stop unless the owner already signed off on that package; then put the review record in the body. **BACKGROUND:** `managing-dependencies`. |
+| A weakened gate (`changing-gates`' list: a removed ruff rule, a `noqa` without a reason, a skipped test, …) | Stop. The PR waits until a human decides; it is not opened with the problem in it. |
+| New behavior without a test that covers it | Stop and add the test. **REQUIRED:** `tdd`. |
+| A new public function without type annotations or a docstring that says why | Add them. **BACKGROUND:** `writing-python`. |
+| A command, route, status, exit code, or `MY_APP_*` setting a user observes changed | The README and a `CHANGELOG.md` entry change on this branch. **REQUIRED:** `updating-docs` decides what is owed. |
+| A removed or changed public behavior | A breaking change: call it out in the Summary, in one line a user can act on, and mark the title with `!`. |
+| A decision that owes an ADR | The ADR is on this branch. **REQUIRED:** `recording-architecture-decisions` decides whether one is owed. |
+
+A row that does not apply holds trivially; say so in the body rather than leaving the
+reader to guess ("No new dependency").
+
+## 4. Title
+
+`<type>(<scope>)<!>: <summary>`, under 72 characters, in English. The title becomes the
+squash-merge commit subject, `.github/workflows/check-pr-title.yml` validates it as a
+Conventional Commit, and `.github/workflows/pr-label.yml` derives the PR's label from
+its type, so the type is not decoration.
+
+- The type is one `check-pr-title.yml` accepts and `pr-label.yml` maps; the workflow
+  sets no `types:` list of its own, so take a type this repository's history already
+  uses (`git log --format=%s -40`): `feat`, `fix`, `docs`, `refactor`, `ci`, `chore`,
+  `build`.
+- The scope is the area the change lives in, matching recent history: `skills`,
+  `hooks`, `github`, `deps`, `bootstrap`, or a layer (`core`, `api`, `cli`).
+- The summary is imperative and lower-case, with no trailing period, and says what the
+  change does, not which files it touches.
+- For a branch whose commits mix types, take the most significant one: `feat` over `fix`
+  over the rest.
+
+## 5. Body
+
+Fill `.github/PULL_REQUEST_TEMPLATE.md` in its own order, keeping its headings, and
+write it to a file outside the checkout — the scratch or temp directory your host
+provides — so it never shows up as an untracked file in the tree the gate judged.
+
+- **Summary.** One to three lines: what the change does and why, then any breaking
+  change, dependency, or ADR line step 3 called for. Then `Closes #N` on its own line
+  when the branch resolves an issue; a bare `#N` closes nothing. Ask rather than guess
+  when it is unclear which issue the branch closes.
+- **Test Plan.** The commands actually run, each with its verdict line —
+  `just verify` → passed, `N passed`. Never a command that was not run, and never a raw
+  log.
+- **Checklist.** Tick an item only when step 2 or step 3 showed it holds. An item that
+  cannot be ticked is a stop: report which one and why, and open nothing. A box ticked
+  on trust is the one defect in this PR a reviewer cannot see.
+
+## 6. Create or update
 
 ```bash
-just verify
+git push -u origin <branch>
+gh pr create --base main --head <branch> --title "<title>" --body-file <body-file>
 ```
 
-`just verify` runs its recipe chain (see the `justfile`) without mutating the
-tree, so it proves the *committed* tree is green.
-**If any step fails, abort PR creation** and report the failure.
-
-On success, the following checklist items are verified:
-- Tests pass (`just test`)
-- Type checks pass (`just lint`)
-- Code is formatted (`just fmt`, already committed above)
-
-## Step 3: Additional Verification
-
-Analyze `git diff main..HEAD` to determine:
-
-**User-facing changes:**
-- Check if a user-facing behavior, command, or setting changed
-- If so: verify README.md or `docs/` was updated
-  - If not updated: mark "Docs updated" as unchecked and warn
-
-**Breaking changes:**
-- Detect deleted public functions, changed arguments, changed return types
-- If found: note them explicitly in the PR Summary section
-
-## Step 4: Generate PR Title
-
-Generate a title in Conventional Commits format:
-
-```
-<type>(<optional-scope>): <short summary>
-```
-
-**Rules:**
-- Analyze commits to select the most appropriate type
-- Types: `feat`, `fix`, `docs`, `refactor`, `test`, `ci`, `chore`, `perf`, `build`
-- If multiple types are mixed: use the type of the most significant change
-- Keep under 70 characters
-- Scope is optional (e.g., module name)
-
-**Examples:**
-- `feat: add JSON export support`
-- `fix(core): handle empty input gracefully`
-- `chore: align agent configuration`
-
-## Step 5: Generate PR Body
-
-Follow the PR template from dynamic context. Write everything in English.
-
-### Summary
-
-Analyze commits and diff to describe the purpose and content in **1-3 lines**.
-Focus on "why this change is needed" rather than "what was changed."
-
-- Include `Closes #N` if a related issue number is known
-- Explicitly note any breaking changes
-
-### Test Plan
-
-- If tests were added/modified: summarize what is being tested
-- If no test changes: `Existing tests cover this change.` or similar
-
-### Checklist
-
-Fill each item based on verification results from Steps 2-3:
-
-| Item | Criteria |
-|------|----------|
-| `just verify` passes | Verified in Step 2 |
-| Docs updated | Required only when a user-facing behavior, command, or setting changed. No change = checked |
-| Breaking changes called out | None, or described in the Summary = checked |
-
-**If any item is unchecked, abort PR creation** and report the issue.
-
-## Step 6: Create or Update PR
+For a branch that already has an open PR, push, then update that PR instead:
 
 ```bash
-# Push if not yet pushed
-git push -u origin <current-branch>
-
-# Create PR (new)
-gh pr create --base main --title "<title>" --body "$(cat <<'EOF'
-<body>
-EOF
-)"
-
-# Or update PR (existing)
-gh pr edit <number> --title "<title>" --body "$(cat <<'EOF'
-<body>
-EOF
-)"
+gh pr view <number> --json title,body
+gh pr edit <number> --title "<title>" --body-file <body-file>
 ```
 
-- Use HEREDOC to pass the body (preserves newlines and markdown)
-- Display the PR URL after creation/update
+Read the current body first and carry over anything a human added to it — `gh pr edit`
+replaces the body whole.
 
-## Notes
+- A push rejected as non-fast-forward stops: the remote branch has commits this checkout
+  does not. Never force-push to get past it.
+- `--body-file`, never an inline `--body` built from a heredoc or command substitution —
+  backticks and `$` in a body are expanded by the shell before `gh` sees them.
+- Run no `--web` flag or anything else that opens a browser; print the PR's URL instead.
 
-- This skill does NOT create commits — use the `smart-commit` skill for that
-- Abort if attempting to create a PR from the `main` branch
-- When a PR already exists for the current branch, update it with `gh pr edit`
+Report the URL, the title, and every checklist item as it was ticked. The PR is then the
+requester's: watching CI and merging are not this skill's.

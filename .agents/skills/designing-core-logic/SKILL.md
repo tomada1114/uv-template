@@ -14,10 +14,11 @@ description: >
 
 **Owns:** the layers beneath the entry points — what belongs in `core/`, how a port and
 its adapters are shaped and tested, how configuration is read, and how
-`composition.py` wires adapters into services. **Does not own:** the layer map and
-removing an entry point (AGENTS.md's "Architecture"); the `AppError` hierarchy and its
-mappings (`designing-errors`); exposing a service over HTTP (`building-api-routes`) or
-as a command (`designing-clis`); module-level Python style (`writing-python`).
+`composition.py` wires adapters into services. **Does not own:** the layer map
+(AGENTS.md's "Architecture"); removing an entry point (`building-api-routes`,
+`designing-clis`); the `AppError` hierarchy and its mappings (`designing-errors`);
+exposing a service over HTTP (`building-api-routes`) or as a command
+(`designing-clis`); module-level Python style (`writing-python`).
 
 ## The direction dependencies point
 

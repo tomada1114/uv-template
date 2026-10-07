@@ -1,0 +1,141 @@
+---
+name: changing-gates
+description: >
+  Covers changing a file that enforces rather than implements: .pre-commit-config.yaml,
+  scripts/check_staged.py, a .github/workflows/*.yml job, .github/rulesets/main.json,
+  the justfile's verify, lint, and test recipes, typos.toml, and pyproject.toml's ruff,
+  mypy, pytest, and coverage tables - and what weakening a gate means here (a removed
+  ruff rule, a noqa without a reason, a lower coverage floor, a skipped test, a dropped
+  CI step). Use when changing hook configuration, a lint, type, or coverage setting, or
+  a CI job or required check. A hook refusing a commit is smart-commit's.
+---
+
+# Changing Gates
+
+**Owns:** a change to a file that enforces rather than implements, keeping the gate
+layers in step, and the list of what counts as weakening one. **Does not own:** whether
+a gate may be weakened at all — never, without a human (AGENTS.md's "Security and human
+approval"); a coverage floor's meaning and where a test goes (`placing-tests`); a new
+tool the config would configure (`managing-dependencies`); the ruff relaxations for
+scripts bundled in a skill (`authoring-skills`); writing a script a gate runs
+(`writing-repo-scripts`); `.github/labels.yml` (`triaging-issues`).
+
+A gate defines what "done" means for every later change, so a loosened rule silently
+lowers the bar for every pull request after it, not only the one that touched it.
+
+## What weakening a gate means here
+
+Each of these is a weakening. An agent never makes one to get a run green; it stops,
+says which gate looks wrong and why, and a human decides.
+
+- **Coverage:** lowering `--cov-fail-under=80` (justfile `test`) or
+  `--fail-under=80` (CI's `Coverage` job); adding a pattern to
+  `[tool.coverage.report] exclude_lines`, an `omit`, or a `# pragma: no cover`.
+- **Ruff:** removing a prefix from `select`; adding a code to `ignore`; adding or
+  widening a `per-file-ignores` entry without a reason comment; a `# noqa` without a
+  written reason after it.
+- **mypy:** turning off `strict` or any `warn_*` or `enable_error_code` entry; a new
+  `[[tool.mypy.overrides]]` block; a `# type: ignore` without an error code and a
+  reason; a cast that only silences an error.
+- **pytest:** removing `--strict-markers` or `--strict-config`; `@pytest.mark.skip`,
+  `xfail`, a deleted test, or a weakened assertion.
+- **The lock:** removing `--locked` from a recipe or a CI step, or `lock-check` from
+  `just verify`.
+- **The pre-commit layer:** removing a hook, narrowing its `files`, `types`, or
+  `stages`, loosening `scripts/check_staged.py`'s rules, `--no-verify`, `SKIP=<id>`, or
+  an edit to `.git/hooks/`.
+- **CI and the ruleset:** removing a job or a step; gating a required job with `if:`,
+  `paths`, or `paths-ignore`; dropping a context from `.github/rulesets/main.json`;
+  adding a bypass actor; widening a workflow's `permissions`; unpinning an action from
+  its commit SHA; `persist-credentials: true`.
+- **Spelling:** adding a real misspelling to `typos.toml`'s `extend-words`, or a path to
+  its `extend-exclude` to hide one.
+
+A change that tightens a gate is welcome, but still owes the pull request body three
+things: which rule or option moved, why, and what now fails that did not before.
+
+## The layers and what each sees
+
+AGENTS.md's "Enforcement layers" names the layers. Keeping them in step is this skill's:
+
+| Check | pre-commit | `just verify` | CI |
+|---|---|---|---|
+| ruff check, ruff format | `ruff`, `ruff-format` | `lint` | `Lint & Type Check` |
+| mypy `src scripts tests` | `mypy` | `lint` | `Lint & Type Check` |
+| Skills mirror | `agents-check` (working tree) | `agents-check` (working tree) | `Lint & Type Check` (the commit) |
+| Skill script tests | — | `test-skills` | `Lint & Type Check` |
+| `uv lock --check` | — | `lock-check` | `--locked` on every `uv sync` |
+| Tests and the 80% floor | — | `test` | `Test` shards, then `Coverage` |
+| typos | `typos` | — | `Spell Check` |
+| zizmor | `zizmor` | — | `Workflow Security Lint` |
+| Staged secrets | `check-staged` | — | the weekly gitleaks history scan |
+
+- A check added to `just verify` gets the matching CI step, and the reverse. Nothing
+  tests that the two lists agree; the reviewer reads both.
+- A tool pinned in two places moves in both: ruff's `rev:` in `.pre-commit-config.yaml`
+  and its `ruff>=` floor in the `dev` group, and `crate-ci/typos`' `rev:` and its
+  action pin in `ci.yml`. **BACKGROUND:** `merging-dependency-prs`.
+- `just verify` runs neither typos nor zizmor; the pre-commit hook does, so prose and
+  workflow changes are checked at commit time and in CI. AGENTS.md's "Validating a
+  change" gives the command for each.
+
+## CI workflows and required checks
+
+- Every job pins each action to a 40-character commit SHA with a `# vX.Y.Z` comment,
+  checks out with `persist-credentials: false`, sets `timeout-minutes`, and stays under
+  a top-level `permissions` of `contents: read` or narrower unless the job's work needs
+  a write. zizmor (pre-commit and CI) reports most departures; verify with
+  `uv run --locked pre-commit run zizmor --all-files`.
+- A required check must be a job that runs on every pull request and cannot be skipped:
+  never a job in a workflow whose `pull_request` trigger has `paths` or `paths-ignore`,
+  and never a job whose `if:` could skip it — a skipped required check counts as
+  passing. A job with `needs:` is guarded with `!cancelled()` or `always()` and fails on
+  its own when a needed job failed, as `Coverage` does; it is required instead of the
+  test shards. Enforced by: `tests/test_apply_ruleset.py`, which also fails on a
+  workflow layout its scanner cannot read.
+- Renaming a required job, or adding one that should block merges, edits
+  `.github/rulesets/main.json` and the context list in
+  `tests/test_apply_ruleset.py::test_required_contexts_match_settled_defaults` in the
+  same pull request. The live ruleset changes only when the owner reruns `just ruleset`
+  — an admin step an agent proposes and never runs. **BACKGROUND:** `starting-an-app`
+  for the ruleset and security settings a new repository enables.
+- A new workflow file is warranted only for a different trigger or permission
+  footprint, never as a convenience split from `ci.yml`.
+
+## The pre-commit layer
+
+The hooks run for every author, so a hook that fires on intended work teaches its
+author to reach for `--no-verify`, which switches off the secret gate with it. Test a
+new or changed hook against an ordinary commit before trusting it to catch a bad one.
+Every hook names `stages: [pre-commit]` itself; only `check-staged` also runs at
+`pre-merge-commit`, and `tests/test_check_staged.py` holds that. What `check-staged`
+refuses, how merges and rebases interact with it, how `just install` verifies the
+hooks, and what replaced the old agent hooks:
+[references/pre-commit-layer.md](references/pre-commit-layer.md).
+
+## Tool configs in `pyproject.toml`
+
+Read the current values in the file rather than a copy here. Traps that have cost time:
+
+- Ruff's `per-file-target-version` pins skill scripts to `py312` and
+  `scripts/check_staged.py` to `py310`, because each runs under an interpreter older
+  than the project's 3.14. Never let a newer syntax rule reach them.
+- `[tool.ruff.lint.flake8-tidy-imports.banned-api]` is a layer boundary, not a style
+  rule. **BACKGROUND:** `designing-core-logic`.
+- `[tool.ruff.lint.flake8-type-checking]`'s runtime-evaluated lists keep framework
+  annotations real imports. **BACKGROUND:** `writing-python`.
+- The coverage floor is not in `pyproject.toml`: it is the `80` in the justfile's `test`
+  recipe and in CI's `Coverage` job. Change both or neither.
+
+## What no gate sees
+
+- Anything only a running server shows (`running-the-app`).
+- Whether a `just <recipe>` or a path named in Markdown still exists, and whether a
+  skill's frontmatter parses (`authoring-skills`) or AGENTS.md's Skills table matches
+  the directories. Check these by hand.
+- A staged deletion: `check-staged` never inspects one, by design.
+- Commits that run no hook at all ([references/pre-commit-layer.md](references/pre-commit-layer.md)
+  › "When the hooks run, and when they do not").
+
+A gate proposed to close one of these gaps is a real gate, argued for in its own pull
+request.

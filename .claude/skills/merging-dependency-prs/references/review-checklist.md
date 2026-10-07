@@ -25,4 +25,4 @@ formality. Step 4 repeats this review whenever a head changes:
   (`crate-ci/typos`) moves with its `rev:` in `.pre-commit-config.yaml` — SKILL.md
   Step 2.
 - A PR touching `pyproject.toml` or `uv.lock` is held, never reviewed into a merge:
-  Python dependencies follow `AGENTS.md` › "`[tool.uv] exclude-newer`".
+  Python dependencies follow `managing-dependencies`' `exclude-newer` procedure.

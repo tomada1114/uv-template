@@ -50,7 +50,10 @@ Likely files: {paths from step 2's triage, or — when step 2 was skipped on a
                labeled backlog — a short grep/glob the parent runs against
                the issue's own keywords right before spawning; never blank}
 Project conventions: read {workdir}/AGENTS.md (and the host's own
-instruction file, if any) before writing code.
+instruction file, if any) before writing code, then load the skills its
+Skills table names for the work: how tests are written and placed and the
+test-first order, how commits are grouped, and the skill for each layer or
+area you touch.
 Decisions already made: {anything step 2/2b resolved, so it is not re-opened}
 Verification command: {verify_command, from step 3's smoke run — if that
                         smoke run found none, say so explicitly here rather
@@ -58,8 +61,8 @@ Verification command: {verify_command, from step 3's smoke run — if that
 </context>
 
 Do:
-1. Read the project's own instruction files and follow them, including its
-   test and commit conventions.
+1. Read the project's own instruction files and the skills they route you to,
+   and follow them, including their test and commit conventions.
 2. If the task claims a performance improvement (runtime, throughput, memory,
    latency), measure the *before* state here, on the unmodified code, with the
    exact command you will re-run afterwards.
