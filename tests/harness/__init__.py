@@ -19,7 +19,9 @@ repository and fails on a fixture built under ``tmp_path``:
   dependabot.yml apply is declared exactly once in ``.github/labels.yml``;
 - (f) ``test_workflow_hygiene.py``: workflow hygiene (SHA pins, timeouts,
   top-level permissions, checkout credentials, no fail-open constructs, push
-  runs on main never cancelled by concurrency);
+  runs on main never cancelled by concurrency), and the same pin, checkout,
+  and ``continue-on-error`` rules for the steps of a composite action under
+  ``.github/actions/``;
 - (g) the Product section check is ``tests/test_product_section.py`` (#95),
   not duplicated here.
 

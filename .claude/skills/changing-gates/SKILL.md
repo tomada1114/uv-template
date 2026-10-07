@@ -82,8 +82,9 @@ AGENTS.md's "Enforcement layers" names the layers. Keeping them in step is this 
 
 ## CI workflows and required checks
 
-- Every job pins each action to a 40-character commit SHA with a `# vX.Y.Z` comment,
-  checks out with `persist-credentials: false`, and sets `timeout-minutes`. The
+- Every job — and every step of a composite action under `.github/actions/` — pins
+  each action to a 40-character commit SHA with a `# vX.Y.Z` comment and checks out
+  with `persist-credentials: false`; every job sets `timeout-minutes`. The
   top-level `permissions` is `{}` or exactly `contents: read`; a scope beyond that,
   a write above all, is granted on the job that needs it. On a workflow that also runs
   on push, concurrency never cancels a push run on `main`, pending ones included.
