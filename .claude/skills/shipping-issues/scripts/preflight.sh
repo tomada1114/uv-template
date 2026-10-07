@@ -216,18 +216,21 @@ fi
 
 # --- repo profile: always emitted, cheap, local ------------------------------
 
-# repo_slug — parsed from the origin URL. Handles the two common forms:
-#   git@github.com:owner/repo.git
-#   https://github.com/owner/repo(.git)
-# and the less common ssh://git@host/owner/repo.git. Anything that doesn't
-# reduce to exactly "owner/repo" is reported as UNKNOWN rather than guessed at.
+# repo_slug — parsed from the origin URL. Handles scp-style
+# (git@host:owner/repo), scheme URLs (https://[user@]host/owner/repo,
+# ssh://git@host[:port]/owner/repo), each with an optional ".git" and trailing
+# "/". Anything that doesn't reduce to exactly "owner/repo" is reported as
+# UNKNOWN rather than guessed at. issue_digest.py's parse_repo_slug() is the
+# Python twin of this block; tests/test_runstate_parity.py holds them equal.
 repo_slug="UNKNOWN"
 if [[ -n "$origin_url" ]]; then
-  slug="${origin_url%.git}"
+  slug="$origin_url"
+  while [[ "$slug" == */ ]]; do slug="${slug%/}"; done
+  slug="${slug%.git}"
   case "$slug" in
-    git@*:*) slug="${slug#*:}" ;;
-    ssh://*) slug="${slug#ssh://}"; slug="${slug#*@}"; slug="${slug#*/}" ;;
-    https://*|http://*) slug="${slug#*://}"; slug="${slug#*/}" ;;
+    *://*) slug="${slug#*://}"; slug="${slug#*/}" ;;
+    *@*:*) slug="${slug#*:}" ;;
+    *) slug="" ;;
   esac
   if [[ "$slug" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
     repo_slug="$slug"
@@ -259,7 +262,14 @@ if [[ "$repo_slug" == "UNKNOWN" ]]; then
 else
   runstate_leaf="${repo_slug%/*}__${repo_slug#*/}"
 fi
+# A leading "~" or "~/" is expanded as run_record.py and issue_digest.py
+# expand it, so a quoted AGENT_SKILL_STATE_DIR=~/x lands in one place.
 state_root="${AGENT_SKILL_STATE_DIR:-$HOME/.local/state/agent-skills}"
+case "$state_root" in
+  "~") state_root="$HOME" ;;
+  "~/"*) state_root="$HOME/${state_root#\~/}" ;;
+esac
+state_root="${state_root%/}"
 runstate="$state_root/shipping-issues/$runstate_leaf"
 emit runstate "$runstate"
 

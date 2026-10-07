@@ -569,6 +569,28 @@ def run_gh(args: list[str]) -> Any:
     return json.loads(out or "[]")
 
 
+SLUG_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+
+
+def parse_repo_slug(url: str) -> str | None:
+    """`owner/repo` from an origin URL, or None when it is not exactly that.
+
+    The Python twin of preflight.sh's repo_slug block: scp-style
+    (git@host:owner/repo) and scheme URLs (https://, ssh://host:port/), each
+    with an optional ".git" and trailing "/". tests/test_runstate_parity.py
+    holds the two equal.
+    """
+    slug = url.rstrip("/")
+    slug = slug.removesuffix(".git")
+    if "://" in slug:
+        slug = slug.split("://", 1)[1].partition("/")[2]
+    elif "@" in slug and ":" in slug:
+        slug = slug.split(":", 1)[1]
+    else:
+        return None
+    return slug if SLUG_RE.match(slug) else None
+
+
 def repo_slug() -> str | None:
     """`owner/repo` from the origin remote, or None when it cannot be read.
 
@@ -583,8 +605,16 @@ def repo_slug() -> str | None:
         ).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         return None
-    m = re.search(r"[:/]([^/:]+)/([^/]+?)(?:\.git)?/?$", url)
-    return f"{m.group(1)}/{m.group(2)}" if m else None
+    return parse_repo_slug(url)
+
+
+def state_root() -> Path:
+    """`${AGENT_SKILL_STATE_DIR:-$HOME/.local/state/agent-skills}`, with a
+    leading `~` expanded — the same root preflight.sh and run_record.py use."""
+    env = os.environ.get("AGENT_SKILL_STATE_DIR")
+    if env:
+        return Path(env).expanduser()
+    return Path.home() / ".local" / "state" / "agent-skills"
 
 
 def runstate_dir() -> Path | None:
@@ -592,9 +622,8 @@ def runstate_dir() -> Path | None:
     slug = repo_slug()
     if not slug:
         return None
-    base = os.environ.get("AGENT_SKILL_STATE_DIR") or str(Path.home() / ".local/state/agent-skills")
     owner, name = slug.split("/", 1)
-    return Path(base) / "shipping-issues" / f"{owner}__{name}"
+    return state_root() / "shipping-issues" / f"{owner}__{name}"
 
 
 def _cache_key(issue_args: list[str]) -> str:
