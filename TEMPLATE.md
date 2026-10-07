@@ -98,9 +98,12 @@ its values (`core/llm.py`) are plain Python, and adapters implement it: a
   means a bug and an unconfigured feature is not one.
 - **Bounded retries inside one deadline.** Two retries on 429, 502, 503, or
   a failed connect, waiting 0.5 s then 1.0 s or the provider's `Retry-After`
-  up to 8 s; a longer `Retry-After` ends the call. `timeout` bounds the whole
-  call, retries included, so retries never multiply it; callers default to 60
-  s. The 60 s and the 8 s cap follow the sibling nextjs-app-template's
+  up to 8 s; a longer `Retry-After` ends the call. `timeout` is one budget
+  for the call, retries included, so retries never multiply it; callers default
+  to 60 s. Each network phase is bounded by the budget left and the deadline is
+  checked between phases, body chunks, and attempts, so a pathologically slow
+  server can still exceed it; a hard cutoff is the caller's own cancellation.
+  The 60 s and the 8 s cap follow the sibling nextjs-app-template's
   OpenRouter adapter (its issues #63, #71, and #73).
 - **No live call in the suite.** It would bill, flake, and need a key in CI,
   and a skipped test is a weakened gate. The OpenRouter adapter runs the

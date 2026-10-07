@@ -45,9 +45,10 @@ point"); only an adapter speaks to a provider.
   traceback. A service that forwards user input validates it first, with its own
   domain error (`designing-errors`' "Two kinds of failure").
 - **`model=None`** means the model the adapter was built with (`MY_APP_LLM_MODEL`).
-- **`timeout` is the whole call's budget**, in seconds: every attempt and every wait
-  between attempts. Pass `DEFAULT_LLM_TIMEOUT_SECONDS` (60) without a reason to pick
-  another.
+- **`timeout` is the call's budget**, in seconds, shared by every attempt and every
+  wait between them. It is enforced between steps, not as a hard cutoff: see the
+  known limit under "Retries and the deadline". Pass `DEFAULT_LLM_TIMEOUT_SECONDS`
+  (60) without a reason to pick another.
 - **What a caller does about each error:**
 
 | Error | Means | The caller |
@@ -88,6 +89,11 @@ once"). For example, a summarizing service's constructor would take
 `llm: LlmPort` and call `self._llm.complete([...], max_tokens=256,
 timeout=DEFAULT_LLM_TIMEOUT_SECONDS)`.
 
+- With `OPENROUTER_API_KEY` set but the `ai` extra missing, `build_llm` raises
+  `LlmConfigurationError` when the container is built — at app or CLI startup,
+  outside the request and command error mapping — so it surfaces as a startup failure
+  with that message. That is intended (fail fast); install the extra or unset the key.
+
 - Routes stay synchronous; a call can hold one of FastAPI's thread-pool slots for up
   to its `timeout`.
 - A route that bills is the app's to protect: access control and rate limiting are
@@ -105,15 +111,20 @@ timeout=DEFAULT_LLM_TIMEOUT_SECONDS)`.
   No jitter: two retries per call make no herd, and exact waits keep tests exact.
 - **A `Retry-After` above `MAX_RETRY_AFTER_SECONDS` (8 s) ends the call at once.**
   Retrying sooner than the provider asked would only be refused again.
-- **Never retried:** an error inside a 2xx body, or a transport error other than a
-  failed connect. The request was accepted, or may have been, and a retry could bill
-  twice.
+- **Never retried:** an error inside a 2xx body; any `httpx` timeout, a
+  `ConnectTimeout` included (it becomes `LlmTimeoutError`), while an
+  `httpx.ConnectError` is retried; and any other transport error. The request was
+  accepted, or may have been, and a retry could bill twice.
 - **The deadline wins.** A retry happens only while its wait ends before the
   deadline; otherwise the last mapped error is raised. Each attempt's `httpx`
   timeout is the budget left.
-- **Known limit:** `httpx` has no whole-response timeout. The body is read in chunks
-  with the deadline checked after each, but one read may block for the budget left
-  at the attempt's start, so the worst case is about twice `timeout`, not unbounded.
+- **Known limit — `timeout` is not a hard wall-clock cutoff.** `httpx` has no
+  whole-request timeout: each network phase (connect, TLS, each write, each socket
+  read, the headers included) is bounded separately by the budget left when the
+  attempt began. The deadline is checked between attempts, once the headers arrive,
+  and after each body chunk. Ordinary phases can add up to several times `timeout`,
+  and a server that trickles bytes can hold the call indefinitely. A caller that
+  needs a hard cutoff runs the call under its own cancellation.
 
 The status meanings, the `{"error": {"code", "message", "metadata"}}` envelope, errors
 inside a 200, and `Retry-After` on 429 and 503 are OpenRouter's
@@ -147,7 +158,8 @@ loaded; another hides `httpx` and runs the CLI.
 ## Adding a provider
 
 1. A new adapter module in `adapters/` that satisfies `LlmPort`, calls
-   `check_completion_request` first, and maps its failures onto the four errors.
+   `check_completion_request` first and sends the message tuple it returns, and maps
+   its failures onto the four errors.
 2. A `pytest.param` in `LLM_FACTORIES` in `tests/adapters/test_llm_contract.py`, and
    `tests/adapters/test_<adapter>.py` for what only it does.
 3. A `Settings` field that chooses between providers, read in `build_llm`; a new
@@ -162,11 +174,21 @@ cases in `_status_for` (`api/app.py`), `adapters/fake_llm.py`, `adapters/closed_
 (`tests/core/test_llm.py`, the `tests/adapters/test_*llm*.py` and `test_openrouter.py`
 files, and the LLM cases in `tests/core/test_errors.py`, `tests/test_settings.py`,
 `tests/test_composition.py`, and `tests/api/test_app.py`). Remove the `ai` extra and
-run `uv lock`; drop the README's LLM rows and sentences and the project's ADR for the
-layer, if it has one.
+run `uv lock`. Then drop the LLM text elsewhere:
+
+- the docstrings of `core/__init__.py`, `adapters/__init__.py`, `settings.py`, and
+  `_status_for`;
+- `designing-errors`: the LLM statuses in its description, the `Llm*Error` rows of its
+  tables, and its `LlmError` and `LlmConfigurationError` prose;
+- `managing-dependencies`' bullet on the `ai` extra, and `designing-core-logic`'s
+  note on the unprefixed `OPENROUTER_API_KEY`;
+- AGENTS.md's Architecture tree lines for the LLM modules and the key;
+- the README's LLM rows and sentences, its Architecture line included, and the
+  project's ADR for the layer, if it has one.
 
 <!-- template-only -->
-In the template, also drop `TEMPLATE.md`'s "Why an optional LLM layer behind a port?".
+In the template, also drop `TEMPLATE.md`'s "Why an optional LLM layer behind a port?"
+and the `ai` extra from its runtime-dependencies sentence.
 <!-- /template-only -->
 
 Then delete this skill and its row in AGENTS.md's Skills table, and run

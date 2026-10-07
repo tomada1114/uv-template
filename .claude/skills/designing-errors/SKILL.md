@@ -167,7 +167,10 @@ An invalid setting is not an `AppError`: Pydantic raises `ValidationError` when
 naming each variable. The API does not map it: `create_app()` without settings, as
 uvicorn's `--factory` calls it for `just dev`, fails to start with the traceback.
 Validate a new setting in a `field_validator`, so it fails at startup rather than on
-the first request (`designing-core-logic`).
+the first request (`designing-core-logic`). The deliberate exception is
+`LlmConfigurationError`, an `AppError`: a missing or rejected LLM key is found when the
+LLM is built or called, not by `Settings()`, and the API answers it 503 like any closed
+feature. The CLI keeps exit 1 for it, not 3, on purpose (`integrating-llm`).
 
 ## Logging
 

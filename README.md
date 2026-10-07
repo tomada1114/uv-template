@@ -58,7 +58,7 @@ one exception is `OPENROUTER_API_KEY`, which keeps the name OpenRouter uses.
 | Variable | Default | Effect |
 |---|---|---|
 | `MY_APP_DATABASE_URL` | unset | Unset (or empty) keeps to-dos in memory, so they vanish when the process exits. `sqlite:///<path>` stores them in a SQLite file at `<path>`, created on first use; `sqlite:///:memory:` and a path ending in `/` are rejected at startup. |
-| `OPENROUTER_API_KEY` | unset | Unset (or blank) keeps the optional LLM layer closed: an LLM-backed route answers 503 and no LLM code is loaded. Set, it opens the OpenRouter adapter, which needs the `ai` extra. |
+| `OPENROUTER_API_KEY` | unset | Unset (or blank) keeps the optional LLM layer closed: an LLM-backed route answers 503, and neither `httpx` nor the OpenRouter adapter is imported. Set, it opens the OpenRouter adapter, which needs the `ai` extra. |
 | `MY_APP_LLM_MODEL` | `deepseek/deepseek-v4.1-flash` | The OpenRouter model a call that names none is sent to; blank means the default. |
 
 > [!NOTE]
@@ -80,7 +80,7 @@ src/my_app/
 ├── adapters/        # In-memory and SQLite repositories; fake, closed, and OpenRouter LLM adapters
 ├── api/             # FastAPI app factory, routers, request/response models
 ├── cli/             # Typer commands; serve.py is the only one that touches the API
-├── settings.py      # MY_APP_* environment variables
+├── settings.py      # MY_APP_* environment variables, plus OPENROUTER_API_KEY
 └── composition.py   # The one place adapters are wired into services
 ```
 

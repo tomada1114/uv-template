@@ -117,7 +117,7 @@ src/my_app/
 ├── adapters/        # Port implementations: in-memory and SQLite repositories; fake, closed, and OpenRouter LLM adapters (httpx, optional ai extra)
 ├── api/             # FastAPI: create_app(settings) factory, routers (api/routers/), Pydantic schemas
 ├── cli/             # Typer: `my-app todo add|list|complete|delete`; serve.py holds `my-app serve`
-├── settings.py      # pydantic-settings `Settings`, read from MY_APP_* environment variables
+├── settings.py      # pydantic-settings `Settings`, read from MY_APP_* environment variables and the unprefixed OPENROUTER_API_KEY
 └── composition.py   # Composition root: wires adapters into services for both entry points
 ```
 
