@@ -60,7 +60,10 @@ no `HTTPException` for a domain failure.
 `create_app(settings=None, *, container=None)` in `api/app.py` builds a new application
 per call; there is no module-level `app`. It builds a container from `settings` (read
 from the environment when omitted), or takes one a test built, and stores it on
-`app.state.container`. It includes each router and registers the `AppError` handler.
+`app.state.container`. Building remains in the factory, so configuration errors fail
+at startup. Its lifespan closes only the container it built; a supplied `container=`
+stays caller-owned. Use `TestClient` as a context manager to run lifespan shutdown.
+It includes each router and registers the `AppError` handler.
 
 - A new router is a module under `api/routers/`, added to the
   `from my_app.api.routers import ...` line and included with `app.include_router`.

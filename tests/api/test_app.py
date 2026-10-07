@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import ExitStack
 from http import HTTPStatus
 from importlib.metadata import version
 from typing import TYPE_CHECKING
@@ -7,8 +8,9 @@ from typing import TYPE_CHECKING
 import pytest
 from fastapi.testclient import TestClient
 
+from my_app.api import app as app_module
 from my_app.api.app import create_app
-from my_app.composition import build_llm
+from my_app.composition import Container, build_llm
 from my_app.core.errors import (
     AppError,
     LlmConfigurationError,
@@ -146,3 +148,35 @@ def test_create_app_with_sqlite_keeps_todos_across_apps(tmp_path):
         titles = [todo["title"] for todo in second.get("/todos").json()]
 
     assert titles == ["survives"]
+
+
+def test_create_app_shutdown_closes_factory_built_container(
+    monkeypatch, make_container
+):
+    closed: list[str] = []
+    resources = ExitStack()
+    resources.callback(closed.append, "built")
+    container = Container(make_container().todos, _resources=resources)
+    monkeypatch.setattr(app_module, "build_container", lambda _: container)
+
+    app = create_app(Settings())
+    assert closed == []
+    with TestClient(app) as client:
+        assert client.get("/healthz").status_code == HTTPStatus.OK
+        assert closed == []
+
+    assert closed == ["built"]
+
+
+def test_create_app_shutdown_leaves_supplied_container_caller_owned(make_container):
+    closed: list[str] = []
+    resources = ExitStack()
+    resources.callback(closed.append, "supplied")
+    container = Container(make_container().todos, _resources=resources)
+
+    with TestClient(create_app(container=container)) as client:
+        assert client.get("/healthz").status_code == HTTPStatus.OK
+
+    assert closed == []
+    container.close()
+    assert closed == ["supplied"]

@@ -4,15 +4,18 @@ import os
 import subprocess
 import sys
 import tomllib
+from contextlib import ExitStack
 from datetime import UTC
 from pathlib import Path
 
 import pytest
 from pydantic import SecretStr
 
+from my_app import composition
 from my_app.adapters.closed_llm import ClosedLlm
+from my_app.adapters.memory import InMemoryTodoRepository
 from my_app.adapters.openrouter import OpenRouterLlm
-from my_app.composition import build_llm, utc_now
+from my_app.composition import Container, build_container, build_llm, utc_now
 from my_app.core.errors import LlmConfigurationError
 from my_app.settings import ENV_PREFIX, OPENROUTER_API_KEY_ENV, Settings
 
@@ -155,3 +158,96 @@ def test_pyproject_httpx_is_only_in_the_ai_extra():
 
     assert runtime == []
     assert "httpx>=0.28" in project["optional-dependencies"]["ai"]
+
+
+def test_container_close_releases_registered_resource_once(make_container):
+    closed: list[str] = []
+    resources = ExitStack()
+    resources.callback(closed.append, "resource")
+    container = Container(make_container().todos, _resources=resources)
+
+    container.close()
+    container.close()
+
+    assert closed == ["resource"]
+
+
+def test_container_context_exit_releases_registered_resource(make_container):
+    closed: list[str] = []
+    resources = ExitStack()
+    resources.callback(closed.append, "resource")
+    container = Container(make_container().todos, _resources=resources)
+
+    with container as entered:
+        assert entered is container
+        assert closed == []
+
+    assert closed == ["resource"]
+
+
+def test_container_context_failure_releases_registered_resource(make_container):
+    closed: list[str] = []
+    resources = ExitStack()
+    resources.callback(closed.append, "resource")
+    container = Container(make_container().todos, _resources=resources)
+
+    message = "operation failed"
+    with pytest.raises(ValueError, match="operation failed"), container:
+        raise ValueError(message)
+
+    assert closed == ["resource"]
+
+
+def test_container_cleanup_failure_runs_remaining_callbacks_and_propagates(
+    make_container,
+):
+    closed: list[str] = []
+    resources = ExitStack()
+    resources.callback(closed.append, "remaining")
+
+    def fail_cleanup():
+        message = "cleanup failed"
+        raise ValueError(message)
+
+    resources.callback(fail_cleanup)
+    container = Container(make_container().todos, _resources=resources)
+
+    with pytest.raises(ValueError, match="cleanup failed"):
+        container.close()
+    container.close()
+
+    assert closed == ["remaining"]
+
+
+def test_build_container_failure_closes_partially_registered_resources(monkeypatch):
+    closed: list[str] = []
+
+    def fail_build(settings, resources=None):
+        if resources is not None:
+            resources.callback(closed.append, "partial")
+        message = "build failed"
+        raise ValueError(message)
+
+    monkeypatch.setattr(composition, "_build_repository", fail_build)
+
+    with pytest.raises(ValueError, match="build failed"):
+        build_container(Settings())
+
+    assert closed == ["partial"]
+
+
+def test_build_container_success_keeps_registered_resources_until_close(monkeypatch):
+    closed: list[str] = []
+
+    def build_repository(settings, resources):
+        resources.callback(closed.append, "owned")
+        return InMemoryTodoRepository()
+
+    monkeypatch.setattr(composition, "_build_repository", build_repository)
+
+    container = build_container(Settings())
+    assert closed == []
+    container.close()
+    container.close()
+
+    assert closed == ["owned"]

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+from contextlib import ExitStack
 from typing import TYPE_CHECKING
 
 import pytest
 from typer.testing import CliRunner
 
+from my_app.cli import context
 from my_app.cli.errors import ExitCode
 from my_app.cli.main import app
+from my_app.composition import Container
 
 if TYPE_CHECKING:
     from typer.testing import Result
@@ -129,3 +132,41 @@ def test_todo_subcommand_help_invalid_setting_prints_help(command, monkeypatch):
     assert result.exit_code == ExitCode.OK
     assert "Usage:" in result.stdout
     assert result.stderr == ""
+
+
+@pytest.mark.parametrize(
+    ("args", "exit_code"),
+    [
+        pytest.param(["todo", "list"], ExitCode.OK, id="success"),
+        pytest.param(
+            ["todo", "delete", "999"], ExitCode.DOMAIN_ERROR, id="domain-error"
+        ),
+    ],
+)
+def test_todo_command_exit_closes_built_container(
+    monkeypatch, make_container, args, exit_code
+):
+    closed: list[str] = []
+    resources = ExitStack()
+    resources.callback(closed.append, "built")
+    container = Container(make_container().todos, _resources=resources)
+    monkeypatch.setattr(context, "build_container", lambda _: container)
+
+    result = CliRunner().invoke(app, args)
+
+    assert result.exit_code == exit_code
+    assert closed == ["built"]
+
+
+def test_todo_command_exit_leaves_supplied_container_caller_owned(make_container):
+    closed: list[str] = []
+    resources = ExitStack()
+    resources.callback(closed.append, "supplied")
+    container = Container(make_container().todos, _resources=resources)
+
+    result = CliRunner().invoke(app, ["todo", "list"], obj=container)
+
+    assert result.exit_code == ExitCode.OK
+    assert closed == []
+    container.close()
+    assert closed == ["supplied"]
