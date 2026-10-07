@@ -56,9 +56,17 @@ KEEPABLE = ("TEMPLATE.md", "scripts/bootstrap.py", "tests/test_bootstrap.py")
 SKILL_REFERENCE = "skills/starting-an-app/references/bootstrap.md"
 # Isolates every git call (the fixtures' and the script's) from the
 # developer's own configuration: hooks, signing, default branch, identity.
+# Auto maintenance is off too: a commit otherwise leaves a detached
+# `git maintenance run --auto` behind, which can repack the session-scoped
+# template's objects while a later local clone is copying them (#175).
 GIT_ENV = {
     "GIT_CONFIG_GLOBAL": os.devnull,
     "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_COUNT": "2",
+    "GIT_CONFIG_KEY_0": "maintenance.auto",
+    "GIT_CONFIG_VALUE_0": "false",
+    "GIT_CONFIG_KEY_1": "gc.auto",
+    "GIT_CONFIG_VALUE_1": "0",
     "GIT_AUTHOR_NAME": "Template Test",
     "GIT_AUTHOR_EMAIL": "template-test@localhost",
     "GIT_COMMITTER_NAME": "Template Test",
@@ -736,3 +744,18 @@ def test_bootstrap_leaves_secret_binary_and_symlinked_files_alone(clone, tmp_pat
         assert (clone / relative).read_bytes() == data, relative
     assert (clone / "docs" / "outside.md").is_symlink()
     assert outside.read_text(encoding="utf-8") == "my-app\n"
+
+
+@pytest.mark.parametrize(
+    ("key", "expected"),
+    [
+        pytest.param("maintenance.auto", "false", id="maintenance"),
+        pytest.param("gc.auto", "0", id="gc"),
+    ],
+)
+def test_git_env_disables_background_maintenance(
+    tmp_path: Path, key: str, expected: str
+) -> None:
+    _git(tmp_path, "init", "--quiet")
+
+    assert _git(tmp_path, "config", "--get", key).strip() == expected
