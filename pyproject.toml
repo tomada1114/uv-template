@@ -87,13 +87,14 @@ src = ["src", "tests", "scripts"]
 extend-exclude = [".claude/skills"]
 
 # Skill scripts run under whatever `python3` the host provides, which may be
-# older than the project's own 3.14 floor. Pin them below the project
+# older than the project's own 3.14 floor: the floor is 3.9, macOS's
+# /usr/bin/python3 (CI's `Skill Scripts (Python 3.9)` job runs them there). Pin them below the project
 # target-version so neither the formatter nor version-specific lint rules
 # introduce syntax (e.g. PEP 758 unparenthesized `except`) that would be a
 # SyntaxError there. `**` so a skill's bundled `scripts/tests/` is pinned too:
 # those tests import the scripts and run under the same interpreters.
 [tool.ruff.per-file-target-version]
-".agents/skills/*/scripts/**/*.py" = "py312"
+".agents/skills/*/scripts/**/*.py" = "py39"
 # pre-commit runs the secret gate with its own interpreter (`language: python`),
 # and pre-commit supports Python 3.10+.
 "scripts/check_staged.py" = "py310"

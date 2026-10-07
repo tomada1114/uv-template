@@ -276,7 +276,7 @@ fi
 state_root="${AGENT_SKILL_STATE_DIR:-$HOME/.local/state/agent-skills}"
 case "$state_root" in
   "~") state_root="$HOME" ;;
-  "~/"*) state_root="$HOME/${state_root#\~/}" ;;
+  \~/*) state_root="$HOME/${state_root#\~/}" ;;
 esac
 state_root="${state_root%/}"
 runstate="$state_root/shipping-issues/$runstate_leaf"

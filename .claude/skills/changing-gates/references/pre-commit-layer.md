@@ -8,6 +8,15 @@ The guard rails run as git hooks through [pre-commit](https://pre-commit.com/), 
 hold for every author — a human, Claude Code, Codex CLI, or any other tool. No
 agent-specific hook is committed.
 
+## `shellcheck`
+
+The `shellcheck` hook (`shellcheck-py`, pinned by `rev:` and kept current by
+Dependabot's `pre-commit` entry) lints every shell script at default severity, style
+included. It excludes `^\.claude/skills/`, the byte-identical mirror of
+`.agents/skills/`. It installs shellcheck in pre-commit's own environment, so it adds
+nothing to `pyproject.toml` or `uv.lock`. CI's `Lint & Type Check` runs it with
+`uv run --locked pre-commit run shellcheck --all-files`.
+
 ## `check-staged`, the secret gate
 
 `check-staged` (`scripts/check_staged.py`) refuses a commit that stages a secret-shaped

@@ -44,6 +44,11 @@ jobs:
       - name: mypy
         run: uv run --locked mypy src scripts tests
 
+      # Runs the pinned pre-commit hook, sharing its shellcheck version and
+      # file selection with local commits.
+      - name: shellcheck
+        run: uv run --locked pre-commit run shellcheck --all-files
+
       # Mirrors `just test-skills`; the .claude/skills mirror is not run twice.
       - name: Skill script tests
         env:
@@ -53,6 +58,33 @@ jobs:
           for dir in .agents/skills/*/scripts/tests; do
             echo "== $dir"
             uv run --locked python -m unittest discover -s "$dir" -t "$dir" -p 'test_*.py' || status=1
+          done
+          exit "$status"
+
+  # Skill scripts promise to run on the system python3; 3.9 is macOS's
+  # /usr/bin/python3. Stdlib only, so no project environment. Not a required
+  # check: a failure leaves the PR UNSTABLE, which automated merges stop on.
+  skill-scripts-py39:
+    name: Skill Scripts (Python 3.9)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
+      - name: Skill script tests under Python 3.9
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          UV_PYTHON_DOWNLOADS: automatic
+        run: |
+          uv run --no-project --python 3.9 python --version
+          status=0
+          for dir in .agents/skills/*/scripts/tests; do
+            echo "== $dir"
+            uv run --no-project --python 3.9 python -m unittest discover -s "$dir" -t "$dir" -p 'test_*.py' || status=1
           done
           exit "$status"
 
