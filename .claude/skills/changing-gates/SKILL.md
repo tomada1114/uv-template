@@ -66,6 +66,7 @@ AGENTS.md's "Enforcement layers" names the layers. Keeping them in step is this 
 | Skill script tests | — | `test-skills` | `Lint & Type Check` |
 | `uv lock --check` | — | `lock-check` | `--locked` on every `uv sync` |
 | Tests and the 80% floor | — | `test` | `Test` shards, then `Coverage` |
+| Harness drift (`tests/harness`) and the Product section | — | `check-harness` | `Test` shards, then `Coverage` |
 | typos | `typos` | — | `Spell Check` |
 | zizmor | `zizmor` | — | `Workflow Security Lint` |
 | Staged secrets | `check-staged` | — | the weekly gitleaks history scan |
@@ -82,17 +83,20 @@ AGENTS.md's "Enforcement layers" names the layers. Keeping them in step is this 
 ## CI workflows and required checks
 
 - Every job pins each action to a 40-character commit SHA with a `# vX.Y.Z` comment,
-  checks out with `persist-credentials: false`, sets `timeout-minutes`, and stays under
-  a top-level `permissions` of `contents: read` or narrower unless the job's work needs
-  a write. zizmor (pre-commit and CI) reports most departures; verify with
+  checks out with `persist-credentials: false`, and sets `timeout-minutes`. The
+  top-level `permissions` is `{}` or exactly `contents: read`; a scope beyond that,
+  a write above all, is granted on the job that needs it. On a workflow that also runs
+  on push, concurrency never cancels a push run on `main`, pending ones included.
+  Enforced by: `tests/harness/test_workflow_hygiene.py` (`just check-harness`); zizmor
+  (pre-commit and CI) reports most other departures — verify with
   `uv run --locked pre-commit run zizmor --all-files`.
 - A required check must be a job that runs on every pull request and cannot be skipped:
   never a job in a workflow whose `pull_request` trigger has `paths` or `paths-ignore`,
   and never a job whose `if:` could skip it — a skipped required check counts as
   passing. A job with `needs:` is guarded with `!cancelled()` or `always()` and fails on
   its own when a needed job failed, as `Coverage` does; it is required instead of the
-  test shards. Enforced by: `tests/test_apply_ruleset.py`, which also fails on a
-  workflow layout its scanner cannot read.
+  test shards. Enforced by: `tests/harness/test_ruleset_contexts.py`, which also fails
+  on a workflow layout its scanner cannot read.
 - Renaming a required job, or adding one that should block merges, edits
   `.github/rulesets/main.json` and the context list in
   `tests/test_apply_ruleset.py::test_required_contexts_match_settled_defaults` in the

@@ -55,7 +55,8 @@ just test            # Run tests in parallel with coverage
 just test-durations  # Regenerate the pytest-split duration file used by CI shards
 just check           # Mutating dev check: fmt → lint → test
 just lock            # Update uv.lock after dependency changes
-just verify          # Non-mutating gate: lock-check → agents-check → lint → test-skills → test
+just verify          # Non-mutating gate: lock-check → agents-check → check-harness → lint → test-skills → test
+just check-harness   # Harness drift (skills, Skills table, recipes, ruleset, labels, workflows) + the Product section check
 just test-skills     # Run the unittest suites bundled under .agents/skills/*/scripts/tests
 just run *ARGS       # Run the CLI, e.g. `just run todo list` (uv run --locked my-app ...)
 just worktree-clean  # Remove agent worktrees under .claude/worktrees with a merged PR
@@ -100,9 +101,9 @@ being run at all.
 | One test | `uv run --locked pytest tests/test_<module>.py::test_<name>` |
 | Any Python file's lint or types | `uv run --locked ruff check <file>`, then `uv run --locked mypy src scripts tests` |
 | A script under `scripts/` | `uv run --locked pytest tests/test_<script>.py` |
-| A skill under `.agents/skills/` | `just agents-sync && just agents-check && just test-skills` |
+| A skill under `.agents/skills/` | `just agents-sync && just agents-check && just check-harness && just test-skills` |
 | Dependencies in `pyproject.toml` | `uv lock`, `uv sync --all-groups --locked`, then `just verify` |
-| A workflow under `.github/workflows/` | `uv run --locked pre-commit run zizmor --all-files` |
+| A workflow under `.github/workflows/` | `uv run --locked pre-commit run zizmor --all-files`, then `just check-harness` |
 | Markdown or other prose | `uv run --locked pre-commit run typos --files <file>` |
 
 The state of the work comes from Git, fresh test output, and CI — never from
@@ -234,7 +235,7 @@ Each layer catches what the one before it cannot; `changing-gates` owns them.
 | Layer | Runs | Holds |
 |---|---|---|
 | Git hooks (pre-commit, `.pre-commit-config.yaml`) | Every `git commit` by any author — a human, Claude Code, Codex CLI, any tool; `check-staged` also on merge commits | No staged secret (`check-staged`), no commit on `main` (`no-commit-to-branch`), ruff, ruff-format, mypy, typos, zizmor, the skills mirror |
-| `just verify` | Before a pull request or a completion claim | A current `uv.lock`, the skills mirror, ruff, mypy, the skill script tests, the test suite and its 80% branch-coverage floor |
+| `just verify` | Before a pull request or a completion claim | A current `uv.lock`, the skills mirror, the harness self-checks (`check-harness`), ruff, mypy, the skill script tests, the test suite and its 80% branch-coverage floor |
 | CI (`.github/workflows/`) | Every pull request and push to `main`, unless noted | The `just verify` checks, typos, zizmor, and CodeQL; the PR title and Dependency Review (pull requests only); OSV-Scanner (when `uv.lock` changes, and weekly); gitleaks over the whole history (weekly) |
 | GitHub ruleset (`.github/rulesets/main.json`) | Every change to `main` | Every change arrives by a branch and a pull request, with the required checks green; no force-push, no deletion |
 

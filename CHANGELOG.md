@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `just check-harness`, part of `just verify` (CI's test shards run it too): a
+  pytest suite in `tests/harness/` that fails on cross-file drift in the agent
+  harness — a skill frontmatter with a key other than `name`/`description`, a
+  `name` that is not its directory, a description that is not a `>` block, not
+  ASCII, or over 600 characters, a body over 200 lines, or a nested `SKILL.md`;
+  an `AGENTS.md` Skills table that disagrees with `.agents/skills/`; a
+  `just <recipe>` that AGENTS.md, CLAUDE.md, a skill (its scripts included), or
+  `.github/**` names but the justfile lacks; a required ruleset context that is
+  not an unskippable every-PR job (moved from `tests/test_apply_ruleset.py`, its
+  workflow scanner now shared in `tests/harness/_workflows.py`, and now also
+  failing a `branches`, `branches-ignore`, or `types` filter that skips some pull
+  requests to main); a label pr-label.yml, an issue form or Markdown template, or
+  dependabot.yml applies that `.github/labels.yml` does not declare exactly once
+  (moved from `tests/test_sync_labels.py`); and workflow hygiene — a `uses:` not
+  pinned to a commit SHA with a `# v` comment, a job without `timeout-minutes`,
+  top-level `permissions` wider than `contents: read`, a checkout that keeps its
+  credentials, `pull_request_target`, `continue-on-error`, `|| true`, or a
+  concurrency that can cancel a push run on main. The Product check stays
+  `tests/test_product_section.py`, which the recipe also runs
 - Seven process skills under `.agents/skills/` (mirrored to
   `.claude/skills/`): `writing-tests` and `placing-tests` (replacing
   `tests/AGENTS.md`), `tdd`, `managing-dependencies` (the `exclude-newer`
@@ -114,6 +133,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- CI, CodeQL, and OSV-Scanner key their concurrency group on the commit SHA
+  outside a pull request, and CI cancels only superseded pull-request runs, so
+  no push to main is cancelled or replaced while pending; `check-pr-title.yml`
+  and `pr-label.yml` move their `pull-requests` scope from the top level onto
+  the job, leaving `permissions: {}` at the top
+- `authoring-skills` names the harness wherever it said no check enforced a rule
 - `AGENTS.md` keeps only what every task needs — Overview, Product, Quick
   Reference, Validating a change, Architecture, Skills, Sub-agents, Security
   and human approval, Enforcement layers — and its conventions and

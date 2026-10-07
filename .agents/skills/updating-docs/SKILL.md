@@ -60,14 +60,14 @@ reader of the diff catches it.
 
 | When you change | Also change | Caught by |
 |---|---|---|
-| A skill added, renamed, or deleted | Its row in AGENTS.md's Skills table | review |
-| A `just` recipe added, renamed, or removed | Its line in AGENTS.md's "Quick Reference", in the block for who runs it; `CONTRIBUTING.md` if it lists the recipe | review |
+| A skill added, renamed, or deleted | Its row in AGENTS.md's Skills table | `tests/harness/test_skills.py` (`just check-harness`) |
+| A `just` recipe added, renamed, or removed | Its line in AGENTS.md's "Quick Reference", in the block for who runs it; `CONTRIBUTING.md` if it lists the recipe | `tests/harness/test_just_recipes.py` when AGENTS.md, CLAUDE.md, a skill, or `.github/` still names a renamed or removed one; review for an added one |
 | A gate, or the narrowest check for one kind of change | Its row in AGENTS.md's "Validating a change" | review |
 | A CLI command or an HTTP route | `README.md`'s command table | review |
 | A `MY_APP_*` setting | `README.md`'s configuration table | review |
 | An `AppError` mapping or an exit code | `README.md`'s error text and exit-code table | `tests/cli/test_errors.py` pins the codes |
-| A label in `.github/labels.yml` | `.github/workflows/pr-label.yml`'s mapping, if it names it | `tests/test_sync_labels.py` |
-| A required CI job | `.github/rulesets/main.json` | `tests/test_apply_ruleset.py` |
+| A label in `.github/labels.yml` | `.github/workflows/pr-label.yml`'s mapping, if it names it | `tests/harness/test_labels.py` |
+| A required CI job | `.github/rulesets/main.json` | `tests/harness/test_ruleset_contexts.py`; `tests/test_apply_ruleset.py` pins the list |
 
 **BACKGROUND:** `smart-commit` for the pairs that must share a commit, not only a pull
 request. Adding a script reaches more files; **REQUIRED:** `writing-repo-scripts`.

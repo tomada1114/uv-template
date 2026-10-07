@@ -25,6 +25,7 @@ them, and which coverage floor governs them. **Does not own:** how a test is wri
 | A top-level module (`settings.py`, `composition.py`) | `tests/test_<module>.py` |
 | `scripts/<script>.py` | `tests/test_<script>.py` |
 | Agent tier definitions in `.claude/agents/` and `.codex/agents/` | `tests/test_agent_tiers.py` |
+| A cross-file rule of the agent harness (skills, AGENTS.md's Skills table, `just` recipes named in docs, ruleset contexts, labels, workflow hygiene) | `tests/harness/test_<family>.py`, run by `just check-harness` |
 
 - A new module gets its test file in the same commit as the module. **BACKGROUND:**
   `tdd`.

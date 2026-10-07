@@ -68,9 +68,10 @@ surface.
   trigger. Avoid an unquoted plain value containing `: ` or ` #`, which a strict YAML
   parser rejects.
 
-No check enforces any of these rules yet: `just agents-check` passes a malformed
-frontmatter as long as both trees agree. Read your frontmatter against this list before
-committing — see "Why nothing catches a broken skill" below.
+Enforced by: `tests/harness/test_skills.py` (`just check-harness`), which reads the
+frontmatter strictly and fails on a third key, a `name` that is not the directory, a
+`description` not written as `description: >`, or one that is not printable ASCII
+within 600 characters. It does not judge whether the description is a good trigger.
 
 ## When a new skill is warranted
 
@@ -113,8 +114,8 @@ Do not write down what a config already enforces. Name the gate in one line
 config cannot express.
 
 A skill added, renamed, or deleted gets its row in `AGENTS.md`'s Skills table updated in
-the same commit, and widening a skill's subject means widening its row. Nothing checks
-the table against the directories yet.
+the same commit, and widening a skill's subject means widening its row. Enforced by:
+`tests/harness/test_skills.py`, which fails when the table and the directories disagree.
 
 ## Write an illustration so it can be deleted
 
@@ -137,8 +138,8 @@ stack-agnostic skill copied across repositories that demonstrably drifts.
 ## Size and structure
 
 - Target 150 body lines per `SKILL.md`, never exceed 200 (physical lines after the
-  frontmatter, blanks included); past that, move detail into `references/`. No check
-  enforces this — count before committing.
+  frontmatter, blanks included); past that, move detail into `references/`. Enforced
+  by: `tests/harness/test_skills.py`, which also fails on a nested `SKILL.md`.
 - A `references/*.md` file stays under 400 lines and is linked with a relative path one
   level deep, never with `@` and never as an absolute path.
 
@@ -166,19 +167,19 @@ Ruff lints these scripts with the scoped relaxations in `pyproject.toml`'s
 templates and kept close to that source. mypy does not check them. Add a new rule to
 those ignores only with a reason comment, never by relaxing the global rule set.
 
-## Why nothing catches a broken skill
+## What catches a broken skill
 
 `just agents-check` only proves the two trees are byte-identical; it says nothing about
 whether the source tree is well-formed. `typos` spell-checks the file without parsing its
 frontmatter. A `SKILL.md` whose frontmatter fails to parse, whose `name` disagrees with
-its directory, or whose `description` carries a stray key passes every one of those
-checks, mirrors cleanly, and simply never loads in either host — nothing reports it. A
-frontmatter and size check is not implemented in this repository yet, so before
-committing a new or changed skill, re-read it against "Frontmatter" and "Size and
-structure", then run:
+its directory, or whose `description` carries a stray key passes both, mirrors cleanly,
+and simply never loads in either host. `just check-harness` (part of `just verify`) is
+the check that reads the frontmatter, the body length, and the Skills table; it does not
+read the mirror. Before committing a new or changed skill, run:
 
 ```bash
 just agents-sync
 just agents-check
+just check-harness
 just test-skills
 ```
