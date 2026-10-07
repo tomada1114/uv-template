@@ -7,8 +7,9 @@ pull request waiting forever, and a skipped required check counts as passing.
 A required job with ``needs:`` runs under ``!cancelled()``/``always()`` even
 when a needed job failed, so it must also fail on its own: some step fails
 when ``needs.<job>.result`` is not ``success``, for each needed job, as CI's
-``Coverage`` does. The workflow scanner (``_workflows.py``) reads that step as
-text, and fails closed on a layout it cannot read. The ruleset's own content
+``Coverage`` does. ``_needs.py`` lists the step shapes that count; it reads
+only required jobs. The workflow scanner (``_workflows.py``) fails closed on a
+layout it cannot read. The ruleset's own content
 is pinned by ``tests/test_apply_ruleset.py``.
 """
 
@@ -21,6 +22,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from tests.harness._needs import unfailed_needs
 from tests.harness._workflows import Check, can_skip, every_pr_checks
 from tests.harness._yaml import UnreadableYamlError
 
@@ -31,6 +33,7 @@ if TYPE_CHECKING:
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RULESET = ".github/rulesets/main.json"
+SHAPES_HINT = "see the step shapes tests/harness/_needs.py accepts"
 WORKFLOWS = ".github/workflows"
 
 
@@ -87,8 +90,8 @@ def ruleset_context_findings(root: Path) -> list[str]:
             )
         findings.extend(
             f"{RULESET}: required context {context!r} needs {job!r}, but no step "
-            f"fails when `needs.{job}.result` is not 'success'"
-            for job in check.unfailed_needs
+            f"fails when `needs.{job}.result` is not 'success'; {SHAPES_HINT}"
+            for job in unfailed_needs(check)
         )
     return findings
 
@@ -234,6 +237,16 @@ def test_ruleset_contexts_unrunnable_context_fails(
     assert findings == [f"{RULESET}: required context {message}"]
 
 
+def _fail_on_lint_with(old: str, new: str) -> str:
+    assert old in FAIL_ON_LINT
+    return FAIL_ON_LINT.replace(old, new)
+
+
+def _with_step_key(line: str) -> str:
+    """FAIL_ON_LINT with one more key on its step, before ``env:``."""
+    return _fail_on_lint_with("        env:\n", f"        {line}\n        env:\n")
+
+
 def _coverage_workflow(steps: str, needs: str = "lint") -> str:
     """A workflow whose required ``Coverage`` job needs ``lint`` under a guard."""
     return (
@@ -258,15 +271,33 @@ def _coverage_workflow(steps: str, needs: str = "lint") -> str:
             "    steps:\n      - name: Fail\n"
             "        if: ${{ needs.lint.result != 'success' || "
             "needs.build.result != 'success' }}\n"
-            "        run: |\n          echo failed\n          exit 1\n",
+            '        run: |\n          echo failed: "$X" >&2\n          exit 1\n',
             "[lint, build]",
             id="step-if-either-not-success",
         ),
         pytest.param(
-            '    steps:\n      - run: test "${{ needs.lint.result }}" = success '
-            "|| exit 1\n",
+            '    steps:\n      - run: \'[ "${{ needs.lint.result }}" = success ] '
+            "|| exit 1'\n",
             "lint",
             id="inline-expression",
+        ),
+        pytest.param(
+            "    env:\n      R: ${{ needs.lint.result }}\n"
+            "    steps:\n      - run: '[[ $R != success ]] && exit 3'\n",
+            "lint",
+            id="not-success-and-exit",
+        ),
+        pytest.param(
+            _with_step_key("if: success()"),
+            "lint",
+            id="step-if-success",
+        ),
+        pytest.param(
+            FAIL_ON_LINT.replace(
+                "        run: |\n", "        run: |\n          echo 'checking lint'\n"
+            ),
+            "lint",
+            id="echo-before-the-check",
         ),
         pytest.param(
             "    env:\n      LINT_RESULT: ${{ needs.lint.result }}\n"
@@ -278,7 +309,9 @@ def _coverage_workflow(steps: str, needs: str = "lint") -> str:
         ),
         pytest.param(
             FAIL_ON_LINT + "      - env:\n          B: ${{ needs.build.result }}\n"
-            '        run: if [ "$B" != success ]; then exit 1; fi\n',
+            "        run: |\n"
+            '          if [[ "${B}" != success ]]; then  # the build\n'
+            "            exit 1\n          fi\n          echo done\n",
             "\n      - lint\n      - build",
             id="block-list-one-step-each",
         ),
@@ -290,11 +323,6 @@ def test_ruleset_contexts_needs_job_failing_on_its_own_passes(
     root = make_root(_ruleset("Coverage"), _coverage_workflow(steps, needs))
 
     assert ruleset_context_findings(root) == []
-
-
-def _fail_on_lint_with(old: str, new: str) -> str:
-    assert old in FAIL_ON_LINT
-    return FAIL_ON_LINT.replace(old, new)
 
 
 @pytest.mark.parametrize(
@@ -338,12 +366,7 @@ def _fail_on_lint_with(old: str, new: str) -> str:
             id="other-job-result",
         ),
         pytest.param(
-            _fail_on_lint_with(
-                "        env:\n", "        if: failure()\n        env:\n"
-            ),
-            "lint",
-            "lint",
-            id="step-if-skips-it",
+            _with_step_key("if: failure()"), "lint", "lint", id="step-if-skips-it"
         ),
         pytest.param(
             "    steps:\n      - if: needs.lint.result == 'failure'\n"
@@ -360,15 +383,102 @@ def _fail_on_lint_with(old: str, new: str) -> str:
             id="step-if-extra-condition",
         ),
         pytest.param(
-            _fail_on_lint_with(
-                "        env:\n", "        continue-on-error: true\n        env:\n"
-            ),
+            _with_step_key("continue-on-error: true"),
             "lint",
             "lint",
             id="continue-on-error",
         ),
         pytest.param(
             FAIL_ON_LINT, "[lint, build]", "build", id="second-need-unchecked"
+        ),
+        # The three false passes a review reproduced on a copy of ci.yml.
+        pytest.param(
+            _fail_on_lint_with(
+                "            exit 1\n          fi\n",
+                "          fi\n          uv run coverage report || exit 1\n",
+            ),
+            "lint",
+            "lint",
+            id="exit-on-another-command",
+        ),
+        pytest.param(
+            _fail_on_lint_with(
+                "            exit 1\n", '            echo "would exit 1"\n'
+            ),
+            "lint",
+            "lint",
+            id="exit-inside-a-string",
+        ),
+        pytest.param(
+            "    env:\n      LINT_RESULT: ${{ needs.lint.result }}\n    steps:\n"
+            '      - run: ( if [ "$LINT_RESULT" != "success" ]; then exit 1; fi ) '
+            "|| echo ignored\n",
+            "lint",
+            "lint",
+            id="exit-inside-a-subshell",
+        ),
+        pytest.param(
+            _fail_on_lint_with("        run: |\n", "        run: |\n          (\n")
+            + "          ) || echo ignored\n",
+            "lint",
+            "lint",
+            id="block-inside-a-subshell",
+        ),
+        pytest.param(
+            _fail_on_lint_with(
+                "        run: |\n", "        run: |\n          exit 0\n"
+            ),
+            "lint",
+            "lint",
+            id="exit-zero-first",
+        ),
+        pytest.param(
+            _fail_on_lint_with('!= "success" ]', '= "success" ]'),
+            "lint",
+            "lint",
+            id="inverted-if-comparison",
+        ),
+        pytest.param(
+            "    env:\n      R: ${{ needs.lint.result }}\n"
+            "    steps:\n      - run: '[ \"$R\" != success ] || exit 1'\n",
+            "lint",
+            "lint",
+            id="inverted-guard-comparison",
+        ),
+        pytest.param(
+            "    steps:\n      - if: contains(needs.*.result, 'failure')\n"
+            "        run: exit 1\n",
+            "lint",
+            "lint",
+            id="contains-needs-star",
+        ),
+        pytest.param(
+            "    steps:\n      - if: needs.*.result != 'success'\n        run: exit 1\n",
+            "lint",
+            "lint",
+            id="needs-star-result",
+        ),
+        pytest.param(
+            "    env:\n      LINT_RESULT: ${{ needs.lint.result }}\n"
+            + _fail_on_lint_with(
+                "          LINT_RESULT: ${{ needs.lint.result }}\n",
+                "          LINT_RESULT: success\n",
+            ),
+            "lint",
+            "lint",
+            id="step-env-overrides-job-env",
+        ),
+        pytest.param(
+            _fail_on_lint_with("        run: |\n", "        run: >\n"),
+            "lint",
+            "lint",
+            id="folded-run",
+        ),
+        pytest.param(
+            _fail_on_lint_with('echo "::error::', 'echo "$(date) ::error::'),
+            "lint",
+            "lint",
+            id="echo-with-command-substitution",
         ),
     ],
 )
@@ -379,7 +489,7 @@ def test_ruleset_contexts_needs_job_not_failing_on_its_own_fails(
 
     assert ruleset_context_findings(root) == [
         f"{RULESET}: required context 'Coverage' needs {unfailed!r}, but no step "
-        f"fails when `needs.{unfailed}.result` is not 'success'"
+        f"fails when `needs.{unfailed}.result` is not 'success'; {SHAPES_HINT}"
     ]
 
 
@@ -394,7 +504,7 @@ def test_ruleset_contexts_unguarded_needs_without_failing_step_reports_both(
         f"{RULESET}: required context 'Docs Build' is a job whose `if:` or `needs:` "
         "can skip it",
         f"{RULESET}: required context 'Docs Build' needs 'lint', but no step fails "
-        "when `needs.lint.result` is not 'success'",
+        f"when `needs.lint.result` is not 'success'; {SHAPES_HINT}",
     ]
 
 
@@ -414,6 +524,12 @@ def test_ruleset_contexts_unguarded_needs_without_failing_step_reports_both(
             r"cannot read an inline `env: ",
             id="inline-env",
         ),
+        pytest.param(
+            "    steps:\n      - run: if true; then\n          exit 1\n          fi\n",
+            "lint",
+            r"cannot read a multi-line plain `run: if true; then`",
+            id="multi-line-plain-run",
+        ),
     ],
 )
 def test_ruleset_contexts_unreadable_needs_job_fails_closed(
@@ -423,6 +539,26 @@ def test_ruleset_contexts_unreadable_needs_job_fails_closed(
 
     with pytest.raises(UnreadableYamlError, match=message):
         ruleset_context_findings(root)
+
+
+@pytest.mark.parametrize(
+    ("steps", "needs"),
+    [
+        pytest.param("", "lint", id="no-failing-step"),
+        pytest.param(FAIL_ON_LINT, "{lint: x}", id="unreadable-needs"),
+        pytest.param(
+            "    steps:\n      - run: if true; then\n          exit 1\n          fi\n",
+            "lint",
+            id="multi-line-plain-run",
+        ),
+    ],
+)
+def test_ruleset_contexts_needs_job_not_required_is_not_read(
+    make_root: MakeRoot, steps: str, needs: str
+) -> None:
+    root = make_root(_ruleset("Lint"), _coverage_workflow(steps, needs))
+
+    assert ruleset_context_findings(root) == []
 
 
 # --- the scanner ---
@@ -619,4 +755,4 @@ def test_every_pr_checks_duplicate_name_keeps_every_problem(
     check = every_pr_checks(tmp_path)["A"]
 
     assert can_skip(check) is True
-    assert check.unfailed_needs == ("b",)
+    assert unfailed_needs(check) == ("b",)

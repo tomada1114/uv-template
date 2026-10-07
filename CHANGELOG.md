@@ -31,7 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The harness's ruleset check now also fails a required job with `needs:` that
   has no step failing when a needed job's result is not `success` (as
   `Coverage`'s "Fail when a test shard did not succeed" step does), so such a
-  job can no longer go green over a failed needed job
+  job can no longer go green over a failed needed job. The step is read as
+  text and counts only in the shapes `tests/harness/_needs.py` lists; a job no
+  ruleset requires is not read
 - The harness's workflow hygiene check now also reads composite actions under
   `.github/actions/` (`action.yml` or `action.yaml`): each step's `uses:` must be
   pinned to a commit SHA with a `# v` comment, a checkout must not keep its

@@ -95,9 +95,14 @@ AGENTS.md's "Enforcement layers" names the layers. Keeping them in step is this 
   never a job in a workflow whose `pull_request` trigger has `paths` or `paths-ignore`,
   and never a job whose `if:` could skip it — a skipped required check counts as
   passing. A job with `needs:` is guarded with `!cancelled()` or `always()` and fails on
-  its own when a needed job failed, as `Coverage` does; it is required instead of the
-  test shards. Enforced by: `tests/harness/test_ruleset_contexts.py`, which also fails
-  on a workflow layout its scanner cannot read.
+  its own when a needed job did not succeed, as `Coverage` does; it is required instead
+  of the test shards. Only a few step shapes count, read as text: Coverage's
+  `if [ "$R" != "success" ]; then … exit 1; fi` as the step's first command,
+  `[ "$R" = success ] || exit 1`, or a step `if: needs.X.result != 'success'` whose
+  `run:` is `exit 1` (the full list is `tests/harness/_needs.py`'s docstring).
+  `skipped` is not `success`, so a required job cannot need a job that is skipped on
+  purpose. Enforced by: `tests/harness/test_ruleset_contexts.py`, which also fails on a
+  workflow layout its scanner cannot read.
 - Renaming a required job, or adding one that should block merges, edits
   `.github/rulesets/main.json` and the context list in
   `tests/test_apply_ruleset.py::test_required_contexts_match_settled_defaults` in the
