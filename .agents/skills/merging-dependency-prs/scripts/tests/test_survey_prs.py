@@ -134,6 +134,14 @@ class EcosystemTest(unittest.TestCase):
             sp.ecosystem_of("dependabot/github_actions/actions-abc"), "github_actions"
         )
 
+    def test_pre_commit_branch_is_recognized(self):
+        self.assertEqual(
+            sp.ecosystem_of("dependabot/pre_commit/hooks-abc"), "pre_commit"
+        )
+
+    def test_pre_commit_as_a_package_name_is_other(self):
+        self.assertEqual(sp.ecosystem_of("dependabot/pip/pre_commit-1.0.0"), "other")
+
     def test_uv_branch(self):
         self.assertEqual(sp.ecosystem_of("dependabot/uv/ruff-0.16.0"), "uv")
 

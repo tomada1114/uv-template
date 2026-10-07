@@ -21,9 +21,15 @@ formality. Step 4 repeats this review whenever a head changes:
 - A bump that changes anything under `.github/workflows/` beyond the `uses:` lines —
   a new input, a new step, a changed `permissions:` block or trigger — is changing
   _what_ runs rather than _which version_ runs, and goes to "Stop and ask".
-- Every pin of the same Action moves together, and an Action with a pre-commit twin
-  (`crate-ci/typos`) moves with its `rev:` in `.pre-commit-config.yaml` — SKILL.md
-  Step 2.
+- Every pin of the same Action moves together — SKILL.md Step 2.
+
+## `pre-commit` PRs
+
+- Read every remote hook's changed `rev:` and upstream release notes, including
+  grouped PR members. Verify the repository and hook IDs are unchanged.
+- A hook update changes only its revision. Changes to arguments, file selection,
+  stages, or language need a separate decision.
+- Run the hooks on all files. CI runs typos and zizmor through these same revisions.
 
 ## `uv` PRs
 
@@ -53,10 +59,10 @@ A `dependabot/uv/...` PR moves Python dependencies. Review it as closely as an A
   removal (comment included, then `uv lock`) in the plan as its own change; this review
   is the trigger that drops it (`managing-dependencies`).
 - CI's `uv sync --group dev --locked` passed on the current head — every job that
-  installs the project starts with it (the spell-check and workflow-lint jobs do not),
+  installs the project starts with it,
   and it refuses a lock that disagrees with `pyproject.toml`. `uv lock --check` (the
   first step of `just verify`) passes on a checkout of that head.
 - List every `version =` change of a grouped PR. A 0.x minor among them (`ruff`) is a
   major risk: read its changelog or release notes before approving.
-- A `ruff` bump moves with the `astral-sh/ruff-pre-commit` hook's `rev:` in
-  `.pre-commit-config.yaml` — SKILL.md Step 2.
+- A `ruff` bump is shared by the local system hooks and CI through `uv.lock`;
+  no companion hook revision changes — SKILL.md Step 2.

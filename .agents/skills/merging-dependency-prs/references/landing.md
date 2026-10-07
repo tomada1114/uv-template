@@ -41,13 +41,13 @@ Apply one approved change at a time:
   across `.github/workflows/` — copying the full new SHA and the `# vX.Y.Z` version
   comment from the reviewed PR exactly. Changes to permissions, triggers, secrets or
   source require the separate decision in SKILL.md.
-- For a pre-commit twin named in the plan's unit completion, set its `rev:` in
-  `.pre-commit-config.yaml` to the matching tag. Nothing else in that file changes.
-- For a `uv` package the plan puts on the combined branch — to complete a `ruff` unit,
-  say — apply the reviewed PR's `pyproject.toml` range change, if it has one, by hand,
+- For a pre-commit hook approved in the plan, set its `rev:` in
+  `.pre-commit-config.yaml` to the reviewed revision. Nothing else in that file changes.
+- For a `uv` package the plan puts on the combined branch, apply the reviewed PR's
+  `pyproject.toml` range change, if it has one, by hand,
   then regenerate the lock with `uv lock --upgrade-package <package>==<version>` for
   each approved package and version. A `python-minor-patch` group holding `ruff` moves
-  whole: every member, every range edit the group PR made, and the hook's `rev:`; the
+  whole: every member and every range edit the group PR made; the
   group PR closes as superseded only after the combined PR merges. `uv.lock` is never
   hand-edited and never taken
   from a bot branch, and the window still applies. A `[[package]]` the regenerated
