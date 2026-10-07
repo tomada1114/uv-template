@@ -488,8 +488,10 @@ def test_ruleset_contexts_needs_job_not_failing_on_its_own_fails(
     root = make_root(_ruleset("Coverage"), _coverage_workflow(steps, needs))
 
     assert ruleset_context_findings(root) == [
-        f"{RULESET}: required context 'Coverage' needs {unfailed!r}, but no step "
-        f"fails when `needs.{unfailed}.result` is not 'success'; {SHAPES_HINT}"
+        (
+            f"{RULESET}: required context 'Coverage' needs {unfailed!r}, but no step "
+            f"fails when `needs.{unfailed}.result` is not 'success'; {SHAPES_HINT}"
+        )
     ]
 
 
@@ -501,10 +503,14 @@ def test_ruleset_contexts_unguarded_needs_without_failing_step_reports_both(
     )
 
     assert ruleset_context_findings(make_root(_ruleset("Docs Build"), workflow)) == [
-        f"{RULESET}: required context 'Docs Build' is a job whose `if:` or `needs:` "
-        "can skip it",
-        f"{RULESET}: required context 'Docs Build' needs 'lint', but no step fails "
-        f"when `needs.lint.result` is not 'success'; {SHAPES_HINT}",
+        (
+            f"{RULESET}: required context 'Docs Build' is a job whose `if:` or `needs:` "
+            "can skip it"
+        ),
+        (
+            f"{RULESET}: required context 'Docs Build' needs 'lint', but no step fails "
+            f"when `needs.lint.result` is not 'success'; {SHAPES_HINT}"
+        ),
     ]
 
 

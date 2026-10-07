@@ -48,7 +48,7 @@ verdict: READY
 """
 
 
-def rank_row(number, tier="P1", readiness="READY", touches=None, title=None,
+def rank_row(number, tier="P1", readiness="READY", touches=None, *, title=None,
              depends=(), unblocks=()):
     return {
         "number": number, "title": title or f"fix(core): thing {number}",
@@ -197,7 +197,7 @@ class MainTest(unittest.TestCase):
     boundary — the two are covered by their own test modules, and what matters
     here is how plan.py combines them."""
 
-    def _run(self, argv, rows, preflight=PREFLIGHT, preflight_rc=0,
+    def _run(self, argv, rows, preflight=PREFLIGHT, preflight_rc=0, *,
              needs_design=(), issues=None, worktrees=(), worktree_paths=(),
              stale_dependency=None, tracking=()):
         self.recorded: list[list[str]] = []

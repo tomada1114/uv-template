@@ -1286,12 +1286,18 @@ def test_check_reports_expected_and_next_for_each_allowlist_problem(
     result = repo.run_check()
 
     assert result.stderr.splitlines() == [
-        "ERR_STAGED_ALLOWLIST_TOO_BROAD: .check-staged-allow:2: "
-        "the path is a glob (* or ?)",
-        "Expected: one exact file per entry; globs, directories, and "
-        '"." are not accepted',
-        "Next: list each file on its own line (`git ls-files -- <directory>` "
-        "prints them), git add .check-staged-allow, and commit again",
+        (
+            "ERR_STAGED_ALLOWLIST_TOO_BROAD: .check-staged-allow:2: "
+            "the path is a glob (* or ?)"
+        ),
+        (
+            "Expected: one exact file per entry; globs, directories, and "
+            '"." are not accepted'
+        ),
+        (
+            "Next: list each file on its own line (`git ls-files -- <directory>` "
+            "prints them), git add .check-staged-allow, and commit again"
+        ),
     ]
 
 

@@ -508,29 +508,29 @@ def resolve_tier_label(tier: str, existing: list[str]) -> str | None:
 # issue that name-drops every keyword cannot outrank a genuine blocker.
 LEVERAGE_RULES = [
     ("security", 5,
-     r"(?i)\b(security|vulnerab\w*|cve-|injection|xss|csrf|auth bypass|secret leak|credential leak)\b"
-     r"|脆弱性|セキュリティ|情報漏[洩え]"),
+     (r"(?i)\b(security|vulnerab\w*|cve-|injection|xss|csrf|auth bypass|secret leak|credential leak)\b"
+     r"|脆弱性|セキュリティ|情報漏[洩え]")),
     ("breakage", 4,
-     r"(?i)\b(crash\w*|data loss|corrupt\w*|outage|broken build|is broken|regression|blocker)\b"
-     r"|クラッシュ|デグレ|データ破損|落ちる|壊れて|動かない|止まって"),
+     (r"(?i)\b(crash\w*|data loss|corrupt\w*|outage|broken build|is broken|regression|blocker)\b"
+     r"|クラッシュ|デグレ|データ破損|落ちる|壊れて|動かない|止まって")),
     ("infra", 4,
-     r"(?i)\b(ci|cd|github actions?|workflow|pipeline|build system|toolchain|lint(?:er|ing)? setup|pre-commit)\b"
-     r"|CI/CD|ワークフロー|ビルド基盤|パイプライン|開発基盤"),
+     (r"(?i)\b(ci|cd|github actions?|workflow|pipeline|build system|toolchain|lint(?:er|ing)? setup|pre-commit)\b"
+     r"|CI/CD|ワークフロー|ビルド基盤|パイプライン|開発基盤")),
     ("schema", 4,
-     r"(?i)\b(schema|migration|data model|new column|new field|new table|db model)\b"
-     r"|スキーマ|マイグレーション|データモデル|テーブル定義"),
+     (r"(?i)\b(schema|migration|data model|new column|new field|new table|db model)\b"
+     r"|スキーマ|マイグレーション|データモデル|テーブル定義")),
     ("interface", 3,
-     r"(?i)\b(interface|protocol|type definition|typing|api contract|abstract base|base class|public api)\b"
-     r"|型定義|インタ[ーー]?フェ[ーー]?ス|共通化|抽象化"),
+     (r"(?i)\b(interface|protocol|type definition|typing|api contract|abstract base|base class|public api)\b"
+     r"|型定義|インタ[ーー]?フェ[ーー]?ス|共通化|抽象化")),
     ("foundation", 3,
-     r"(?i)\b(shared|common|core|foundation|scaffold\w*|extract\w* (?:into|to) a? ?(?:module|helper|util))\b"
-     r"|共通処理|基盤|土台|全体に影響"),
+     (r"(?i)\b(shared|common|core|foundation|scaffold\w*|extract\w* (?:into|to) a? ?(?:module|helper|util))\b"
+     r"|共通処理|基盤|土台|全体に影響")),
     ("test-harness", 3,
-     r"(?i)\b(test harness|test infra\w*|flaky|test fixture|coverage setup|e2e setup)\b"
-     r"|テスト基盤|テスト環境|フレーキ"),
+     (r"(?i)\b(test harness|test infra\w*|flaky|test fixture|coverage setup|e2e setup)\b"
+     r"|テスト基盤|テスト環境|フレーキ")),
     ("config", 2,
-     r"(?i)\b(config\w*|settings|env(?:ironment)? var\w*|feature flag)\b"
-     r"|設定値|環境変数|フィーチャーフラグ"),
+     (r"(?i)\b(config\w*|settings|env(?:ironment)? var\w*|feature flag)\b"
+     r"|設定値|環境変数|フィーチャーフラグ")),
 ]
 LEVERAGE_CAP = 8
 

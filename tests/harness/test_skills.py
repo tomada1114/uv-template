@@ -436,8 +436,10 @@ def test_skill_findings_nested_skill_md_fails(make_skill: MakeSkill) -> None:
     nested.write_text("# nested\n", encoding="utf-8")
 
     assert skill_findings(root) == [
-        f"{SKILLS_DIR}/foo/references/SKILL.md: a nested SKILL.md registers as a "
-        "second, nameless skill"
+        (
+            f"{SKILLS_DIR}/foo/references/SKILL.md: a nested SKILL.md registers as a "
+            "second, nameless skill"
+        )
     ]
 
 

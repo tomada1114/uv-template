@@ -159,8 +159,10 @@ def test_product_section_filled_in_the_template_fails(make_repository):
     root = make_repository(_entries(is_filled=True), is_app=False)
 
     assert product_section_problems(root) == [
-        "the template's Product section must keep its TODO: markers: every app "
-        "writes its own"
+        (
+            "the template's Product section must keep its TODO: markers: every app "
+            "writes its own"
+        )
     ]
 
 
