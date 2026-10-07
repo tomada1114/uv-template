@@ -7,11 +7,8 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-07-21T00:00:00Z"
-
-[options.exclude-newer-package]
-virtualenv = "2026-09-22T00:00:00Z"
-python-discovery = "2026-09-22T00:00:00Z"
+exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
+exclude-newer-span = "P14D"
 
 [[package]]
 name = "annotated-doc"

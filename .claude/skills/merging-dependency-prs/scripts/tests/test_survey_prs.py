@@ -134,8 +134,29 @@ class EcosystemTest(unittest.TestCase):
             sp.ecosystem_of("dependabot/github_actions/actions-abc"), "github_actions"
         )
 
+    def test_uv_branch(self):
+        self.assertEqual(sp.ecosystem_of("dependabot/uv/ruff-0.16.0"), "uv")
+
+    def test_grouped_uv_branch(self):
+        self.assertEqual(
+            sp.ecosystem_of("dependabot/uv/python-minor-patch-1a2b3c4d5e"), "uv"
+        )
+
+    def test_uv_as_a_package_name_is_not_the_uv_ecosystem(self):
+        self.assertEqual(sp.ecosystem_of("dependabot/pip/uv-0.12.1"), "other")
+
+    def test_uv_branch_naming_github_actions_is_uv(self):
+        self.assertEqual(
+            sp.ecosystem_of("dependabot/uv/github_actions-helper-1.2.0"), "uv"
+        )
+
+    def test_github_actions_as_a_later_segment_is_other(self):
+        self.assertEqual(
+            sp.ecosystem_of("dependabot/pip/github_actions-1.0.0"), "other"
+        )
+
     def test_anything_else_is_other(self):
-        self.assertEqual(sp.ecosystem_of("dependabot/uv/ruff-0.16.0"), "other")
+        self.assertEqual(sp.ecosystem_of("dependabot/pip/requests-2.33.0"), "other")
 
 
 class SelectRowsTest(unittest.TestCase):
@@ -187,6 +208,27 @@ class MainTest(unittest.TestCase):
         self.assertIn("2 open Dependabot PR(s)", out)
         self.assertIn("FLAG: 0.x minor change", out)
         self.assertIn("FLAG: versions not parsed", out)
+
+    def test_text_report_lands_uv_lock_overlap_one_at_a_time(self):
+        rc, out, _, _ = self._run([], [
+            pr(1, "bump a from 1.0.0 to 1.0.1", branch="dependabot/uv/a-1.0.1",
+               files=["pyproject.toml", "uv.lock"]),
+            pr(2, "bump b from 1.0.0 to 2.0.0", branch="dependabot/uv/b-2.0.0",
+               files=["pyproject.toml", "uv.lock"]),
+        ])
+        self.assertEqual(rc, 0)
+        self.assertNotIn("favor a combined branch", out)
+        self.assertIn("land one at a time", out)
+        self.assertIn("uv.lock: #1, #2", out)
+
+    def test_text_report_favors_combined_branch_for_workflow_overlap(self):
+        rc, out, _, _ = self._run([], [
+            pr(1, "bump a from 1.0.0 to 1.0.1", files=[".github/workflows/ci.yml"]),
+            pr(2, "bump b from 1.0.0 to 1.0.1", files=[".github/workflows/ci.yml"]),
+        ])
+        self.assertEqual(rc, 0)
+        self.assertIn("favor a combined branch", out)
+        self.assertNotIn("land one at a time", out)
 
     def test_no_rows(self):
         rc, out, _, _ = self._run([], [])

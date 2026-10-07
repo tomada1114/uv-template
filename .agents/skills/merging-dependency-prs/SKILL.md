@@ -2,20 +2,20 @@
 name: merging-dependency-prs
 description: >
   Use when landing open Dependabot pull requests, clearing a backlog of dependency
-  updates, or several bot PRs contest the same workflow file. Covers the read-only
-  survey, pre-1.0 minor updates treated as major risk, review of SHA-pinned Action
-  bumps, keeping an Action and its pre-commit twin on one version, an exact approval
+  updates, or several bot PRs contest the same workflow file or uv.lock. Covers the
+  read-only survey, pre-1.0 minor updates treated as major risk, review of SHA-pinned
+  Action bumps and of uv PRs (pyproject.toml with uv.lock, a new locked package),
+  keeping an Action or ruff and its pre-commit twin on one version, an exact approval
   plan, individual merges or a combined branch, and closing originals only after their
-  replacement lands. Python dependencies are updated by hand, not here.
+  replacement lands.
 ---
 
 # Merging Dependency PRs
 
-**Owns:** landing already-open Dependabot PRs: survey, review, approval scope, landing
-mode, the combined branch, and cleanup. **Does not own:** updating Python dependencies
-— `.github/dependabot.yml` covers GitHub Actions only, and `pyproject.toml` / `uv.lock`
-move by the manual `exclude-newer` procedure in `managing-dependencies` — nor whether
-a package may be added at all (`managing-dependencies`).
+**Owns:** landing already-open Dependabot PRs — the `github-actions` and `uv` updates
+`.github/dependabot.yml` proposes: survey, review, approval scope, landing mode, the
+combined branch, and cleanup. **Does not own:** whether a package may be added at all,
+the `exclude-newer` window, or a one-package exception to it (`managing-dependencies`).
 
 ## Operating contract
 
@@ -43,12 +43,18 @@ title is the usual case and hides its members: inspect the whole diff and each `
 change rather than deriving the group's risk from its title. A missing or unknown
 version is a reason to inspect, never a patch classification.
 
+The `uv` entry groups minor and patch updates into one `python-minor-patch` PR a month
+and opens one PR per major, under a 14-day cooldown equal to `exclude-newer`. Each always
+moves `uv.lock`, and moves `pyproject.toml` too when it raises a range. Its grouped title hides its members just the same:
+read every `version =` change in the `uv.lock` diff. Dependabot counts a 0.x minor
+(`ruff` is one) as a minor, so it arrives inside the group — review it as a major.
+
 A row whose ecosystem is `other` is not something this repository's Dependabot config
-asks for — typically a security update the repository settings enabled for `uv.lock` or
-`pyproject.toml`. Hold it: a Python dependency moves only by the manual
-`exclude-newer` procedure, and a `pyproject.toml`-only change cannot pass CI's
+asks for — typically a security update the repository settings enabled for another
+Python ecosystem (a `dependabot/pip/...` branch). Hold it: Python dependencies arrive
+through the `uv` entry, and a `pyproject.toml`-only change cannot pass CI's
 `uv sync --locked` anyway ([F4](references/failure-modes.md)). Report the advisory so a
-human can schedule that update.
+human can schedule the update.
 
 ## Step 2: Review and coordinate
 
@@ -67,6 +73,13 @@ Treat these as one reviewed unit:
   updates the Action, so a bump leaves local and CI spell checks on different versions
   until the hook's `rev:` follows. The same applies to any future Action that has a
   pre-commit counterpart.
+- **A Python tool and its pre-commit twin.** `ruff` is locked in `uv.lock` (the `dev`
+  group) and runs as the `astral-sh/ruff-pre-commit` hook. A `uv` PR moves only the
+  lock, so the hook's `rev:` follows to the matching tag. When `ruff` arrives inside the
+`python-minor-patch` group, the whole group moves to the combined branch, as a grouped
+`actions` PR does: every member by `uv lock --upgrade-package <pkg>==<version>`, the
+`pyproject.toml` range edits the group PR made, and the hook's `rev:`. The group PR is
+closed as superseded only after the combined PR merges.
 
 If open PRs leave a unit split, complete it on the combined branch and list the exact
 companion pins and target versions in the plan. Completing a unit never adds a new
@@ -78,6 +91,11 @@ Merge individually only when at most three eligible PRs have no contested paths 
 is clean with passing current-head checks. Otherwise build a combined PR: more PRs,
 overlapping workflow files, or a unit needing completion favor that route. Mixed
 outcomes are allowed; name the mode for each PR.
+
+Two `uv` PRs always contest `uv.lock`, and that alone does not call for a combined
+branch: merge them one at a time. After each merge, wait for Dependabot to rebase the
+next PR and regenerate its lock on its own; comment `@dependabot rebase` only if it has
+not ([F6](references/failure-modes.md)). Re-review the new head either way.
 
 The survey's passing rollup is a classifier, not the complete gate: confirm that every
 expected required check actually registered and passed for the head being landed.
@@ -108,7 +126,8 @@ approval; do not stretch a green check or an approved Action into another decisi
 Follow [landing](references/landing.md) for the selected mode. The combined branch
 starts from the current default branch and applies the approved pins by hand-editing
 only the `uses:` lines (and a twin's `rev:`); it never integrates a bot branch's
-commits.
+commits. A `uv` package lands there by `uv lock --upgrade-package`, never by editing
+`uv.lock` or taking it from a bot branch.
 
 For an Action, copy the approved full SHA and its `# vX.Y.Z` comment exactly.
 
@@ -134,8 +153,17 @@ These require a separate decision even if a batch was approved:
   adds a step that was not there before.
 - A maintainer, owner or source change, including an Action moving to another
   repository.
-- Any Python dependency change: a Dependabot PR touching `pyproject.toml` or `uv.lock`,
-  a move of `[tool.uv] exclude-newer`, or a new package in `uv.lock`.
+- A new package in `uv.lock` — a `[[package]]` the base did not lock, a new transitive
+  dependency included. It needs `managing-dependencies`' review record and the owner's
+  yes, like any new package.
+- A `pyproject.toml` change beyond an existing dependency's range: a new entry, a
+  `[tool.*]` table, a move of `exclude-newer`, or a new or extended
+  `exclude-newer-package` entry. Removing a stale one, as the review checklist plans, is
+  not.
+- A security update younger than the 14-day window, which `uv lock` refuses — usually
+  seen as a failed Dependabot job and an open alert rather than as a PR
+  ([F3](references/failure-modes.md)): whether to add a one-package exception is the
+  owner's call (`managing-dependencies`).
 - A bump that is green only after relaxing a gate, a zizmor finding, or an Action pin.
 - An Action major whose migration changes inputs or behavior beyond a mechanical rename;
   a newly discovered breaking change outside the approved plan.

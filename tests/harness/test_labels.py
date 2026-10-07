@@ -9,8 +9,10 @@ definitions. Applied labels are read from ``.github/workflows/pr-label.yml``
 ``run:`` steps), each issue form's top-level ``labels`` and each Markdown issue
 template's front-matter ``labels``, and each ``.github/dependabot.yml``
 update's ``labels`` (Dependabot's default ``dependencies`` when an entry sets
-none; the ecosystem label Dependabot adds itself is not modelled). Applied and
-declared names are compared case-insensitively, as GitHub does.
+none). With more than one update entry, Dependabot adds an ecosystem label
+(``github_actions``, ``python``) to any entry that sets no ``labels``, which
+this check cannot see, so each entry must then declare ``labels`` explicitly.
+Applied and declared names are compared case-insensitively, as GitHub does.
 
 Each of those files is optional — an app may delete pr-label.yml — but one that
 is present and cannot be read fails closed: a pr-label.yml with no label this
@@ -34,6 +36,7 @@ from tests.harness._yaml import (
     block_text,
     content_lines,
     mapping,
+    scalar,
     scalar_list,
     sequence,
 )
@@ -137,6 +140,25 @@ def _dependabot_labels(root: Path) -> list[tuple[str, str]]:
     return applied
 
 
+def _dependabot_implicit_label_findings(root: Path) -> list[str]:
+    path = root / DEPENDABOT
+    if not path.is_file():
+        return []
+    top = mapping(content_lines(path.read_text(encoding="utf-8")), path)
+    updates = [
+        mapping(item, path) for item in sequence(top.get("updates", ("", []))[1], path)
+    ]
+    if len(updates) <= 1:  # one ecosystem gets no ecosystem label added
+        return []
+    return [
+        f"{DEPENDABOT}: the {scalar(update.get('package-ecosystem', ('?', []))[0])!r} "
+        "update sets no `labels:`; with more than one ecosystem Dependabot adds an "
+        "undeclared ecosystem label"
+        for update in updates
+        if "labels" not in update
+    ]
+
+
 def label_findings(root: Path) -> list[str]:
     """Return each applied label not declared, and each label declared twice."""
     path = root / LABELS
@@ -165,6 +187,7 @@ def label_findings(root: Path) -> list[str]:
         for where, label in sorted(set(applied))
         if label.casefold() not in counts
     )
+    findings.extend(_dependabot_implicit_label_findings(root))
     return findings
 
 
@@ -321,6 +344,36 @@ def test_label_findings_undeclared_or_duplicate_label_fails(
     )
 
     assert label_findings(root) == [finding]
+
+
+TWO_ECOSYSTEMS = """\
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    labels: ["dependencies"]
+  - package-ecosystem: "uv"
+{uv_labels}"""
+
+
+def test_label_findings_two_ecosystems_with_explicit_labels_pass(
+    make_root: MakeRoot,
+) -> None:
+    root = make_root(
+        {DEPENDABOT: TWO_ECOSYSTEMS.format(uv_labels='    labels: ["dependencies"]\n')}
+    )
+
+    assert label_findings(root) == []
+
+
+def test_label_findings_two_ecosystems_one_without_labels_fails(
+    make_root: MakeRoot,
+) -> None:
+    root = make_root({DEPENDABOT: TWO_ECOSYSTEMS.format(uv_labels="")})
+
+    assert label_findings(root) == [
+        f"{DEPENDABOT}: the 'uv' update sets no `labels:`; with more than one "
+        "ecosystem Dependabot adds an undeclared ecosystem label"
+    ]
 
 
 def test_label_findings_without_labels_file_fails(tmp_path: Path) -> None:

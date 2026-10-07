@@ -50,11 +50,16 @@ dev = [
 # --------------------------------------------------------------------------- #
 
 [tool.uv]
-exclude-newer = "2026-07-21T00:00:00Z"
-# virtualenv (dev, via pre-commit) 21.6.1 has PYSEC-2026-4011..4014; 21.7.13
-# fixes them (it needs python-discovery>=1.6) and both are past the 14-day
-# cooldown. Drop this override once the global cutoff passes 2026-09-18.
-exclude-newer-package = { virtualenv = "2026-09-22T00:00:00Z", python-discovery = "2026-09-22T00:00:00Z" }
+# A relative `exclude-newer` needs uv 0.9.17 or later ("Add support for
+# relative durations in `exclude-newer`", uv changelogs/0.9.x.md), and uv.lock
+# records it the way 0.11.8 and later write it ("Use a sentinel timestamp for
+# relative `exclude-newer` ... values in lockfiles", changelogs/0.11.x.md), so an
+# older uv could rewrite the lock and fail `uv lock --check`.
+required-version = ">=0.11.8"
+# `uv lock` and `uv sync` ignore any release younger than 14 days. It must equal
+# the `uv` entry's `cooldown.default-days` in .github/dependabot.yml, so
+# Dependabot almost never proposes a version this window refuses to lock.
+exclude-newer = "14 days"
 
 # --------------------------------------------------------------------------- #
 #  Build

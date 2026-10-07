@@ -61,7 +61,8 @@
   description: "A tracking issue: its sub-issues carry the work; never implemented itself."
 
 # Labels applied by .github/workflows/pr-label.yml from a PR's Conventional
-# Commit type. Never used for issue triage.
+# Commit type; .github/dependabot.yml also applies `dependencies` to its PRs.
+# Never used for issue triage.
 - name: dependencies
   color: 0366d6
   description: "A dependency version bump."
