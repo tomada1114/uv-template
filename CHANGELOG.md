@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `.claude/settings.json` with a SessionStart hook that runs `just install`
+  (falling back to `uvx --from rust-just just install` when `just` is
+  missing) at the start or resume of a Claude Code cloud session, where
+  `CLAUDE_CODE_REMOTE=true`; locally it exits at once
 - An optional LLM layer. The core gains `LlmPort` (`complete(messages, *,
   model=None, max_tokens, timeout)` returning text, the answering model, the
   finish reason, and token usage) and the `LlmError` family; the adapters are
