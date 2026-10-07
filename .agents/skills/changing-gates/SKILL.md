@@ -80,6 +80,9 @@ AGENTS.md's "Enforcement layers" names the layers. Keeping them in step is this 
 - A tool pinned in two places moves in both: ruff's `rev:` in `.pre-commit-config.yaml`
   and its `ruff>=` floor in the `dev` group, and `crate-ci/typos`' `rev:` and its
   action pin in `ci.yml`. **BACKGROUND:** `merging-dependency-prs`.
+- CI runs zizmor through the pinned pre-commit hook with `--all-files`, sharing
+  its version and file selection with local checks, including Dependabot and composite
+  action definitions. Update the hook revision rather than introducing a separate CI pin.
 - `just verify` runs neither typos nor zizmor; the pre-commit hook does, so prose and
   workflow changes are checked at commit time and in CI. AGENTS.md's "Validating a
   change" gives the command for each.

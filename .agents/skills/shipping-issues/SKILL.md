@@ -1,17 +1,17 @@
 ---
 name: shipping-issues
 description: >-
-  Rank open GitHub Issues by their `priority: P0`-`P3` labels, backfilling missing ones,
+  Claude Code only. Rank open GitHub Issues by their `priority: P0`-`P3` labels, backfilling missing ones,
   then implement the top issue, review its branch, open a PR that closes it, watch CI to
   green, merge, and return to the default branch. Pass "all" to work through every issue
   in dependency order, independent ones in parallel git worktrees. Use when asked to
   ship the remaining issues, take on the next issue, or clear the ticket backlog.
 ---
 
-# Shipping Issues
+# Shipping Issues (Claude Code)
 
-**Done means all three:** the PR is merged to the default branch, the issue is CLOSED,
-and nothing was deleted or weakened to get there.
+Claude Code only. In Codex, use `codex-shipping-issues`; do not run this workflow.
+**Done:** the PR is merged, the issue is CLOSED, and no gate was deleted or weakened.
 
 **Invoking this skill is the sign-off for exactly the remote writes it lists, for this
 invocation, up to and including the merge** — priority and status labels, syncing label

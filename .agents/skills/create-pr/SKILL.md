@@ -27,6 +27,16 @@ A step that would need one of those stops and asks.
 Every step below ends in either the next step or a stop. A stop is reported with what
 was found and what would clear it; it never becomes a PR with the problem left in it.
 
+## Codex execution surface
+
+In Codex, use GitHub MCP exclusively for remote PR reads and writes. The `gh`
+examples below apply to Claude Code only; do not run them or live-GitHub helper
+scripts in Codex. Local Git still owns fetch, status, commit and push. Discover MCP
+schemas to list this branch's PR, read its existing body, and create/update it with
+structured title/body text. Preserve human edits and verify returned head/base and
+PR state. If MCP lacks a required capability, report it without a CLI or direct
+HTTP fallback. The same checks and write authorization apply on both hosts.
+
 ## 1. Preconditions
 
 Gather the state before running anything:
