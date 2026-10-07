@@ -4,8 +4,12 @@ A required check must be a job that runs on every pull request and cannot be
 skipped: a context no workflow produces, or one from a workflow whose
 ``pull_request`` trigger has ``paths``/``paths-ignore``, leaves every other
 pull request waiting forever, and a skipped required check counts as passing.
-The workflow scanner (``_workflows.py``) fails closed on a layout it cannot
-read. The ruleset's own content is pinned by ``tests/test_apply_ruleset.py``.
+A required job with ``needs:`` runs under ``!cancelled()``/``always()`` even
+when a needed job failed, so it must also fail on its own: some step fails
+when ``needs.<job>.result`` is not ``success``, for each needed job, as CI's
+``Coverage`` does. The workflow scanner (``_workflows.py``) reads that step as
+text, and fails closed on a layout it cannot read. The ruleset's own content
+is pinned by ``tests/test_apply_ruleset.py``.
 """
 
 from __future__ import annotations
@@ -74,11 +78,18 @@ def ruleset_context_findings(root: Path) -> list[str]:
                 f"{RULESET}: required context {context!r} is not a job that runs "
                 "on every pull request"
             )
-        elif can_skip(available[context]):
+            continue
+        check = available[context]
+        if can_skip(check):
             findings.append(
                 f"{RULESET}: required context {context!r} is a job whose `if:` or "
                 "`needs:` can skip it"
             )
+        findings.extend(
+            f"{RULESET}: required context {context!r} needs {job!r}, but no step "
+            f"fails when `needs.{job}.result` is not 'success'"
+            for job in check.unfailed_needs
+        )
     return findings
 
 
@@ -92,6 +103,18 @@ def test_ruleset_contexts_on_repository_are_every_pr_jobs() -> None:
 # --- fixtures ---
 
 LINT_WORKFLOW = "on: pull_request\njobs:\n  lint:\n    name: Lint\n"
+# The step that fails a needs-job on its own, as ci.yml's Coverage spells it.
+FAIL_ON_LINT = (
+    "    steps:\n"
+    "      - name: Fail when lint did not succeed\n"
+    "        env:\n"
+    "          LINT_RESULT: ${{ needs.lint.result }}\n"
+    "        run: |\n"
+    '          if [ "$LINT_RESULT" != "success" ]; then\n'
+    '            echo "::error::lint finished with result: $LINT_RESULT"\n'
+    "            exit 1\n"
+    "          fi\n"
+)
 
 
 def _ruleset(*contexts: str) -> str:
@@ -188,14 +211,16 @@ def test_ruleset_contexts_unreadable_ruleset_fails(
             id="skippable-if",
         ),
         pytest.param(
-            "on: pull_request\njobs:\n  docs:\n    name: Docs Build\n    needs: lint\n",
+            "on: pull_request\njobs:\n  docs:\n    name: Docs Build\n    needs: lint\n"
+            + FAIL_ON_LINT,
             "'Docs Build' is a job whose `if:` or `needs:` can skip it",
             id="unguarded-needs",
         ),
         pytest.param(
             "on: pull_request\njobs:\n  docs:\n    name: Docs Build\n"
             "    needs: lint\n    if: always() # also on failure\n"
-            "  again:\n    name: Docs Build\n    if: github.actor == 'me'\n",
+            + FAIL_ON_LINT
+            + "  again:\n    name: Docs Build\n    if: github.actor == 'me'\n",
             "'Docs Build' is a job whose `if:` or `needs:` can skip it",
             id="duplicate-name-skippable-wins",
         ),
@@ -207,6 +232,197 @@ def test_ruleset_contexts_unrunnable_context_fails(
     findings = ruleset_context_findings(make_root(_ruleset("Docs Build"), workflow))
 
     assert findings == [f"{RULESET}: required context {message}"]
+
+
+def _coverage_workflow(steps: str, needs: str = "lint") -> str:
+    """A workflow whose required ``Coverage`` job needs ``lint`` under a guard."""
+    return (
+        "on: pull_request\njobs:\n  lint:\n    name: Lint\n"
+        "  build:\n    name: Build\n"
+        "  coverage:\n    name: Coverage\n    if: ${{ !cancelled() }}\n"
+        f"    needs: {needs}\n{steps}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("steps", "needs"),
+    [
+        pytest.param(FAIL_ON_LINT, "lint", id="coverage-shape"),
+        pytest.param(
+            "    steps:\n      - if: needs.lint.result != 'success'\n"
+            "        run: exit 1\n",
+            "lint",
+            id="step-if-not-success",
+        ),
+        pytest.param(
+            "    steps:\n      - name: Fail\n"
+            "        if: ${{ needs.lint.result != 'success' || "
+            "needs.build.result != 'success' }}\n"
+            "        run: |\n          echo failed\n          exit 1\n",
+            "[lint, build]",
+            id="step-if-either-not-success",
+        ),
+        pytest.param(
+            '    steps:\n      - run: test "${{ needs.lint.result }}" = success '
+            "|| exit 1\n",
+            "lint",
+            id="inline-expression",
+        ),
+        pytest.param(
+            "    env:\n      LINT_RESULT: ${{ needs.lint.result }}\n"
+            "    steps:\n      - uses: actions/checkout@v7\n"
+            '      - if: always()\n        run: \'[ "${LINT_RESULT}" = success ] '
+            "|| exit 2'\n",
+            "lint",
+            id="job-env-and-guarded-step",
+        ),
+        pytest.param(
+            FAIL_ON_LINT + "      - env:\n          B: ${{ needs.build.result }}\n"
+            '        run: if [ "$B" != success ]; then exit 1; fi\n',
+            "\n      - lint\n      - build",
+            id="block-list-one-step-each",
+        ),
+    ],
+)
+def test_ruleset_contexts_needs_job_failing_on_its_own_passes(
+    make_root: MakeRoot, steps: str, needs: str
+) -> None:
+    root = make_root(_ruleset("Coverage"), _coverage_workflow(steps, needs))
+
+    assert ruleset_context_findings(root) == []
+
+
+def _fail_on_lint_with(old: str, new: str) -> str:
+    assert old in FAIL_ON_LINT
+    return FAIL_ON_LINT.replace(old, new)
+
+
+@pytest.mark.parametrize(
+    ("steps", "needs", "unfailed"),
+    [
+        pytest.param("", "lint", "lint", id="no-steps"),
+        pytest.param(
+            "    uses: org/repo/.github/workflows/x.yml@main\n",
+            "lint",
+            "lint",
+            id="reusable-workflow-call",
+        ),
+        pytest.param(
+            _fail_on_lint_with("            exit 1\n", ""),
+            "lint",
+            "lint",
+            id="no-exit",
+        ),
+        pytest.param(
+            _fail_on_lint_with("exit 1", "exit 0"),
+            "lint",
+            "lint",
+            id="exit-zero",
+        ),
+        pytest.param(
+            _fail_on_lint_with('!= "success"', '= "failure"'),
+            "lint",
+            "lint",
+            id="failure-only-lets-cancelled-pass",
+        ),
+        pytest.param(
+            _fail_on_lint_with('[ "$LINT_RESULT"', '[ "$OTHER"'),
+            "lint",
+            "lint",
+            id="result-variable-unused",
+        ),
+        pytest.param(
+            _fail_on_lint_with("needs.lint.result", "needs.build.result"),
+            "lint",
+            "lint",
+            id="other-job-result",
+        ),
+        pytest.param(
+            _fail_on_lint_with(
+                "        env:\n", "        if: failure()\n        env:\n"
+            ),
+            "lint",
+            "lint",
+            id="step-if-skips-it",
+        ),
+        pytest.param(
+            "    steps:\n      - if: needs.lint.result == 'failure'\n"
+            "        run: exit 1\n",
+            "lint",
+            "lint",
+            id="step-if-failure-only",
+        ),
+        pytest.param(
+            "    steps:\n      - if: needs.lint.result != 'success' && "
+            "github.event_name == 'push'\n        run: exit 1\n",
+            "lint",
+            "lint",
+            id="step-if-extra-condition",
+        ),
+        pytest.param(
+            _fail_on_lint_with(
+                "        env:\n", "        continue-on-error: true\n        env:\n"
+            ),
+            "lint",
+            "lint",
+            id="continue-on-error",
+        ),
+        pytest.param(
+            FAIL_ON_LINT, "[lint, build]", "build", id="second-need-unchecked"
+        ),
+    ],
+)
+def test_ruleset_contexts_needs_job_not_failing_on_its_own_fails(
+    make_root: MakeRoot, steps: str, needs: str, unfailed: str
+) -> None:
+    root = make_root(_ruleset("Coverage"), _coverage_workflow(steps, needs))
+
+    assert ruleset_context_findings(root) == [
+        f"{RULESET}: required context 'Coverage' needs {unfailed!r}, but no step "
+        f"fails when `needs.{unfailed}.result` is not 'success'"
+    ]
+
+
+def test_ruleset_contexts_unguarded_needs_without_failing_step_reports_both(
+    make_root: MakeRoot,
+) -> None:
+    workflow = (
+        "on: pull_request\njobs:\n  docs:\n    name: Docs Build\n    needs: lint\n"
+    )
+
+    assert ruleset_context_findings(make_root(_ruleset("Docs Build"), workflow)) == [
+        f"{RULESET}: required context 'Docs Build' is a job whose `if:` or `needs:` "
+        "can skip it",
+        f"{RULESET}: required context 'Docs Build' needs 'lint', but no step fails "
+        "when `needs.lint.result` is not 'success'",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("steps", "needs", "message"),
+    [
+        pytest.param(
+            FAIL_ON_LINT, "{lint: x}", r"cannot read `needs: ", id="needs-map"
+        ),
+        pytest.param(FAIL_ON_LINT, "[]", r"cannot read `needs: ", id="needs-empty"),
+        pytest.param(
+            _fail_on_lint_with(
+                "        env:\n          LINT_RESULT: ${{ needs.lint.result }}\n",
+                "        env: {LINT_RESULT: x}\n",
+            ),
+            "lint",
+            r"cannot read an inline `env: ",
+            id="inline-env",
+        ),
+    ],
+)
+def test_ruleset_contexts_unreadable_needs_job_fails_closed(
+    make_root: MakeRoot, steps: str, needs: str, message: str
+) -> None:
+    root = make_root(_ruleset("Coverage"), _coverage_workflow(steps, needs))
+
+    with pytest.raises(UnreadableYamlError, match=message):
+        ruleset_context_findings(root)
 
 
 # --- the scanner ---
@@ -378,3 +594,29 @@ def test_every_pr_checks_duplicate_name_keeps_skippable(
     )
 
     assert can_skip(every_pr_checks(tmp_path)["A"]) is True
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        pytest.param(("a.yml", "b.yml"), id="needs-job-first"),
+        pytest.param(("b.yml", "a.yml"), id="needs-job-last"),
+    ],
+)
+def test_every_pr_checks_duplicate_name_keeps_every_problem(
+    tmp_path: Path, files: tuple[str, str]
+) -> None:
+    needs_job, skippable = files
+    (tmp_path / needs_job).write_text(
+        "on: pull_request\njobs:\n  a:\n    name: A\n    needs: b\n    if: always()\n",
+        encoding="utf-8",
+    )
+    (tmp_path / skippable).write_text(
+        "on: pull_request\njobs:\n  a:\n    name: A\n    if: github.actor == 'x'\n",
+        encoding="utf-8",
+    )
+
+    check = every_pr_checks(tmp_path)["A"]
+
+    assert can_skip(check) is True
+    assert check.unfailed_needs == ("b",)

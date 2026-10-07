@@ -13,7 +13,8 @@ repository and fails on a fixture built under ``tmp_path``:
   CLAUDE.md, the skills, and ``.github/**`` exists in the justfile;
 - (d) ``test_ruleset_contexts.py``: every required context in
   ``.github/rulesets/main.json`` is a job that runs on every pull request and
-  cannot be skipped;
+  cannot be skipped, and one with ``needs:`` has a step that fails when a
+  needed job's result is not ``success``;
 - (e) ``test_labels.py``: every label pr-label.yml, the issue forms, and
   dependabot.yml apply is declared exactly once in ``.github/labels.yml``;
 - (f) ``test_workflow_hygiene.py``: workflow hygiene (SHA pins, timeouts,

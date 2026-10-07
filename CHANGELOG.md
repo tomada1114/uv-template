@@ -28,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   credentials, `pull_request_target`, `continue-on-error`, `|| true`, or a
   concurrency that can cancel a push run on main. The Product check stays
   `tests/test_product_section.py`, which the recipe also runs
+- The harness's ruleset check now also fails a required job with `needs:` that
+  has no step failing when a needed job's result is not `success` (as
+  `Coverage`'s "Fail when a test shard did not succeed" step does), so such a
+  job can no longer go green over a failed needed job
 - Seven process skills under `.agents/skills/` (mirrored to
   `.claude/skills/`): `writing-tests` and `placing-tests` (replacing
   `tests/AGENTS.md`), `tdd`, `managing-dependencies` (the `exclude-newer`
