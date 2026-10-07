@@ -11,7 +11,16 @@ from my_app import __version__
 from my_app.api.routers import health, todos
 from my_app.api.schemas import ErrorResponse
 from my_app.composition import Container, build_container
-from my_app.core.errors import AppError, InvalidTodoError, TodoNotFoundError
+from my_app.core.errors import (
+    AppError,
+    InvalidTodoError,
+    LlmConfigurationError,
+    LlmError,
+    LlmProviderError,
+    LlmRateLimitError,
+    LlmTimeoutError,
+    TodoNotFoundError,
+)
 from my_app.settings import Settings
 
 APP_TITLE = "My App"
@@ -53,7 +62,8 @@ def _status_for(error: AppError) -> HTTPStatus:
     The one place the mapping lives, as ``cli.errors`` is for exit codes. Any
     ``AppError`` without a case here is still the client's problem, not the
     server's, so a new subclass is a 400 until it gets its own case — never
-    an unhandled 500.
+    an unhandled 500. An LLM failure is not the client's: an unconfigured
+    LLM is 503 (closed), and the provider's own failures are 429, 504, or 502.
 
     Args:
         error: The domain error a service raised.
@@ -63,11 +73,24 @@ def _status_for(error: AppError) -> HTTPStatus:
     """
     match error:
         case TodoNotFoundError():
-            return HTTPStatus.NOT_FOUND
+            status = HTTPStatus.NOT_FOUND
         case InvalidTodoError():
-            return HTTPStatus.UNPROCESSABLE_CONTENT
+            status = HTTPStatus.UNPROCESSABLE_CONTENT
+        case LlmConfigurationError():
+            status = HTTPStatus.SERVICE_UNAVAILABLE
+        case LlmRateLimitError():
+            status = HTTPStatus.TOO_MANY_REQUESTS
+        case LlmTimeoutError():
+            status = HTTPStatus.GATEWAY_TIMEOUT
+        case LlmProviderError():
+            status = HTTPStatus.BAD_GATEWAY
+        case LlmError():
+            # An LLM failure with no case of its own is upstream's too, never
+            # the client's 400.
+            status = HTTPStatus.BAD_GATEWAY
         case _:
-            return HTTPStatus.BAD_REQUEST
+            status = HTTPStatus.BAD_REQUEST
+    return status
 
 
 async def _handle_app_error(_: Request, error: AppError) -> JSONResponse:

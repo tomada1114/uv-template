@@ -34,9 +34,11 @@ With the server running, `curl http://127.0.0.1:8000/healthz` returns
 | `my-app todo delete ID` | `DELETE /todos/{id}` | 204 |
 
 An unknown id is a 404 from the API; a title that is empty or longer than 200
-characters after trimming is a 422. Either way the body is `{"detail":
-"<reason>"}` — only a request that does not parse at all gets FastAPI's
-list-shaped `detail`.
+characters after trimming is a 422. A route you build on the optional LLM
+layer answers 503 while no key is set, 429 when the provider keeps
+rate-limiting, 504 when the call times out, and 502 for any other provider
+failure. Either way the body is `{"detail": "<reason>"}` — only a request that
+does not parse at all gets FastAPI's list-shaped `detail`.
 
 The CLI exits with one of these codes. A domain or configuration error prints
 one line on stderr; a usage error prints Typer's own usage message.
@@ -50,11 +52,14 @@ one line on stderr; a usage error prints Typer's own usage message.
 
 ## Configuration
 
-Settings are read from environment variables prefixed with `MY_APP_`.
+Settings are read from environment variables prefixed with `MY_APP_`; the
+one exception is `OPENROUTER_API_KEY`, which keeps the name OpenRouter uses.
 
 | Variable | Default | Effect |
 |---|---|---|
 | `MY_APP_DATABASE_URL` | unset | Unset (or empty) keeps to-dos in memory, so they vanish when the process exits. `sqlite:///<path>` stores them in a SQLite file at `<path>`, created on first use; `sqlite:///:memory:` and a path ending in `/` are rejected at startup. |
+| `OPENROUTER_API_KEY` | unset | Unset (or blank) keeps the optional LLM layer closed: an LLM-backed route answers 503, and neither `httpx` nor the OpenRouter adapter is imported. Set, it opens the OpenRouter adapter, which needs the `ai` extra. |
+| `MY_APP_LLM_MODEL` | `deepseek/deepseek-v4.1-flash` | The OpenRouter model a call that names none is sent to; blank means the default. |
 
 > [!NOTE]
 > Each `my-app todo` invocation is its own process, so without
@@ -62,15 +67,20 @@ Settings are read from environment variables prefixed with `MY_APP_`.
 > exits. The in-memory default suits the API server and tests; point the
 > variable at a SQLite file for anything you want to keep.
 
+The LLM layer is optional: `uv sync --extra ai` (or `pip install 'my-app[ai]'`)
+installs `httpx` for the OpenRouter adapter. The `integrating-llm` skill
+(`.agents/skills/integrating-llm/SKILL.md`) covers calling it, testing with
+the fake, and removing it.
+
 ## Architecture
 
 ```
 src/my_app/
 ├── core/            # Domain model, ports (typing.Protocol), services, errors — no frameworks
-├── adapters/        # In-memory and SQLite repositories implementing the core's ports
+├── adapters/        # In-memory and SQLite repositories; fake, closed, and OpenRouter LLM adapters
 ├── api/             # FastAPI app factory, routers, request/response models
 ├── cli/             # Typer commands; serve.py is the only one that touches the API
-├── settings.py      # MY_APP_* environment variables
+├── settings.py      # MY_APP_* environment variables, plus OPENROUTER_API_KEY
 └── composition.py   # The one place adapters are wired into services
 ```
 
@@ -83,7 +93,8 @@ therefore be removed by deleting files, without touching the core:
 - **Drop the API:** delete `src/my_app/api/`, `src/my_app/cli/serve.py` and
   its registration line in `src/my_app/cli/main.py`, `tests/api/`, and
   `tests/cli/test_serve.py`; remove the `fastapi` and `uvicorn` dependencies,
-  the `httpx` dev dependency, and the `just dev` recipe; run `uv lock`. Remove
+  the `httpx` dev dependency (unless you keep the LLM layer, whose adapter
+  tests use it), and the `just dev` recipe; run `uv lock`. Remove
   the lines that name `just dev` (this README's Development block and
   `AGENTS.md`'s Quick Reference); `just check-harness` fails while one remains.
   Delete the `.agents/skills/building-api-routes/` skill and its row in

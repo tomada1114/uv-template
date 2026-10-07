@@ -52,6 +52,11 @@ has not happened yet.
 - Runtime dependencies go under `[project] dependencies`; everything only development
   needs goes under `[dependency-groups] dev`. A new group needs a reason — CI installs
   `--group dev` only.
+- A runtime package only some deployments need goes in an extra under
+  `[project.optional-dependencies]` — the `ai` extra carries `httpx` for the LLM
+  adapter — never in a group: a group is not part of a built package, so a deployment
+  could not ask for it. Code that needs an extra's package imports it lazily and fails
+  with a message naming the extra (`integrating-llm`).
 - Declare a range, `>=X.Y`, never an exact pin; `uv.lock` pins the exact versions.
 - Add with `uv add <package>` or `uv add --group dev <package>` rather than typing a
   version: under the window below, a hand-typed recent version may not resolve.
