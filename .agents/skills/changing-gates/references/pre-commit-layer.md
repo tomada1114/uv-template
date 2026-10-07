@@ -37,7 +37,9 @@ nothing is exempt.
 
 **An entry is a gate loosening a human decides,** reviewed in the pull request like any
 other change to a gate — never something an agent adds or widens to get its own commit
-through.
+through. The one edit an agent may make on its own is removing an entry whose file
+its own change deleted or renamed, which narrows the exemption; adding, widening,
+re-pointing, or re-pinning an entry is the human's.
 
 ```text
 # Public root CA for the staging TLS proxy; holds no private key.
@@ -51,16 +53,20 @@ content tests/fixtures/secrets/aws.txt 3b18e512dba79e4c8300dd08aeb37f8e728b8dad
 - **Two kinds of entry, each exact.** `path <file>` lets that one file past the path
   rules; its content is still scanned. `content <file> <blob id>` lets that one staged
   content of the file past the credential patterns. A file both refuse needs one of
-  each. `<file>` is the path as `git ls-files` prints it, with `/`; a glob (`*`, `?`),
-  a directory, `.`, an absolute path, or a `..` segment is refused.
-- **Every entry sits below a `#` reason comment**, with no blank line between them;
-  consecutive entries share the comment above them. CRLF endings and a BOM are fine.
+  each. `<file>` is the path from the repository root, unquoted, as
+  `git -c core.quotePath=false ls-files --full-name` prints it, with `/`; a glob (`*`,
+  `?`), a directory, `.`, an absolute path, or a `..` segment is refused.
+- **Every entry sits below a `#` reason comment** with text after the `#`, and no blank
+  line between them; consecutive entries share the comment above them. CRLF endings and
+  a BOM are fine. Lines split on `\n` alone, and a line holding any other control or
+  line-separator character (a form feed, U+2028, a lone `\r`; a tab is fine) is refused,
+  so the file parses into exactly the lines a reviewer reads in the diff.
 - **It is read from the index** the commit is made from, never the working tree: an
   entry counts only once it is staged, and a `git commit -- <path>` that leaves out a
   staged allowlist edit does not get that edit's exemption.
 - **The blob id** is `git rev-parse :<file>` after `git add <file>`. Any edit changes
   it, so edited content is judged again.
-- **A stale entry fails the commit** until it is removed or updated in the same commit:
+- **A stale entry fails the commit** until it is removed or corrected in the same commit:
   a file deleted or renamed, a blob id that is not the staged one, a `path` entry no
   rule needs, a `content` entry whose content matches no pattern or names a submodule.
 - **The allowlist is judged like any file**, so a token pasted into a reason comment is
@@ -74,7 +80,7 @@ quoting the line, then an `Expected:` and a `Next:` line:
 | Code | Raised when |
 |---|---|
 | `ERR_STAGED_ALLOWLIST_FILE` | The staged `.check-staged-allow` is a symlink, a submodule, a directory, or not UTF-8. |
-| `ERR_STAGED_ALLOWLIST_SYNTAX` | An unknown keyword or an indented entry, a missing path or blob id, a malformed blob id or path, an entry with no reason comment, or a duplicate. |
+| `ERR_STAGED_ALLOWLIST_SYNTAX` | An unknown keyword or an indented entry, a missing path or blob id, a malformed blob id or path, an entry with no reason comment or one with no text, a control or line-separator character, or a duplicate. |
 | `ERR_STAGED_ALLOWLIST_TOO_BROAD` | A glob, a trailing `/`, `.`, or a path that names a directory in the index. |
 | `ERR_STAGED_ALLOWLIST_STALE` | An entry the index no longer matches, as above. |
 

@@ -63,7 +63,7 @@ import os
 import re
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Final, Literal
 
@@ -116,9 +116,12 @@ RAW_DIFF_ARGS: Final = (
 )
 
 # `--full-name` prints paths from the repository root wherever the hook runs,
-# and `:(top,literal)` matches a pathspec from the root with no glob magic.
+# and `:(top...)` matches from the root; `literal` turns off glob magic. Only
+# these two constant pathspecs are ever passed: allowlist entries are resolved
+# against the whole listing in Python, so no entry path reaches argv.
 LS_FILES_ARGS: Final = ("ls-files", "--stage", "-z", "--full-name", "--")
-LITERAL_PATHSPEC_PREFIX: Final = ":(top,literal)"
+ALLOWLIST_PATHSPEC: Final = ":(top,literal).check-staged-allow"
+WHOLE_INDEX_PATHSPEC: Final = ":(top)"
 
 ALLOWLIST_PATH: Final = ".check-staged-allow"
 PATH_KEYWORD: Final = "path"
@@ -128,6 +131,12 @@ BYTE_ORDER_MARK: Final = "\ufeff"
 GLOB_CHARACTERS: Final = frozenset("*?")
 DRIVE_LETTER: Final = re.compile(r"[A-Za-z]:")
 IMPLICIT_SEGMENTS: Final = frozenset({"", ".", ".."})
+# Lines split on "\n" alone, as git, GitHub, and editors do. Any other control
+# or line-separator character is refused outright: a splitter that broke on it
+# would see two lines where a reviewer reads one. A tab is allowed.
+LINE_SEPARATOR: Final = "\n"
+CARRIAGE_RETURN: Final = "\r"
+FORBIDDEN_CHARACTERS: Final = re.compile("[\x00-\x08\x0a-\x1f\x7f\x85\u2028\u2029]")
 
 FIX_HINT: Final = (
     "Remove the secret from the file and `git add` it again, or take the path "
@@ -253,7 +262,8 @@ ALLOWLIST_REMEDIES: Final[dict[AllowlistProblemKind, tuple[str, str]]] = {
     ),
     AllowlistProblemKind.SYNTAX: (
         "`path <file>` or `content <file> <blob id>` below a `# reason` comment, "
-        "the file as `git ls-files` prints it",
+        "the file's path from the repository root, unquoted, as "
+        "`git -c core.quotePath=false ls-files --full-name` prints it",
         f"fix line {{line}} of {ALLOWLIST_PATH}, git add {ALLOWLIST_PATH}, "
         "and commit again",
     ),
@@ -266,8 +276,9 @@ ALLOWLIST_REMEDIES: Final[dict[AllowlistProblemKind, tuple[str, str]]] = {
         "every entry names a file in this commit that the gate would otherwise "
         "refuse; a content entry carries the file's current blob id "
         "(`git rev-parse :<file>`)",
-        f"remove or update line {{line}} of {ALLOWLIST_PATH}, "
-        f"git add {ALLOWLIST_PATH}, and commit again",
+        f"remove line {{line}} of {ALLOWLIST_PATH} if this change deleted or "
+        "renamed its file; any other edit to it is a human's reviewed decision; "
+        f"then git add {ALLOWLIST_PATH} and commit again",
     ),
 }
 
@@ -324,21 +335,27 @@ class Allowlist:
     """The valid entries of `.check-staged-allow`, in file order."""
 
     entries: tuple[AllowEntry, ...]
+    # Derived from `entries` once, in __post_init__; never passed in.
+    paths: frozenset[str] = field(init=False, compare=False)
+    contents: dict[tuple[str, str], int] = field(init=False, compare=False)
 
-    @property
-    def paths(self) -> frozenset[str]:
-        """The files exempt from the path rules."""
-        return frozenset(
-            entry.path for entry in self.entries if entry.kind == PATH_KEYWORD
+    def __post_init__(self) -> None:
+        """Index the entries: the exempt paths, and each content pair's line."""
+        object.__setattr__(
+            self,
+            "paths",
+            frozenset(
+                entry.path for entry in self.entries if entry.kind == PATH_KEYWORD
+            ),
         )
-
-    @property
-    def contents(self) -> frozenset[tuple[str, str]]:
-        """The `(path, blob id)` pairs exempt from the content patterns."""
-        return frozenset(
-            (entry.path, entry.blob_id)
-            for entry in self.entries
-            if entry.blob_id is not None
+        object.__setattr__(
+            self,
+            "contents",
+            {
+                (entry.path, entry.blob_id): entry.line
+                for entry in self.entries
+                if entry.blob_id is not None
+            },
         )
 
 
@@ -349,8 +366,8 @@ EMPTY_ALLOWLIST: Final = Allowlist(entries=())
 class Verdict:
     """What judging the index found: refused paths, and stale content entries."""
 
-    findings: list[Finding]
-    problems: list[AllowlistProblem]
+    findings: tuple[Finding, ...]
+    problems: tuple[AllowlistProblem, ...]
 
 
 def _run_git(args: Sequence[str], stdin: bytes | None = None) -> bytes:
@@ -361,7 +378,9 @@ def _run_git(args: Sequence[str], stdin: bytes | None = None) -> bytes:
     """
     command = ["git", *args]
     try:
-        completed = subprocess.run(  # noqa: S603 -- fixed argv, no shell
+        # Arguments are constants or commit ids: no path read from the index or
+        # the allowlist ever reaches argv, so this error text never holds one.
+        completed = subprocess.run(  # noqa: S603 -- constant argv, no shell
             command,
             input=stdin,
             capture_output=True,
@@ -677,6 +696,7 @@ def parse_allowlist(text: str) -> tuple[Allowlist, list[AllowlistProblem]]:
 
     Args:
         text: The decoded file; CRLF line endings and a leading BOM are fine.
+            Lines split on LF alone, so the line numbers are an editor's.
 
     Returns:
         The valid entries, and a SYNTAX or TOO_BROAD problem for each line
@@ -685,21 +705,40 @@ def parse_allowlist(text: str) -> tuple[Allowlist, list[AllowlistProblem]]:
     entries: list[AllowEntry] = []
     problems: list[AllowlistProblem] = []
     first_seen: dict[tuple[str, str, str | None], int] = {}
-    has_reason = False
-    lines = text.removeprefix(BYTE_ORDER_MARK).splitlines()
-    for number, line in enumerate(lines, start=1):
-        if not line.strip():
-            has_reason = False
+    reason: Literal["none", "empty", "text"] = "none"
+    lines = text.removeprefix(BYTE_ORDER_MARK).split(LINE_SEPARATOR)
+    if lines[-1] == "":
+        lines.pop()
+    for number, raw_line in enumerate(lines, start=1):
+        line = raw_line.removesuffix(CARRIAGE_RETURN)
+        if FORBIDDEN_CHARACTERS.search(line):
+            problems.append(
+                _syntax(
+                    number,
+                    "the line holds a control or line-separator character "
+                    "(only a tab is allowed)",
+                ),
+            )
+            reason = "none"
             continue
-        if line.lstrip().startswith(COMMENT_PREFIX):
-            has_reason = True
+        if not line.strip():
+            reason = "none"
+            continue
+        comment = line.lstrip()
+        if comment.startswith(COMMENT_PREFIX):
+            has_text = comment.removeprefix(COMMENT_PREFIX).strip()
+            reason = "text" if has_text else "empty"
             continue
         parsed = _parse_entry(line, number)
         if isinstance(parsed, AllowlistProblem):
             problems.append(parsed)
-        elif not has_reason:
+        elif reason == "none":
             problems.append(
                 _syntax(number, "the entry has no # reason comment directly above it")
+            )
+        elif reason == "empty":
+            problems.append(
+                _syntax(number, "an entry needs a reason comment with text")
             )
         elif (key := (parsed.kind, parsed.path, parsed.blob_id)) in first_seen:
             problems.append(_syntax(number, f"duplicates line {first_seen[key]}"))
@@ -709,19 +748,20 @@ def parse_allowlist(text: str) -> tuple[Allowlist, list[AllowlistProblem]]:
     return Allowlist(entries=tuple(entries)), problems
 
 
-def _ls_files(paths: Sequence[str]) -> list[StagedEntry]:
-    """List the index records at or under each of `paths`, matched literally.
+def _ls_files(pathspec: str) -> tuple[list[StagedEntry], set[str]]:
+    """List the index records `pathspec`, one of the constants above, matches.
+
+    Returns:
+        The merged records, and the paths of the unmerged ones (stage not 0).
 
     Raises:
-        GitError: git failed, printed a record of an unexpected shape, or the
-            index holds an unmerged path among them.
+        GitError: git failed or printed a record of an unexpected shape.
     """
-    output = _run_git(
-        [*LS_FILES_ARGS, *(f"{LITERAL_PATHSPEC_PREFIX}{path}" for path in paths)],
-    )
+    output = _run_git([*LS_FILES_ARGS, pathspec])
     entries: list[StagedEntry] = []
+    unmerged: set[str] = set()
     if not output:
-        return entries
+        return entries, unmerged
     for record in output.removesuffix(b"\0").split(b"\0"):
         meta, tab, raw_path = record.partition(b"\t")
         words = meta.decode("ascii", errors="replace").split()
@@ -734,11 +774,23 @@ def _ls_files(paths: Sequence[str]) -> list[StagedEntry]:
             raise GitError(msg)
         mode, blob_id, stage = words
         path = os.fsdecode(raw_path)
-        if stage != MERGED_STAGE:
-            msg = f"{path} is unmerged; resolve it and `git add` it first"
-            raise GitError(msg)
-        entries.append(StagedEntry(path=path, mode=mode, blob_id=blob_id))
-    return entries
+        if stage == MERGED_STAGE:
+            entries.append(StagedEntry(path=path, mode=mode, blob_id=blob_id))
+        else:
+            unmerged.add(path)
+    return entries, unmerged
+
+
+def _unmerged_error() -> GitError:
+    # The path is not named: it may be an allowlist entry's.
+    return GitError(
+        f"the index holds an unmerged path that {ALLOWLIST_PATH} names; "
+        "resolve it and `git add` it first"
+    )
+
+
+def _at_or_under(path: str, entry_path: str) -> bool:
+    return path == entry_path or path.startswith(f"{entry_path}/")
 
 
 def _file_problem(detail: str) -> list[AllowlistProblem]:
@@ -758,7 +810,9 @@ def read_allowlist() -> tuple[Allowlist, list[AllowlistProblem]]:
     Raises:
         GitError: git could not list or read the index.
     """
-    records = _ls_files([ALLOWLIST_PATH])
+    records, unmerged = _ls_files(ALLOWLIST_PATHSPEC)
+    if unmerged:
+        raise _unmerged_error()
     if not records:
         return EMPTY_ALLOWLIST, []
     if any(record.path != ALLOWLIST_PATH for record in records):
@@ -802,12 +856,22 @@ def resolve_allowlist(allowlist: Allowlist) -> list[AllowlistProblem]:
         content entry on a submodule. A content entry whose staged content
         matches no pattern is found later, by `find_violations`.
 
+    Each entry is matched against one listing of the whole index, exactly:
+    byte for byte and case-sensitively, as git compares paths.
+
     Raises:
-        GitError: git could not list the index, or it holds an unmerged path.
+        GitError: git could not list the index, it printed a malformed record,
+            or an entry names an unmerged path or a directory holding one.
     """
     if not allowlist.entries:
         return []
-    records = _ls_files(list(dict.fromkeys(entry.path for entry in allowlist.entries)))
+    records, unmerged = _ls_files(WHOLE_INDEX_PATHSPEC)
+    if any(
+        _at_or_under(path, entry.path)
+        for entry in allowlist.entries
+        for path in unmerged
+    ):
+        raise _unmerged_error()
     by_path = {record.path: record for record in records}
     directories = {
         parent.as_posix()
@@ -830,7 +894,7 @@ def resolve_allowlist(allowlist: Allowlist) -> list[AllowlistProblem]:
                     AllowlistProblemKind.STALE,
                     entry.line,
                     "names no file in the index "
-                    "(`git ls-files -- <path>` prints a file's exact spelling)",
+                    "(`git ls-files -- ':(icase)<path>'` finds its exact spelling)",
                 ),
             )
         elif detail := _stale_detail(entry, record):
@@ -852,17 +916,13 @@ def _judge(
     if content is None:
         return None
     kind = secret_kind(content)
-    if (entry.path, entry.blob_id) not in allowlist.contents:
+    line = allowlist.contents.get((entry.path, entry.blob_id))
+    if line is None:
         if kind is None:
             return None
         return Finding(entry.path, f"content matches the {kind.value} pattern")
     if kind is not None:
         return None
-    line = next(
-        allowed.line
-        for allowed in allowlist.entries
-        if (allowed.path, allowed.blob_id) == (entry.path, entry.blob_id)
-    )
     return AllowlistProblem(
         AllowlistProblemKind.STALE,
         line,
@@ -912,23 +972,25 @@ def find_violations(
             strict=True,
         ),
     )
-    verdict = Verdict(findings=[], problems=[])
+    findings: list[Finding] = []
+    problems: list[AllowlistProblem] = []
     for entry in entries:
         result = _judge(
             entry, path_reasons[entry.path], contents.get(entry.path), allowlist
         )
         if isinstance(result, Finding):
-            verdict.findings.append(result)
+            findings.append(result)
         elif result is not None:
-            verdict.problems.append(result)
-    return verdict
+            problems.append(result)
+    return Verdict(findings=tuple(findings), problems=tuple(problems))
 
 
 def _report_problems(problems: Sequence[AllowlistProblem]) -> None:
-    """Print each problem as an `ERR_` block, the file-level one first."""
-    for problem in sorted(
-        problems, key=lambda problem: (problem.line is not None, problem.line or 0)
-    ):
+    """Print each problem as an `ERR_` block, in line order.
+
+    A FILE problem, the only kind without a line, is always reported alone.
+    """
+    for problem in sorted(problems, key=lambda problem: problem.line or 0):
         location = (
             ALLOWLIST_PATH
             if problem.line is None
@@ -949,8 +1011,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         argv: Command-line arguments; the script takes none besides --help.
 
     Returns:
-        An `ExitCode` value: git failing wins over an allowlist problem, which
-        wins over a refusal.
+        An `ExitCode` value. A git failure before the allowlist is judged wins
+        (2). Once the allowlist has a FILE, SYNTAX, or TOO_BROAD problem the run
+        stops there and exits 3 without calling git again; a STALE problem
+        lets judging go on, and still exits 3 over a refusal (1).
     """
     parser = argparse.ArgumentParser(
         description="Refuse staged secret-shaped paths and credential-shaped content.",

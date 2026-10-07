@@ -113,11 +113,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `scripts/check_staged.py`, a pre-commit hook (`check-staged`) that refuses
   a commit staging a secret-shaped path (`.env*` and `.envrc*` except
   `.example`, `.sample`, and `.template` copies, `secrets/**`, `*.pem`,
-  `*.key`, `id_rsa*`, personal agent settings) or credential-shaped content, read from the index; it also runs on
-  merge commits (`pre-merge-commit`). `just install` now fails when the git
-  hooks are missing (opt-out: `ALLOW_MISSING_GIT_HOOKS=1`; `CI=true` only
-  warns). **Existing checkouts: re-run `just install`** to add the new
-  `pre-merge-commit` hook
+  `*.key`, `id_rsa*`, personal agent settings) or credential-shaped content,
+  read from the index; it also runs on merge commits (`pre-merge-commit`).
+  `just install` now fails when the git hooks are missing (opt-out:
+  `ALLOW_MISSING_GIT_HOOKS=1`; `CI=true` only warns). **Existing checkouts:
+  re-run `just install`** to add the new `pre-merge-commit` hook
 - `.check-staged-allow`, a committed allowlist for the `check-staged` secret
   gate, read from the index: `path <file>` exempts one exact file from the
   path rules and `content <file> <blob id>` exempts one exact staged content

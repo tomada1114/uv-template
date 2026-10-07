@@ -693,6 +693,80 @@ def test_parse_allowlist_problem_detail_never_echoes_the_line() -> None:
     assert [problem for problem in problems if token in problem.detail] == []
 
 
+@pytest.mark.parametrize(
+    "comment",
+    [
+        pytest.param("#", id="bare-hash"),
+        pytest.param("#   \t", id="hash-and-whitespace"),
+        pytest.param("# a real reason\n#", id="bare-hash-below-a-reason"),
+    ],
+)
+def test_parse_allowlist_reason_without_text_is_a_syntax_problem(
+    comment: str,
+) -> None:
+    text = f"{comment}\npath a.pem\n"
+    line = text.count("\n")
+
+    _, problems = check_staged.parse_allowlist(text)
+
+    assert [
+        (problem.kind.name, problem.line, problem.detail) for problem in problems
+    ] == [("SYNTAX", line, "an entry needs a reason comment with text")]
+
+
+# Characters some line splitter (Python's str.splitlines among them) breaks a
+# line on, though git, GitHub, and editors show one line.
+HIDDEN_SEPARATORS = {
+    "vertical-tab": "\x0b",
+    "form-feed": "\x0c",
+    "file-separator": "\x1c",
+    "group-separator": "\x1d",
+    "record-separator": "\x1e",
+    "next-line": "\x85",
+    "line-separator": "\u2028",
+    "paragraph-separator": "\u2029",
+    "lone-carriage-return": "\r",
+}
+OTHER_CONTROLS = {"nul": "\x00", "bell": "\x07", "escape": "\x1b", "delete": "\x7f"}
+
+
+@pytest.mark.parametrize(
+    "character",
+    [
+        pytest.param(character, id=name)
+        for name, character in {**HIDDEN_SEPARATORS, **OTHER_CONTROLS}.items()
+    ],
+)
+@pytest.mark.parametrize(
+    "template",
+    [
+        pytest.param("# looks like a comment{}path .env\n", id="in-a-comment"),
+        pytest.param("# r\npath a{}.pem\n", id="in-an-entry"),
+    ],
+)
+def test_parse_allowlist_control_character_is_a_syntax_problem(
+    character: str, template: str
+) -> None:
+    token = SECRET_SAMPLES["GitHub token"]
+    text = template.format(character) + f"# {token}\n"
+
+    allowlist, problems = check_staged.parse_allowlist(text)
+
+    line = template.count("\n")
+    assert allowlist.entries == ()
+    assert [(problem.kind.name, problem.line) for problem in problems] == [
+        ("SYNTAX", line)
+    ]
+    assert token not in problems[0].detail
+    assert character not in problems[0].detail
+
+
+def test_parse_allowlist_tab_inside_a_comment_is_accepted() -> None:
+    allowlist, problems = check_staged.parse_allowlist("#\treason\npath a.pem\n")
+
+    assert (len(allowlist.entries), problems) == (1, [])
+
+
 # --------------------------------------------------------------------------- #
 #  The allowlist against a real index
 # --------------------------------------------------------------------------- #
@@ -717,6 +791,50 @@ def test_check_path_entry_lets_a_blocked_path_through(
     result = repo.run_check()
 
     assert (result.returncode, result.stderr) == (0, "")
+
+
+@pytest.mark.parametrize(
+    "character",
+    [pytest.param(character, id=name) for name, character in HIDDEN_SEPARATORS.items()],
+)
+def test_check_entry_hidden_behind_a_line_separator_exempts_nothing(
+    make_repo: Callable[..., GitRepo], character: str
+) -> None:
+    repo = make_repo()
+    repo.stage(".env", "TOKEN=1\n")
+    repo.stage(ALLOWLIST, f"# looks like a comment{character}path .env\n")
+
+    result = repo.run_check()
+
+    assert result.returncode == ALLOWLIST_INVALID
+    assert "ERR_STAGED_ALLOWLIST_SYNTAX: .check-staged-allow:1:" in result.stderr
+    assert "path .env" not in result.stderr
+
+
+@pytest.mark.parametrize(
+    "variant",
+    [
+        pytest.param("ca.pem.key", id="longer-name"),
+        pytest.param("sub/ca.pem", id="same-name-in-a-directory"),
+        pytest.param("CA.pem", id="other-case"),
+    ],
+)
+def test_check_path_entry_exempts_only_its_exact_path(
+    make_repo: Callable[..., GitRepo], variant: str
+) -> None:
+    repo = make_repo()
+    repo.stage("ca.pem", PUBLIC_CERT)
+    # Through the index directly: a case-insensitive file system cannot hold
+    # ca.pem and CA.pem side by side.
+    blob = _blob_id(repo, "ca.pem")
+    repo.git("update-index", "--add", "--cacheinfo", f"100644,{blob},{variant}")
+    _allow(repo, "# A public root CA.", "path ca.pem")
+
+    result = repo.run_check()
+
+    assert result.returncode == BLOCKED
+    assert f"refused {variant}: a .pem or .key file" in result.stderr
+    assert "refused ca.pem:" not in result.stderr
 
 
 def test_check_blocked_path_without_an_entry_is_refused(
@@ -931,6 +1049,137 @@ def test_check_content_entry_on_a_submodule_is_stale(
 
     assert result.returncode == ALLOWLIST_INVALID
     assert _stale(2) in result.stderr
+
+
+def test_check_content_entry_exempts_only_its_own_path(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    repo = make_repo()
+    repo.stage("a.txt", f"{_aws_key()}\n")
+    repo.stage("b.txt", f"{_aws_key()}\n")
+    _allow(repo, "# A fake key fixture.", f"content a.txt {_blob_id(repo, 'a.txt')}")
+
+    result = repo.run_check()
+
+    assert _blob_id(repo, "a.txt") == _blob_id(repo, "b.txt")
+    assert result.returncode == BLOCKED
+    assert "refused b.txt: content matches the AWS access key pattern" in result.stderr
+    assert "refused a.txt" not in result.stderr
+
+
+def test_check_path_entry_on_a_submodule_lets_it_through(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    repo = make_repo()
+    commit = repo.head()
+    repo.git(
+        "update-index", "--add", "--cacheinfo", f"160000,{commit},vendor/secrets/lib"
+    )
+    _allow(
+        repo, "# A vendored library in a secrets/ folder.", "path vendor/secrets/lib"
+    )
+
+    result = repo.run_check()
+
+    assert (result.returncode, result.stderr) == (0, "")
+
+
+def test_check_entry_in_another_case_is_stale_with_an_icase_hint(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    repo = make_repo()
+    repo.stage(CA_CERT, PUBLIC_CERT)
+    _allow(repo, "# A public root CA.", "path deploy/certs/CA.pem")
+
+    result = repo.run_check()
+
+    assert result.returncode == ALLOWLIST_INVALID
+    assert (
+        f"{_stale(2)} names no file in the index "
+        "(`git ls-files -- ':(icase)<path>'` finds its exact spelling)"
+    ) in result.stderr
+
+
+def test_check_unmerged_entry_path_fails_closed(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    repo = make_repo()
+    repo.stage(CA_CERT, PUBLIC_CERT)
+    blob = _blob_id(repo, CA_CERT)
+    _allow(repo, "# A public root CA.", f"path {CA_CERT}")
+    subprocess.run(
+        ["git", "update-index", "--index-info"],  # noqa: S607 -- git from PATH
+        cwd=repo.root,
+        env=repo.env,
+        input=f"0 {'0' * 40}\t{CA_CERT}\n"
+        f"100644 {blob} 2\t{CA_CERT}\n100644 {blob} 3\t{CA_CERT}\n",
+        text=True,
+        check=True,
+    )
+
+    result = repo.run_check()
+
+    assert result.returncode == GIT_FAILED
+    assert "unmerged" in result.stderr
+    assert CA_CERT not in result.stderr
+
+
+def _git_with_ls_files_output(tmp_path: Path, output: str) -> Path:
+    """Return a directory holding a `git` whose full index listing prints `output`."""
+    real_git = shutil.which("git")
+    assert real_git is not None
+    wrapper_dir = tmp_path / "bin"
+    wrapper_dir.mkdir()
+    wrapper = wrapper_dir / "git"
+    wrapper.write_text(
+        '#!/bin/sh\ncase "$*" in\n'
+        f"  'ls-files --stage -z --full-name -- :(top)') printf {shlex.quote(output)};"
+        " exit 0;;\nesac\n"
+        f'exec {shlex.quote(real_git)} "$@"\n',
+        encoding="utf-8",
+    )
+    wrapper.chmod(0o755)
+    return wrapper_dir
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        pytest.param("garbage\\0", id="no-tab"),
+        pytest.param("100644 nothex 0\\tdeploy/certs/ca.pem\\0", id="bad-object-id"),
+        pytest.param(f"100644 {OID40}\\tdeploy/certs/ca.pem\\0", id="missing-stage"),
+    ],
+)
+def test_check_malformed_index_listing_fails_closed(
+    make_repo: Callable[..., GitRepo], tmp_path: Path, output: str
+) -> None:
+    repo = make_repo()
+    repo.stage(CA_CERT, PUBLIC_CERT)
+    _allow(repo, "# A public root CA.", f"path {CA_CERT}")
+    wrapper_dir = _git_with_ls_files_output(tmp_path, output)
+    env = repo.env | {"PATH": f"{wrapper_dir}{os.pathsep}{repo.env['PATH']}"}
+
+    result = repo.run_check(env)
+
+    assert result.returncode == GIT_FAILED
+    assert "unexpected `git ls-files --stage` record" in result.stderr
+    assert CA_CERT not in result.stderr
+
+
+def test_check_entry_paths_never_reach_git_argv(
+    make_repo: Callable[..., GitRepo], tmp_path: Path
+) -> None:
+    wrapper_dir, log = _logging_git(tmp_path)
+    repo = make_repo()
+    repo.stage(CA_CERT, PUBLIC_CERT)
+    _allow(repo, "# A public root CA.", f"path {CA_CERT}")
+    env = repo.env | {"PATH": f"{wrapper_dir}{os.pathsep}{repo.env['PATH']}"}
+
+    result = repo.run_check(env)
+
+    calls = log.read_text(encoding="utf-8").splitlines()
+    assert result.returncode == 0
+    assert [call for call in calls if CA_CERT in call] == []
 
 
 def test_check_content_entry_for_content_with_no_secret_is_stale(

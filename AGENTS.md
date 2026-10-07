@@ -199,8 +199,10 @@ model is inherited. `tests/test_agent_tiers.py` holds their instructions equal.
 - Never weaken a gate to make a run pass: no lowered coverage threshold, no
   removed ruff rule, no `noqa`, `type: ignore`, or per-file ignore without a
   written reason, no skipped or deleted test, no removed `--locked`, no
-  `.check-staged-allow` entry added without a human's decision. If a gate is
-  wrong, say so and let a human decide. `changing-gates` lists every form
+  `.check-staged-allow` entry added, widened, re-pointed, or re-pinned without
+  a human's decision (removing one whose file the same change deleted or
+  renamed narrows the gate and is allowed). If a gate is wrong, say so and let
+  a human decide. `changing-gates` lists every form
   this takes.
 - When a command is denied — by a permission setting, a hook, or a human —
   re-spelling it (`bash -c '…'`, an alias, a wrapper script) is forbidden. Stop

@@ -140,11 +140,12 @@ agent hooks: its guard rails are git hooks run by pre-commit, which fire on
 paths and credential-shaped content straight from the index, on every
 `git commit` and every merge commit, and `just install` fails when the git
 hooks are missing. A file the gate refuses but that holds no secret gets
-through by a reviewed entry in `.check-staged-allow`, never by a bypass flag. Commits git makes without running hooks — `git rebase`
-replays, `git cherry-pick`, `git revert` — are left to the weekly full-history
-scan of the Security Audit workflow (gitleaks). What the old agent hooks did
-and where each behavior went is the replacement table in the `changing-gates`
-skill's `references/pre-commit-layer.md`.
+through by a reviewed entry in `.check-staged-allow`, never by a bypass flag.
+Commits git makes without running hooks — `git rebase` replays,
+`git cherry-pick`, `git revert` — are left to the weekly full-history scan of
+the Security Audit workflow (gitleaks). What the old agent hooks did and where
+each behavior went is the replacement table in the `changing-gates` skill's
+`references/pre-commit-layer.md`.
 
 ### Why 80% coverage minimum?
 
