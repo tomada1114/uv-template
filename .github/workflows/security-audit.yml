@@ -12,9 +12,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  # Only superseded PR runs are cancelled; main pushes and scheduled or
-  # dispatched scans always finish.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  # Superseded PR runs are cancelled. Scheduled and dispatched scans each get
+  # their own group (run_id), so neither replaces the other while pending and
+  # every one finishes.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # To bump: read the linux_x64 line of the release's
