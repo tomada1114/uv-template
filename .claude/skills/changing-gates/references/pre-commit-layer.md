@@ -102,7 +102,9 @@ one pass.
 
 ## Installing the hooks
 
-- `just install` installs both git hooks and fails when either is missing afterwards.
+- `just install` installs the git hooks and fails when any type listed in
+  `default_install_hook_types` (a one-line `[a, b]` list) is missing afterwards;
+  `tests/test_just_install.py` runs the recipe body against a fake `uv`.
   With `ALLOW_MISSING_GIT_HOOKS=1` or `CI=true` it still attempts the install, but a
   failed install or a missing hook is only a warning. Outside a Git repository it skips
   the hooks.

@@ -61,7 +61,7 @@ just test-skills     # Run the unittest suites bundled under .agents/skills/*/sc
 just run *ARGS       # Run the CLI, e.g. `just run todo list` (uv run --locked my-app ...)
 just worktree-prepare # Recreate the locked Python environment in an existing linked worktree
 just worktree-setup ISSUE BRANCH BASE ROOT VERIFY # Provision one issue worktree with its baseline
-just worktree-clean ROOT BRANCH # Preview cleanup of one named, merged worktree
+just worktree-clean ROOT BRANCH # Preview cleanup of one named worktree whose local tip is a merged PR's head; a failed gh fails the run
 just worktree-clean-apply ROOT BRANCH # Apply the preview; keeps dirty or unmerged worktrees
 just agents-sync     # Regenerate the .claude/skills mirror from .agents/skills
 just agents-check    # Fail when the skills mirror has drifted
