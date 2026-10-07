@@ -911,9 +911,23 @@ class DigestCacheTest(DigestRunner, unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         self.state = Path(self._tmp.name)
+        # The cache fixture must work without a Git checkout or origin remote.
+        repo = patch.object(idg, "repo_slug", return_value="acme/widgets")
+        repo.start()
+        self.addCleanup(repo.stop)
 
     def _gh_fetches(self):
         return [c for c in self.gh_calls if c[:2] in (["issue", "list"], ["pr", "list"])]
+
+    def _warm_cache(self, issues):
+        """Prove this setup can hit the cache before testing a bypass."""
+        self._run(["--select", "--cache-ttl", "300"], issues,
+                  state_dir=self.state, cache=True)
+        self.assertEqual(len(self._gh_fetches()), 2)
+        rc, out, err = self._run(["--select", "--cache-ttl", "300"], issues,
+                                 state_dir=self.state, cache=True)
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(self._gh_fetches(), [])
 
     def test_second_call_serves_from_cache(self):
         issues = [gh_issue(1, labels=["priority: P0"], body="cached body")]
@@ -930,16 +944,14 @@ class DigestCacheTest(DigestRunner, unittest.TestCase):
 
     def test_refresh_bypasses_a_warm_cache(self):
         issues = [gh_issue(1, labels=["priority: P0"])]
-        self._run(["--select", "--cache-ttl", "300"], issues,
-                  state_dir=self.state, cache=True)
+        self._warm_cache(issues)
         self._run(["--select", "--refresh", "--cache-ttl", "300"], issues,
                   state_dir=self.state, cache=True)
         self.assertEqual(len(self._gh_fetches()), 2)
 
     def test_zero_ttl_disables_the_cache(self):
         issues = [gh_issue(1, labels=["priority: P0"])]
-        self._run(["--select", "--cache-ttl", "300"], issues,
-                  state_dir=self.state, cache=True)
+        self._warm_cache(issues)
         self._run(["--select", "--cache-ttl", "0"], issues,
                   state_dir=self.state, cache=True)
         self.assertEqual(len(self._gh_fetches()), 2)
@@ -980,10 +992,10 @@ class DigestCacheTest(DigestRunner, unittest.TestCase):
 
     def test_env_kill_switch_disables_the_cache(self):
         issues = [gh_issue(1, labels=["priority: P0"])]
-        self._run(["--select", "--cache-ttl", "300"], issues,
-                  state_dir=self.state, cache=True)
+        self._warm_cache(issues)
+        # Positive TTL isolates the kill switch from the default-off behavior.
         # cache=False leaves FakeGh's SHIPPING_ISSUES_NO_CACHE=1 in place.
-        self._run(["--select"], issues, state_dir=self.state)
+        self._run(["--select", "--cache-ttl", "300"], issues, state_dir=self.state)
         self.assertEqual(len(self._gh_fetches()), 2)
 
     def test_the_cache_is_off_unless_a_caller_asks_for_it(self):
@@ -991,6 +1003,7 @@ class DigestCacheTest(DigestRunner, unittest.TestCase):
         # this run's own merge can re-select an issue that is already closed,
         # and nothing downstream would notice. Opting in is the caller's job.
         issues = [gh_issue(1, labels=["priority: P0"])]
+        self._warm_cache(issues)
         self._run(["--select"], issues, state_dir=self.state, cache=True)
         self._run(["--select"], issues, state_dir=self.state, cache=True)
         self.assertEqual(len(self._gh_fetches()), 2)
