@@ -77,9 +77,12 @@ AGENTS.md's "Enforcement layers" names the layers. Keeping them in step is this 
 
 - A check added to `just verify` gets the matching CI step, and the reverse. Nothing
   tests that the two lists agree; the reviewer reads both.
-- A tool pinned in two places moves in both: ruff's `rev:` in `.pre-commit-config.yaml`
-  and its `ruff>=` floor in the `dev` group, and `crate-ci/typos`' `rev:` and its
-  action pin in `ci.yml`. **BACKGROUND:** `merging-dependency-prs`.
+- Ruff's local system hooks run `uv run --locked ruff`, sharing `uv.lock` with
+  `lint` and CI. A Ruff update moves the existing dependency range and lock; there
+  is no separate hook revision to align. **BACKGROUND:** `merging-dependency-prs`.
+- CI's `Spell Check` runs the pinned typos pre-commit hook with `--all-files`,
+  sharing its revision, config, and file selection with local checks. Dependabot's
+  `pre-commit` entry updates remote hook revisions; local hooks use the project lock.
 - CI runs zizmor through the pinned pre-commit hook with `--all-files`, sharing
   its version and file selection with local checks, including Dependabot and composite
   action definitions. Update the hook revision rather than introducing a separate CI pin.

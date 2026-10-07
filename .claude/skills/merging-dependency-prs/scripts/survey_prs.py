@@ -50,7 +50,7 @@ PASSING_STATES = frozenset({"SUCCESS", "NEUTRAL", "SKIPPED"})
 PENDING_STATES = frozenset({"PENDING", "IN_PROGRESS", "QUEUED", "WAITING", "EXPECTED"})
 UNKNOWN_STATE = "UNKNOWN"
 # Branch-name ecosystem segments that .github/dependabot.yml configures.
-KNOWN_ECOSYSTEMS = frozenset({"github_actions", "uv"})
+KNOWN_ECOSYSTEMS = frozenset({"github_actions", "pre_commit", "uv"})
 # Files every uv PR may share; that overlap lands one PR at a time.
 UV_MANIFEST_FILES = frozenset({"uv.lock", "pyproject.toml"})
 
@@ -175,8 +175,8 @@ def check_summary(rollup: list[Row] | None) -> tuple[str, list[str]]:
 def ecosystem_of(branch: str) -> str:
     """Classify a Dependabot branch name into an ecosystem.
 
-    `.github/dependabot.yml` configures `github-actions` and `uv`; Dependabot
-    names a branch `dependabot/<ecosystem>/<dependency or group>`, so both are
+    `.github/dependabot.yml` configures `github-actions`, `pre-commit`, and `uv`; Dependabot
+    names a branch `dependabot/<ecosystem>/<dependency or group>`, so they are
     matched on that segment alone, never on a dependency or group name that
     happens to contain `uv` or `github_actions`. Anything else (a security
     update the repository settings enabled, say) is `other`.

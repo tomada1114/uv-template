@@ -33,15 +33,6 @@ repos:
         args: ["--branch", "main"]
         stages: [pre-commit]
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.8
-    hooks:
-      - id: ruff
-        args: [--fix]
-        stages: [pre-commit]
-      - id: ruff-format
-        stages: [pre-commit]
-
   - repo: https://github.com/crate-ci/typos
     rev: v1.50.3
     hooks:
@@ -57,6 +48,22 @@ repos:
 
   - repo: local
     hooks:
+      # Use the same locked Ruff as local verification and CI. Preserve the
+      # upstream hook's file selection, exclusions, and serial execution.
+      - id: ruff
+        name: ruff
+        entry: uv run --locked ruff check --force-exclude --fix
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
+        stages: [pre-commit]
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --locked ruff format --force-exclude
+        language: system
+        types_or: [python, pyi, jupyter, markdown]
+        require_serial: true
+        stages: [pre-commit]
       # Reads the index itself (scripts/check_staged.py), so it takes no
       # filenames and runs on every `git commit` and every merge commit,
       # whatever pre-commit would pass it. Stdlib-only, so `language: python`

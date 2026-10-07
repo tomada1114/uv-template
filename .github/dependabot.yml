@@ -37,3 +37,16 @@ updates:
     # .github/labels.yml does not declare.
     labels: ["dependencies"]
     open-pull-requests-limit: 3
+
+  - package-ecosystem: "pre-commit"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    # Match the github-actions cooldown for hooks resolved from Git tags.
+    cooldown:
+      default-days: 7
+    groups:
+      hooks:
+        patterns: ["*"]
+    labels: ["dependencies"]
+    open-pull-requests-limit: 3

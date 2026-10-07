@@ -5,16 +5,16 @@ description: >
   updates, or several bot PRs contest the same workflow file or uv.lock. Covers the
   read-only survey, pre-1.0 minor updates treated as major risk, review of SHA-pinned
   Action bumps and of uv PRs (pyproject.toml with uv.lock, a new locked package),
-  keeping an Action or ruff and its pre-commit twin on one version, an exact approval
+  reviewing pre-commit hook revisions and locked Python tools, an exact approval
   plan, individual merges or a combined branch, and closing originals only after their
   replacement lands.
 ---
 
 # Merging Dependency PRs
 
-**Owns:** landing already-open Dependabot PRs — the `github-actions` and `uv` updates
-`.github/dependabot.yml` proposes: survey, review, approval scope, landing mode, the
-combined branch, and cleanup. **Does not own:** whether a package may be added at all,
+**Owns:** landing already-open Dependabot PRs — the `github-actions`, `pre-commit`,
+and `uv` updates `.github/dependabot.yml` proposes: survey, review, approval scope,
+landing mode, the combined branch, and cleanup. **Does not own:** whether a package may be added at all,
 the `exclude-newer` window, or a one-package exception to it (`managing-dependencies`).
 
 ## Operating contract
@@ -49,6 +49,11 @@ moves `uv.lock`, and moves `pyproject.toml` too when it raises a range. Its grou
 read every `version =` change in the `uv.lock` diff. Dependabot counts a 0.x minor
 (`ruff` is one) as a minor, so it arrives inside the group — review it as a major.
 
+The `pre-commit` entry groups remote hooks into one monthly `hooks` PR with the
+same seven-day cooldown as Actions. Review each changed `rev:` and its upstream
+release notes; a grouped title may hide a major. Hook selection, arguments, stages,
+or repository changes need a separate decision. The survey reports `pre_commit`.
+
 A row whose ecosystem is `other` is not something this repository's Dependabot config
 asks for — typically a security update the repository settings enabled for another
 Python ecosystem (a `dependabot/pip/...` branch). Hold it: Python dependencies arrive
@@ -68,18 +73,11 @@ Treat these as one reviewed unit:
 - **Every pin of the same Action.** `actions/checkout` and `astral-sh/setup-uv` are
   pinned in many jobs across `.github/workflows/`; all of them move to the same SHA, or
   the PR is incomplete.
-- **An Action and its pre-commit twin.** `crate-ci/typos` runs both as an Action in
-  `ci.yml` and as a hook whose `rev:` is in `.pre-commit-config.yaml`. Dependabot only
-  updates the Action, so a bump leaves local and CI spell checks on different versions
-  until the hook's `rev:` follows. The same applies to any future Action that has a
-  pre-commit counterpart.
-- **A Python tool and its pre-commit twin.** `ruff` is locked in `uv.lock` (the `dev`
-  group) and runs as the `astral-sh/ruff-pre-commit` hook. A `uv` PR moves only the
-  lock, so the hook's `rev:` follows to the matching tag. When `ruff` arrives inside the
-`python-minor-patch` group, the whole group moves to the combined branch, as a grouped
-`actions` PR does: every member by `uv lock --upgrade-package <pkg>==<version>`, the
-`pyproject.toml` range edits the group PR made, and the hook's `rev:`. The group PR is
-closed as superseded only after the combined PR merges.
+- **A tool shared by local checks and CI.** Ruff's local hooks use
+  `uv run --locked ruff`; its version is the `uv.lock` entry, with no separate hook
+  pin. A Ruff member of `python-minor-patch` needs the normal range/lock review, not
+  a combined branch solely for hook alignment. Typos and zizmor run through their
+  pre-commit hooks in CI; their revisions live only in `.pre-commit-config.yaml`.
 
 If open PRs leave a unit split, complete it on the combined branch and list the exact
 companion pins and target versions in the plan. Completing a unit never adds a new
@@ -125,7 +123,7 @@ approval; do not stretch a green check or an approved Action into another decisi
 
 Follow [landing](references/landing.md) for the selected mode. The combined branch
 starts from the current default branch and applies the approved pins by hand-editing
-only the `uses:` lines (and a twin's `rev:`); it never integrates a bot branch's
+only the `uses:` lines (or an approved hook's `rev:`); it never integrates a bot branch's
 commits. A `uv` package lands there by `uv lock --upgrade-package`, never by editing
 `uv.lock` or taking it from a bot branch.
 
