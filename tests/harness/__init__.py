@@ -20,12 +20,15 @@ repository and fails on a fixture built under ``tmp_path``:
   shapes ``_needs.py`` lists, that fails when a needed job's result is not
   ``success``;
 - (e) ``test_labels.py``: every label pr-label.yml, the issue forms, and
-  dependabot.yml apply is declared exactly once in ``.github/labels.yml``;
+  dependabot.yml apply is declared exactly once in ``.github/labels.yml``,
+  and with more than one Dependabot ecosystem each update sets ``labels:``;
 - (f) ``test_workflow_hygiene.py``: workflow hygiene (SHA pins, timeouts,
   top-level permissions, checkout credentials, no fail-open constructs, push
   runs on main never cancelled by concurrency), and the same pin, checkout,
   ``continue-on-error``, and ``|| true`` rules for a composite action under
   ``.github/actions/``;
+- (h) ``test_dependabot_cooldown.py``: the Dependabot ``uv`` update's
+  ``cooldown.default-days`` equals ``[tool.uv] exclude-newer``'s day count;
 - (g) the Product section check is ``tests/test_product_section.py`` (#95),
   not duplicated here.
 
