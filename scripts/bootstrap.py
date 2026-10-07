@@ -85,6 +85,7 @@ RESERVED_NAMES = frozenset(
         "pydantic_settings",
         "uvicorn",
         "httpx",
+        "httpx2",
         "starlette",
         "pytest",
         "ruff",

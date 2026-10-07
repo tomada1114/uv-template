@@ -497,6 +497,7 @@ def test_main_dirty_tree_exits_one_with_an_error_line(clone, capsys):
         "fastapi",
         "pydantic-settings",
         "starlette",
+        "httpx2",
         "mypy",
         "sync-labels",  # a scripts/*.py stem
         "bootstrap",
