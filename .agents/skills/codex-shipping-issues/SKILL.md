@@ -2,7 +2,8 @@
 name: codex-shipping-issues
 description: >
   Use when shipping a GitHub issue from a Codex Cloud or Codex-managed checkout through
-  a regular pull request, current-head Codex review and CI, and an authorized merge;
+  a regular pull request, one opening-triggered Codex review, current-head CI and an
+  authorized merge;
   preparing or cleaning a linked worktree; or checking the evidence for a PR-only run.
   Uses repository-local skills and helpers without requiring personal global skills.
 ---
@@ -30,7 +31,7 @@ request. Keep evidence outside the checkout. Reuse that agreement after correcti
 or a resume; ask only for necessary writes outside it.
 
 - A request to ship an issue through merge authorizes the necessary commits, branch
-  push, regular PR creation/updates, review requests and replies, in-scope repairs,
+  push, regular PR creation/updates, in-scope review corrections,
   and gated merge/issue closure. Default to `stop_at=merge` for that request.
 - A request to create a PR authorizes its necessary commit, push and PR publication;
   use `stop_at=pr` unless the user also authorizes merge. A bare invocation grants no
@@ -102,18 +103,22 @@ for this branch instead of creating another. Attach the PR to this chat when the
 host supports PR attachments.
 
 Read [review, CI and landing](references/review-and-ci.md) before publication.
-When the run records automatic Codex review on PR opening, wait for that initial
-review without immediately posting a duplicate request. Automatic review runs once
-on opening; pushing corrections does not start another automatic review. Request
-a new review explicitly when the reviewed diff changes and authorization covers it. Observe CI while review runs and fix failures within scope.
-After a correction changes the diff, obtain fresh review and CI evidence, using an
-explicit review request within the recorded authorization when necessary.
+Wait for the first automatic Codex review triggered on opening. Read all its findings,
+fix accepted in-scope ones and inspect the correction diff locally. Observe CI while
+that review runs and diagnose failures within scope. Record the reviewed commit and
+findings separately from the current head.
+
+After the initial review completes, do not request or wait for a second review, even
+when corrections or base integration change the diff. Repeat affected checks and
+`just verify`, push normally and wait for current-head CI. This is the owner's
+single-review policy; it does not claim the final head received cloud review.
+Repository-required approvals remain separate and cannot be bypassed.
 
 ## 5. Finish at the authorized boundary
 
-At `stop_at=pr`, finish only after acceptance, current-head CI and terminal Codex
-review pass; preserve the open PR and branch. At `stop_at=merge`, proceed to landing
-as soon as all current gates and required approvals pass, without asking again for
+At `stop_at=pr`, finish after acceptance, completed initial review with accepted
+findings addressed, and current-head CI; preserve the open PR and branch.
+At `stop_at=merge`, proceed to landing as soon as all current gates and required approvals pass, without asking again for
 already authorized merge. Verify remote merged state, merge commit and issue closure.
 Do not switch, pull or clean the user's busy primary checkout.
 

@@ -1,94 +1,97 @@
-# Review, CI and landing for one PR
+# Initial review, current-head CI and landing
 
-## Pin each observation to a diff
+## Record reviewed and current revisions separately
 
-Record repository, issue, PR URL/number, full head SHA, base SHA/ref and compared diff.
-Refresh head/base whenever assessing review or CI. A changed head or base that changes
-the diff invalidates earlier verdicts. Record review completion IDs and commit identity,
-check names, run URLs and conclusions separately; green CI is not review evidence.
+Record repository, issue, PR URL/number, initial review ID and commit, current head
+SHA, base SHA/ref, correction commits and check/run evidence. Refresh head/base when
+checking CI or landing. Never present the initial review as cloud review of later
+corrections. A changed diff invalidates old CI and local acceptance evidence, but
+completion of the initial review remains recorded for this PR.
 
-## Observe the opening-only automatic review
+The owner chooses one cloud review per PR: wait for the automatic opening review,
+address its findings, then use local verification and current-head CI for landing.
+Do not request or wait for a second cloud review after corrections or base integration.
+This accepts the risk that later changes have no fresh cloud review. It does not
+remove repository-required approvals, checks or unresolved correctness decisions.
 
-Discover connected review and PR actions. Read submitted reviews, inline threads,
-resolution state, PR conversation and task metadata where available. Follow MCP
-pagination or discover another MCP action when normalized responses omit data.
-If required evidence remains unavailable, report it; never use `gh` or direct HTTP.
+## Wait for the first automatic review
 
-If the user or repository records automatic Codex review only on opening, open a regular
-PR and observe that initial run. Record opening time, head/base and review activity.
-Do not post an explicit request while that automatic run is active, or interpret the
-initial delay as failure. This is a run-specific setup, not a universal Codex default.
-Do not change review settings or close/reopen the PR to trigger another run.
+Discover GitHub MCP actions and inspect review submissions, inline threads, the PR
+conversation and review-task metadata. Follow pagination or another MCP action when
+normalized responses omit data. Report required inaccessible evidence; never use
+`gh` or direct HTTP as a fallback.
 
-Record these states independently of CI:
+Open a regular PR. Record the opening event and the automatic review's trusted
+integration identity, state and reviewed commit. Wait through its queue/start delay
+and running state. Do not post `@codex review`, `@codex fix`, change review settings,
+or close/reopen the PR to start another run. Pushes do not imply a new automatic run.
+If the initial run fails or cannot be observed, report that blocker without claiming
+completion or replacing it with a local review.
 
-| Review state | Action |
+| Initial review state | Action |
 | --- | --- |
-| Not started / queued | Wait for the opening-triggered run; do not post a duplicate. |
-| Running | Observe its summary/task and CI in bounded waits. |
-| Completed, findings | Read all findings and fix accepted in-scope ones. |
-| Completed, no findings | Verify trusted identity and reviewed head/diff before accepting. |
-| Diff changed after review | Invalidate the verdict; request fresh review explicitly when authorized. |
-| Failed / unavailable | Report the evidence failure; do not infer a clear review from CI. |
+| Not started / queued | Wait for the opening-triggered review. |
+| Running | Observe review and CI in bounded waits. |
+| Completed, findings | Read all findings and address accepted in-scope ones. |
+| Completed, no findings | Record terminal state and the reviewed commit. |
+| Failed / unavailable | Report missing evidence and preserve the PR. |
 
-A trusted completed summary identifying the current commit, its no-findings signal
-and empty findings/threads together can establish a clean result. Completion alone
-does not mean approval; a completed review can still contain a P1 finding.
-A thumbs-up alone, without terminal state and matching diff, is insufficient.
+Completion must be terminal and come from the trusted Codex integration, associated
+with this PR and its reviewed commit. A display name, acknowledgement, reaction,
+green CI or silence alone is insufficient. A trusted terminal summary with matching
+commit metadata, a no-findings signal and empty findings/threads can establish a
+clean initial review. Completion alone does not mean there were no findings.
 
-A terminal result must come from the trusted Codex integration and identify the reviewed
-current diff. Read all findings. A display name, acknowledgement, queued task, reaction,
-green CI, silence or local review is insufficient. If a no-findings result is delivered
-as a conversation comment, verify its trusted author, terminal meaning and associated
-head/diff through available task/review metadata; do not infer identity from timing.
-If that association cannot be established, report review evidence as unavailable.
+Classify each finding as accepted, rejected or out of scope with a reason. Fix
+accepted in-scope findings, inspect the complete correction diff, run affected checks
+and `just verify`, commit with normal hooks and push. Record which commits address
+which findings. An unresolved owner decision or correctness finding blocks landing;
+CI success cannot dismiss it. Resolve threads only within comment/thread-write
+scope, and do not require a fresh cloud review to prove the fixes.
 
-Classify findings as accepted, rejected or out of scope with reasons. Fix accepted
-in-scope findings, run affected and required gates, commit with hooks and push normally.
-Get fresh CI and review for the new diff. Do not assume a push repeats an opening-only
-automatic review; resolved threads alone do not prove the new diff reviewed.
+If an unsolicited later review appears, do not wait for its completion. Address any
+known actionable correctness feedback already received; do not ignore a known defect
+merely because the initial review is complete.
 
-When fresh review is needed, check for an active run first. Post `@codex review` only
-within the recorded review-comment authorization, including full head SHA and base.
-Record request/comment ID and time; never duplicate an active request or use
-`@codex fix`. If comment authorization is missing, ask for that scope while continuing
-independent CI inspection. Do not replace unavailable cloud review with local review.
+## Verify CI on the current head
 
-## Observe CI alongside review
+Inspect workflows, jobs/steps and required checks for the latest head through MCP,
+including pagination. Compare with the committed ruleset and workflows; inspect
+live requirements/approvals where MCP exposes them. Report unavailable policy fields
+without inventing approvals or bypassing server-enforced requirements.
 
-Inspect workflows and required checks for the current head, including job/step results
-and pagination. The committed ruleset and workflows describe expected checks; read live
-branch rules to establish enforced requirements and approvals. If live policy cannot
-be established, report it as unverified and do not merge on assumptions.
-
-A single green check, earlier SHA, branch name or partial response cannot prove success.
-Distinguish successful, failed, pending, skipped, cancelled and inaccessible checks.
+A green check for one job, an earlier SHA or a partial response is insufficient.
+Distinguish success, failure, pending, skipped, cancelled and inaccessible checks.
 A skipped required check is not success unless active policy explicitly permits it.
-Diagnose failures while review is pending; corrections start a new evidence phase.
-Retries must be authorized and remain associated with their actual head and run.
-Never dispatch workflows or change security/settings just to obtain missing evidence.
+Diagnose failures while the initial review is pending. Any correction or changed
+base integration requires fresh local acceptance and CI for the resulting head.
+Retries must be authorized and associated with their actual head/run. Never change
+settings or dispatch workflows merely to obtain missing evidence.
 
-Use bounded observations (at most 60 seconds per blocking wait) with backoff when state
-is unchanged. Keep independent review and CI records; either can finish first. Continue
-in-scope repairs without a fixed retry count. A pending gate or elapsed time alone is
-not a failure or completion. Honor explicit deadlines and host limits; report required
-unavailable evidence precisely and preserve the PR. Once all gates pass, no extra
-settling delay is required.
+Use bounded observations (at most 60 seconds per blocking wait) and back off when
+state is unchanged. Continue in-scope repairs without an arbitrary attempt cap.
+Pending gates or elapsed time alone do not complete or fail a run. Honor user
+deadlines and host limits. Once the initial review is complete, accepted findings
+are addressed and current-head gates pass, no further review wait is required.
 
-## Land only within the recorded authorization
+## Land within recorded authorization
 
-At a PR-only boundary, preserve the open PR after verified review and CI. Otherwise:
+At a PR-only boundary, preserve the open PR. For an authorized merge:
 
-1. Refresh PR head/base, mergeability, review findings/threads, required approvals and
-   all expected checks. Confirm acceptance and local verification still cover the diff.
-   If base integration is necessary, merge the current default branch normally in the
-   issue worktree, then repeat affected gates and obtain fresh review/CI. No force push.
-2. Merge with the connector's expected-head-SHA guard and an allowed merge method.
-   Never use an admin bypass. If the head changes or merge is rejected, inspect the
-   new state before trying again; do not route around a policy rejection.
-3. Fetch the PR again and verify merged state, target branch and merge commit. Fetch
-   the issue and confirm it closed. If closure failed, close it only within explicit
-   issue-closure scope; otherwise report the remaining open issue. A successful write
-   response alone is not verification.
-4. Preserve the primary checkout and run-owned evidence. Perform only authorized
-   cleanup through the matching local or host-managed lifecycle and verify outcomes.
+1. Refresh head/base, mergeability, known findings, required approvals and all
+   expected checks. Confirm the initial review completed, accepted findings have
+   correction evidence, and local acceptance/CI cover the current diff. Integrate
+   the current default branch normally if needed, repeat local checks and CI, and
+   inspect the resulting diff. Do not request another review or force-push.
+2. Merge through MCP with the expected-head-SHA guard and an allowed merge method.
+   Never use an admin bypass. If the head changes or merge is rejected, inspect
+   the actual state before retrying; do not route around a policy rejection.
+3. Fetch the PR again and verify merged state, target branch and merge commit.
+   Confirm the linked issue closed. If closure failed, close it only within
+   explicit issue-closure scope; otherwise report the remaining open issue.
+   A successful write response alone is not postcondition verification.
+4. Preserve the primary checkout and evidence. Perform only authorized cleanup
+   through the matching local or managed-worktree lifecycle and verify outcomes.
+
+Report the initial reviewed commit, addressed findings, final head and CI separately,
+including that corrections were locally verified without a second cloud review.
