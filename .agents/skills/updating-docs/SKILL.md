@@ -61,7 +61,7 @@ reader of the diff catches it.
 | When you change | Also change | Caught by |
 |---|---|---|
 | A skill added, renamed, or deleted | Its row in AGENTS.md's Skills table | `tests/harness/test_skills.py` (`just check-harness`) |
-| A `just` recipe added, renamed, or removed | Its line in AGENTS.md's "Quick Reference", in the block for who runs it; `CONTRIBUTING.md` if it lists the recipe | `tests/harness/test_just_recipes.py` when AGENTS.md, CLAUDE.md, a skill, or `.github/` still names a renamed or removed one; review for an added one |
+| A `just` recipe added, renamed, or removed | Its line in AGENTS.md's "Quick Reference", in the block for who runs it; `CONTRIBUTING.md` if it lists the recipe | `tests/harness/test_just_recipes.py` when a document it reads still names a renamed or removed one (its docstring lists them; not CHANGELOG.md, an ADR, the roadmap, `docs/product/`, or `.devcontainer/`); review for an added one |
 | A gate, or the narrowest check for one kind of change | Its row in AGENTS.md's "Validating a change" | review |
 | A CLI command or an HTTP route | `README.md`'s command table | review |
 | A `MY_APP_*` setting | `README.md`'s configuration table | review |
@@ -87,8 +87,10 @@ request. Adding a script reaches more files; **REQUIRED:** `writing-repo-scripts
 ## Examples must work
 
 A code example in a document must be valid Python that works with the current code, and
-a command must run as written. No gate compiles or runs a fenced block, and none checks
-that a named recipe or path still exists, so check by hand before committing:
+a command must run as written. No gate compiles or runs a fenced block or checks that a
+named path still exists. `just check-harness` checks a `just <recipe>` in command
+position, but not in CHANGELOG.md, an ADR, the roadmap, `docs/product/`, or
+`.devcontainer/`. Check by hand before committing:
 
 - every `just <recipe>` you name appears in `just --list`;
 - every file path you name exists;

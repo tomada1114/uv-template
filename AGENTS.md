@@ -103,8 +103,8 @@ being run at all.
 | A script under `scripts/` | `uv run --locked pytest tests/test_<script>.py` |
 | A skill under `.agents/skills/` | `just agents-sync && just agents-check && just check-harness && just test-skills` |
 | Dependencies in `pyproject.toml` | `uv lock`, `uv sync --all-groups --locked`, then `just verify` |
-| A workflow under `.github/workflows/` | `uv run --locked pre-commit run zizmor --all-files`, then `just check-harness` |
-| Markdown or other prose | `uv run --locked pre-commit run typos --files <file>` |
+| A workflow under `.github/workflows/`, or an action under `.github/actions/` | `uv run --locked pre-commit run zizmor --all-files`, then `just check-harness` |
+| Markdown or other prose | `uv run --locked pre-commit run typos --files <file>`, then `just check-harness` (it checks each `just <recipe>` named) |
 
 The state of the work comes from Git, fresh test output, and CI — never from
 prose or a test count in a prompt.

@@ -3,13 +3,15 @@
 Shared by the ruleset check (which jobs run on every pull request) and the
 workflow hygiene check (triggers, jobs, steps). Any layout the scanner cannot
 read raises `UnreadableYamlError`, so a workflow is never classified as running
-on every pull request, or as clean, by accident.
+on every pull request, or as clean, by accident. Whether a required job with
+``needs:`` fails on its own is ``_needs.py``'s, read from the job each check
+keeps.
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from fnmatch import fnmatchcase
 from typing import TYPE_CHECKING
 
@@ -50,6 +52,16 @@ class Check:
     name: str
     if_expr: str | None
     has_needs: bool
+    # Every job that reports this check, read only when it is a required context.
+    jobs: tuple[JobSource, ...] = field(default=(), compare=False)
+
+
+@dataclass(frozen=True, slots=True)
+class JobSource:
+    """A job's mapping and the workflow it came from."""
+
+    path: Path
+    job: Mapping
 
 
 def workflow_files(root: Path) -> list[Path]:
@@ -146,22 +158,30 @@ def _checks(path: Path) -> list[Check] | None:
                 for value in _matrix_values(job, key, path)
             ]
         if_expr = split_comment(job["if"][0])[0] if "if" in job else None
-        checks.extend(Check(name, if_expr, "needs" in job) for name in names)
+        source = (JobSource(path, job),)
+        checks.extend(Check(name, if_expr, "needs" in job, source) for name in names)
     return checks
 
 
 def every_pr_checks(workflows_dir: Path) -> dict[str, Check]:
     """Return checks from workflows whose pull_request trigger is unfiltered.
 
-    Two jobs with one name report one context; the skippable one is kept, so a
-    duplicate can only make the judgement stricter.
+    Two jobs with one name report one context; they merge into one check that
+    keeps the skippable one's ``if:`` and both jobs, so a duplicate can only make
+    the judgement stricter.
     """
     found: dict[str, Check] = {}
     for path in sorted(workflows_dir.glob("*.y*ml")):
         for check in _checks(path) or []:
-            if check.name not in found or can_skip(check):
-                found[check.name] = check
+            found[check.name] = (
+                _stricter(found[check.name], check) if check.name in found else check
+            )
     return found
+
+
+def _stricter(kept: Check, other: Check) -> Check:
+    base = other if can_skip(other) and not can_skip(kept) else kept
+    return replace(base, jobs=(*kept.jobs, *other.jobs))
 
 
 def can_skip(check: Check) -> bool:

@@ -82,8 +82,9 @@ AGENTS.md's "Enforcement layers" names the layers. Keeping them in step is this 
 
 ## CI workflows and required checks
 
-- Every job pins each action to a 40-character commit SHA with a `# vX.Y.Z` comment,
-  checks out with `persist-credentials: false`, and sets `timeout-minutes`. The
+- Every job — and every step of a composite action under `.github/actions/` — pins
+  each action to a 40-character commit SHA with a `# vX.Y.Z` comment and checks out
+  with `persist-credentials: false`; every job sets `timeout-minutes`. The
   top-level `permissions` is `{}` or exactly `contents: read`; a scope beyond that,
   a write above all, is granted on the job that needs it. On a workflow that also runs
   on push, concurrency never cancels a push run on `main`, pending ones included.
@@ -94,9 +95,14 @@ AGENTS.md's "Enforcement layers" names the layers. Keeping them in step is this 
   never a job in a workflow whose `pull_request` trigger has `paths` or `paths-ignore`,
   and never a job whose `if:` could skip it — a skipped required check counts as
   passing. A job with `needs:` is guarded with `!cancelled()` or `always()` and fails on
-  its own when a needed job failed, as `Coverage` does; it is required instead of the
-  test shards. Enforced by: `tests/harness/test_ruleset_contexts.py`, which also fails
-  on a workflow layout its scanner cannot read.
+  its own when a needed job did not succeed, as `Coverage` does; it is required instead
+  of the test shards. Only a few step shapes count, read as text: Coverage's
+  `if [ "$R" != "success" ]; then … exit 1; fi` as the step's first command,
+  `[ "$R" = success ] || exit 1`, or a step `if: needs.X.result != 'success'` whose
+  `run:` is `exit 1` (the full list is `tests/harness/_needs.py`'s docstring).
+  `skipped` is not `success`, so a required job cannot need a job that is skipped on
+  purpose. Enforced by: `tests/harness/test_ruleset_contexts.py`, which also fails on a
+  workflow layout its scanner cannot read.
 - Renaming a required job, or adding one that should block merges, edits
   `.github/rulesets/main.json` and the context list in
   `tests/test_apply_ruleset.py::test_required_contexts_match_settled_defaults` in the
@@ -134,9 +140,10 @@ Read the current values in the file rather than a copy here. Traps that have cos
 ## What no gate sees
 
 - Anything only a running server shows (`running-the-app`).
-- Whether a `just <recipe>` or a path named in Markdown still exists, and whether a
-  skill's frontmatter parses (`authoring-skills`) or AGENTS.md's Skills table matches
-  the directories. Check these by hand.
+- Whether a path named in Markdown still exists. A skill's frontmatter, AGENTS.md's
+  Skills table, and a `just <recipe>` in command position are `just check-harness`'s,
+  but the recipe scan leaves out CHANGELOG.md, the ADRs, the roadmap, `docs/product/`
+  (intent or history, not instructions), and `.devcontainer/` (JSON with comments).
 - A staged deletion: `check-staged` never inspects one, by design.
 - Commits that run no hook at all ([references/pre-commit-layer.md](references/pre-commit-layer.md)
   › "When the hooks run, and when they do not").

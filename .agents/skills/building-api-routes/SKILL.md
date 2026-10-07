@@ -27,8 +27,10 @@ core change:
   line in `src/my_app/cli/main.py`, `tests/api/`, and `tests/cli/test_serve.py`;
 - remove the `fastapi` and `uvicorn` runtime dependencies and the `httpx` dev
   dependency, then run `uv lock`;
-- remove the `just dev` recipe, and in `pyproject.toml`'s ruff config the `fastapi.*`
-  entries and the `src/my_app/api/**` per-file-ignore;
+- remove the `just dev` recipe and the lines that name it (README's Development block,
+  AGENTS.md's Quick Reference and the paragraph under it; `just check-harness` fails
+  while one remains), and in `pyproject.toml`'s ruff config the `fastapi.*` entries and
+  the `src/my_app/api/**` per-file-ignore;
 - delete `.agents/skills/building-api-routes/`, remove its row from AGENTS.md's Skills
   table, and run `just agents-sync`.
 

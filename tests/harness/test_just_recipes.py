@@ -1,18 +1,39 @@
-"""(c) Every ``just <recipe>`` the agent-facing documents name exists.
+"""(c) Every ``just <recipe>`` the agent- and human-facing documents name exists.
 
-A renamed or removed recipe must not leave AGENTS.md, CLAUDE.md, a skill, or a
-file under ``.github/`` pointing an agent at nothing. Only code is read, so
-English prose ("just to be safe") never counts:
+A renamed or removed recipe must not leave a document pointing a reader at
+nothing. Read: every top-level ``*.md`` but CHANGELOG.md (AGENTS.md, CLAUDE.md,
+README.md, CONTRIBUTING.md, TEMPLATE.md, SECURITY.md, ...), ``docs/**/*.md``
+but the ADRs and the roadmap, the skills, the agent definitions
+(``.claude/agents/*.md``, ``.codex/agents/*.toml``), everything under
+``.github/`` (composite actions included), ``.pre-commit-config.yaml``, and the
+repository and skill scripts (``scripts/*.py``,
+``.agents/skills/*/scripts/*.py``; not their tests). Each is optional: a missing
+file or directory names nothing, and a present file that is not UTF-8 fails the
+check.
 
-- in Markdown and in YAML text (issue forms and comments render as Markdown),
-  the inline code spans and the lines of a shell-fenced block (a bare fence
-  often holds a prompt template, so only its spans count);
-- in a workflow, also the commands of each ``run:`` step;
-- in a skill's own scripts (``.agents/skills/*/scripts/*.py``, not their
-  tests), the code spans inside string literals and comments, which is how
-  they name a recipe to an agent.
+Not read, because they record intent or history rather than instruct: CHANGELOG.md,
+the ADRs (``docs/architecture/adr/**``, which may decide to add or drop a
+recipe), the roadmap (``docs/architecture/roadmap.md``), and the product and
+planning documents (``docs/product/**``), whose "done when" names a recipe that
+does not exist yet. ``.devcontainer/devcontainer.json`` is not read either: it
+is JSON with comments, which no stdlib parser reads.
 
-A token is ``just`` not preceded by a name character, then a recipe name, so
+Only code is read, so English prose ("just to be safe") never counts:
+
+- in Markdown and in YAML or TOML text (issue forms and comments render as
+  Markdown), the inline code spans and the lines of a ``bash``/``sh``/
+  ``shell``/``zsh`` fence. A fence whose lines carry a ``$ `` prompt counts only
+  those lines, the rest being output; a ``console``, ``text``, or ``output``
+  fence is output and is skipped; any other fence (a bare one holding a prompt
+  template, a python one) counts only its spans;
+- in a workflow or a composite action, also the commands of each ``run:``;
+- in a script, the code spans inside string literals and comments, which is
+  how it names a recipe to a reader.
+
+Within that code only ``just`` in a command's position counts: at the start
+(after a ``$ `` prompt, ``NAME=value`` assignments, or ``uvx [--from X]``), or
+after ``&&``, ``||``, ``;``, ``|``, ``(``, or ``$(``; never inside quotes or
+after an unquoted ``#``. It is then followed by a recipe name, so
 ``just --list`` and the placeholder ``just <recipe>`` name nothing and
 arguments (``just run todo list``) are ignored. ``just -f``/``--justfile``/
 ``-d``/``--working-directory`` points at another justfile, which this check
@@ -39,32 +60,54 @@ if TYPE_CHECKING:
 REPO_ROOT = Path(__file__).resolve().parents[2]
 JUSTFILE = "justfile"
 DOCUMENT_GLOBS = (
-    "AGENTS.md",
-    "CLAUDE.md",
+    "*.md",
+    "docs/**/*.md",
     ".agents/skills/**/*.md",
+    ".claude/agents/**/*.md",
+    ".codex/agents/**/*.toml",
     ".github/**/*.md",
     ".github/**/*.yml",
     ".github/**/*.yaml",
+    ".pre-commit-config.yaml",
+    "scripts/*.py",
+    ".agents/skills/*/scripts/*.py",
 )
-SKILL_SCRIPTS = ".agents/skills/*/scripts/*.py"
+# Intent or history, not instructions: see the module docstring.
+UNREAD_GLOBS = (
+    "CHANGELOG.md",
+    "docs/architecture/adr/**/*",
+    "docs/architecture/roadmap.md",
+    "docs/product/**/*",
+)
 WORKFLOW_PARENT = ".github/workflows"
+ACTIONS_DIR = ".github/actions"
+ACTION_FILES = frozenset({"action.yml", "action.yaml"})
 # Column-0 justfile lines that look like a recipe header but are not one.
 NOT_RECIPES = frozenset({"set", "export", "unexport", "import", "mod", "alias"})
 
 _NAME = r"[A-Za-z_][A-Za-z0-9_-]*"
 _RECIPE_HEADER = re.compile(rf"^@?(?P<name>{_NAME})(?:[ \t]+[^:]*?)?[ \t]*:(?!=)")
 _ALIAS = re.compile(rf"^alias[ \t]+(?P<name>{_NAME})[ \t]*:=")
-_TOKEN = re.compile(rf"(?<![\w./-])just\s+(?P<name>{_NAME})")
+_CALL = re.compile(rf"^just\s+(?P<name>{_NAME})")
 _OTHER_JUSTFILE = re.compile(
-    r"(?<![\w./-])just\s+(?P<flag>-f|-d|--justfile|--working-directory)(?![\w-])"
+    r"^just\s+(?P<flag>-f|-d|--justfile|--working-directory)(?![\w-])"
+)
+_QUOTED = re.compile(r"\"(?:[^\"\\]|\\.)*\"|'[^']*'")
+_COMMENT = re.compile(r"(?:^|\s)#")
+_SEPARATOR = re.compile(r"&&|\|\||\$\(|[;|(]")
+_PROMPT = re.compile(r"^\s*\$\s+")
+_COMMAND_PREFIX = re.compile(
+    r"^(?:[A-Za-z_]\w*=\S*\s+)*(?:uvx\s+(?:--from(?:\s+|=)\S+\s+)?)?"
 )
 _RUN_KEY = re.compile(r"^\s*(?:-\s+)?run:(?:\s+(?P<value>.*?))?\s*$")
 _BLOCK_INDICATOR = re.compile(r"^[|>][+-]?[1-9]?$")
 _SCRIPT_TOKENS = frozenset({tokenize.STRING, tokenize.COMMENT, tokenize.FSTRING_MIDDLE})
 _FENCE = re.compile(r"^\s*(?:`{3,}|~{3,})\s*(?P<info>[\w-]*)")
-# A fence in one of these is a command listing; any other (a bare one holding a
-# prompt template, a python one) is prose whose inline spans alone count.
-SHELL_FENCES = frozenset({"bash", "sh", "shell", "console", "zsh"})
+# A fence in one of these is a command listing, one in OUTPUT_FENCES is skipped,
+# and any other (a bare one holding a prompt template, a python one) is prose
+# whose inline spans alone count.
+SHELL_FENCES = frozenset({"bash", "sh", "shell", "zsh"})
+OUTPUT_FENCES = frozenset({"console", "text", "output"})
 _SPAN = re.compile(r"`([^`]+)`")
 
 
@@ -90,19 +133,32 @@ def _paragraphs(lines: list[str]) -> Iterator[tuple[int, str]]:
             start, run = 0, []
 
 
+def _shell_lines(block: list[tuple[int, str]]) -> list[tuple[int, str]]:
+    """Return a shell fence's commands: its ``$ `` lines if it has any, else all."""
+    prompted = [(number, line) for number, line in block if _PROMPT.match(line)]
+    return prompted or block
+
+
 def code_snippets(text: str) -> Iterator[tuple[int, str]]:
     """Yield ``(line number, code)`` for each shell-fenced line and code span."""
     prose: list[str] = []
     fence: str | None = None
+    block: list[tuple[int, str]] = []
     for number, line in enumerate(text.splitlines(), start=1):
         if match := _FENCE.match(line):
+            if fence is not None:
+                yield from _shell_lines(block)
+                block = []
             fence = match["info"] if fence is None else None
             prose.append("")
         elif fence in SHELL_FENCES:
-            yield number, line
+            block.append((number, line))
+            prose.append("")
+        elif fence in OUTPUT_FENCES:
             prose.append("")
         else:
             prose.append(line)
+    yield from _shell_lines(block)
     for start, paragraph in _paragraphs(prose):
         for match in _SPAN.finditer(paragraph):
             yield start + paragraph.count("\n", 0, match.start()), match[1]
@@ -141,11 +197,31 @@ def script_snippets(text: str) -> Iterator[tuple[int, str]]:
                 )
 
 
+def commands(code: str) -> Iterator[str]:
+    """Yield each command of a snippet, from its command name on.
+
+    Quoted text is dropped first, then everything after an unquoted ``#``; an
+    unclosed quote drops the rest of the snippet.
+    """
+    unquoted = _QUOTED.sub(" ", code)
+    for end in (_COMMENT.search(unquoted), re.search(r"[\"']", unquoted)):
+        if end is not None:
+            unquoted = unquoted[: end.start()]
+    for segment in _SEPARATOR.split(_PROMPT.sub("", unquoted, count=1)):
+        yield _COMMAND_PREFIX.sub("", segment.strip(), count=1)
+
+
 def documents(root: Path) -> list[Path]:
     """Return every document this check reads, sorted and without repeats."""
-    patterns = (*DOCUMENT_GLOBS, SKILL_SCRIPTS)
-    found = {path for pattern in patterns for path in root.glob(pattern)}
-    return sorted(path for path in found if path.is_file())
+    found = {path for pattern in DOCUMENT_GLOBS for path in root.glob(pattern)}
+    unread = {path for pattern in UNREAD_GLOBS for path in root.glob(pattern)}
+    return sorted(path for path in found - unread if path.is_file())
+
+
+def _runs_commands(path: Path, root: Path) -> bool:
+    """Whether ``path`` is a workflow or a composite action, whose ``run:`` counts."""
+    is_action = path.name in ACTION_FILES and path.is_relative_to(root / ACTIONS_DIR)
+    return is_action or path.parent == root / WORKFLOW_PARENT
 
 
 def _snippets(path: Path, root: Path) -> list[tuple[int, str]]:
@@ -153,7 +229,7 @@ def _snippets(path: Path, root: Path) -> list[tuple[int, str]]:
     if path.suffix == ".py":
         return list(script_snippets(text))
     snippets = list(code_snippets(text))
-    if path.parent == root / WORKFLOW_PARENT:
+    if _runs_commands(path, root):
         snippets.extend(workflow_run_lines(text))
     return snippets
 
@@ -168,18 +244,24 @@ def recipe_findings(root: Path) -> list[str]:
     for path in documents(root):
         relative = path.relative_to(root).as_posix()
         snippets = _snippets(path, root)
+        calls = sorted(
+            {
+                (number, command)
+                for number, code in snippets
+                for command in commands(code)
+            }
+        )
         findings.extend(
             f"{relative}:{number}: `just {match['flag']}` names another justfile, "
             "which this check cannot read; name the recipe of the root justfile"
-            for number, code in sorted(set(snippets))
-            for match in _OTHER_JUSTFILE.finditer(code)
+            for number, command in calls
+            if (match := _OTHER_JUSTFILE.match(command))
         )
         missing = sorted(
             {
                 (number, match["name"])
-                for number, code in snippets
-                for match in _TOKEN.finditer(code)
-                if match["name"] not in recipes
+                for number, command in calls
+                if (match := _CALL.match(command)) and match["name"] not in recipes
             }
         )
         findings.extend(
@@ -251,6 +333,27 @@ def test_justfile_recipes_reads_headers_and_aliases() -> None:
         pytest.param("```\nIts CI just failed.\n```\n", id="bare-fence-prose"),
         pytest.param("Replace `just <recipe>` or run `just --list`.\n", id="no-name"),
         pytest.param("Run `uvx --from rust-just==1 just test`.\n", id="tool-prefix"),
+        # Shell text that names `just` outside a command's position.
+        pytest.param("```bash\n# just lists them\njust --list\n```\n", id="comment"),
+        pytest.param(
+            "```bash\njust test # then just docs\n```\n", id="trailing-comment"
+        ),
+        pytest.param(
+            "```bash\nmy-app todo add \"just docs\"\nmy-app todo add 'just docs'\n```\n",
+            id="quoted-argument",
+        ),
+        pytest.param("```bash\necho just docs\n```\n", id="argument"),
+        pytest.param(
+            "```console\n$ my-app todo list\njust docs  [ ]\n```\n", id="console"
+        ),
+        pytest.param("```text\njust docs\n```\n", id="text-fence"),
+        pytest.param("```output\njust docs\n```\n", id="output-fence"),
+        pytest.param(
+            "```bash\n$ my-app todo list\njust docs  [ ]\n$ just test\n```\n",
+            id="prompt-fence-output-line",
+        ),
+        pytest.param("Run `echo 'it is \"just docs\"'`.\n", id="nested-quotes"),
+        pytest.param('Run `say "just docs`.\n', id="unclosed-quote"),
     ],
 )
 def test_recipe_findings_existing_or_no_recipe_passes(
@@ -302,6 +405,66 @@ def test_recipe_findings_existing_or_no_recipe_passes(
             "body:\n  - type: markdown\n    attributes:\n      value: Run `just docs`.\n",
             4,
             id="issue-form",
+        ),
+        pytest.param(
+            "README.md", "# App\n\n```bash\njust docs # build\n```\n", 4, id="readme"
+        ),
+        pytest.param(
+            "CONTRIBUTING.md",
+            "## Commands\n\nRun `just test`, then `just docs`.\n",
+            3,
+            id="contributing",
+        ),
+        pytest.param(
+            "docs/architecture/README.md",
+            "# Architecture\n\nRun `just docs`.\n",
+            3,
+            id="docs-index",
+        ),
+        pytest.param("docs/guide/setup.md", "Run `just docs`.\n", 1, id="other-docs"),
+        pytest.param("TEMPLATE.md", "Run `just docs`.\n", 1, id="template-md"),
+        pytest.param("SECURITY.md", "Run `just docs`.\n", 1, id="security-md"),
+        pytest.param(
+            "scripts/tool.py",
+            '"""Tool.\n\nRun `just docs` first.\n"""\n',
+            3,
+            id="repository-script",
+        ),
+        pytest.param(
+            ".pre-commit-config.yaml",
+            "repos: []\n# CI and `just docs` judge the commit.\n",
+            2,
+            id="pre-commit-config",
+        ),
+        pytest.param(
+            ".github/actions/setup/action.yml",
+            "runs:\n  using: composite\n  steps:\n    - shell: bash\n"
+            "      run: |\n        uv sync\n        just docs\n",
+            7,
+            id="composite-action-run",
+        ),
+        pytest.param("AGENTS.md", "Run `uv sync && just docs`.\n", 1, id="after-and"),
+        pytest.param("AGENTS.md", "Run `false || just docs`.\n", 1, id="after-or"),
+        pytest.param("AGENTS.md", "Run `cd x; just docs`.\n", 1, id="after-semicolon"),
+        pytest.param("AGENTS.md", "Run `yes | just docs`.\n", 1, id="after-pipe"),
+        pytest.param("AGENTS.md", "Run `(just docs)`.\n", 1, id="subshell"),
+        pytest.param("AGENTS.md", "Run `x=$(just docs)`.\n", 1, id="substitution"),
+        pytest.param("AGENTS.md", "Run `CI=1 just docs`.\n", 1, id="env-prefix"),
+        pytest.param(
+            "AGENTS.md", "```bash\n$ just docs\nok\n```\n", 2, id="prompt-line"
+        ),
+        pytest.param(
+            ".claude/agents/executor.md",
+            "---\nname: executor\n---\n\nRun `just docs` before reporting.\n",
+            5,
+            id="claude-agent",
+        ),
+        pytest.param(
+            ".codex/agents/executor.toml",
+            'name = "executor"\ndeveloper_instructions = """\n'
+            'Run `just docs` before reporting.\n"""\n',
+            3,
+            id="codex-agent",
         ),
     ],
 )
@@ -360,6 +523,63 @@ def test_recipe_findings_other_justfile_is_reported(
     assert len(findings) == 1
     assert findings[0].startswith("AGENTS.md:")
     assert f"`just {flag}` names another justfile" in findings[0]
+
+
+@pytest.mark.parametrize(
+    ("relative", "text"),
+    [
+        pytest.param(
+            "docs/architecture/adr/0001-drop-dev.md",
+            "# ADR-0001\n\n- **Status:** Accepted 2026-01-01\n\nDrop `just docs`.\n",
+            id="accepted-adr",
+        ),
+        pytest.param(
+            "docs/architecture/adr/0002-e2e.md",
+            "- **Status:** Proposed\n\nAdd `just docs`.\n",
+            id="proposed-adr",
+        ),
+        pytest.param(
+            "docs/architecture/adr/template.md", "Run `just docs`.\n", id="adr-template"
+        ),
+        pytest.param(
+            "docs/architecture/roadmap.md",
+            "- Done when: `just docs` passes\n",
+            id="roadmap",
+        ),
+        pytest.param(
+            "docs/product/requirements.md", "Later: `just docs`.\n", id="product-docs"
+        ),
+        pytest.param(
+            "CHANGELOG.md", "## [1.0.0]\n\n- Removed `just docs`.\n", id="changelog"
+        ),
+        pytest.param(
+            ".devcontainer/devcontainer.json",
+            '{"postCreateCommand": "just docs"}\n',
+            id="devcontainer",
+        ),
+        pytest.param(
+            "scripts/tests/test_tool.py",
+            '"""Fixture: `just docs`."""\n',
+            id="script-tests",
+        ),
+    ],
+)
+def test_recipe_findings_intent_or_history_is_not_read(
+    make_root: MakeRoot, relative: str, text: str
+) -> None:
+    assert recipe_findings(make_root({relative: text})) == []
+
+
+def test_recipe_findings_undecodable_document_fails_closed(
+    make_root: MakeRoot,
+) -> None:
+    root = make_root({})
+    (root / "README.md").write_bytes(b"Run `just docs` \xff\n")
+
+    with pytest.raises(
+        UnicodeDecodeError, match=r"'utf-8' codec can't decode byte 0xff"
+    ):
+        recipe_findings(root)
 
 
 def test_recipe_findings_without_justfile_fails(tmp_path: Path) -> None:

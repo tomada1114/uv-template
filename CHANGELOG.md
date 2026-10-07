@@ -28,6 +28,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   credentials, `pull_request_target`, `continue-on-error`, `|| true`, or a
   concurrency that can cancel a push run on main. The Product check stays
   `tests/test_product_section.py`, which the recipe also runs
+- The harness's ruleset check now also fails a required job with `needs:` that
+  has no step failing when a needed job's result is not `success` (as
+  `Coverage`'s "Fail when a test shard did not succeed" step does), so such a
+  job can no longer go green over a failed needed job. The step is read as
+  text and counts only in the shapes `tests/harness/_needs.py` lists; a job no
+  ruleset requires is not read
+- The harness's workflow hygiene check now also reads composite actions under
+  `.github/actions/` (`action.yml` or `action.yaml`): each step's `uses:` must be
+  pinned to a commit SHA with a `# v` comment, a checkout must not keep its
+  credentials, no step may set `continue-on-error`, and no line may end a
+  command with `|| true`; an unreadable action is named by its path from the
+  repository root
+- The harness's recipe check now also reads every top-level Markdown file but
+  CHANGELOG.md (README.md, CONTRIBUTING.md, TEMPLATE.md, ...), `docs/**` but the
+  ADRs, the roadmap, and `docs/product/`, the agent definitions
+  (`.claude/agents/`, `.codex/agents/`), `.pre-commit-config.yaml`, the
+  `scripts/*.py` strings and comments, and composite actions' `run:` commands,
+  so a renamed or removed `just` recipe they still name fails `just verify`. It
+  now counts `just` only in a command's position, never in a comment, a quoted
+  argument, or a `console`/`text`/`output` fence
 - Seven process skills under `.agents/skills/` (mirrored to
   `.claude/skills/`): `writing-tests` and `placing-tests` (replacing
   `tests/AGENTS.md`), `tdd`, `managing-dependencies` (the `exclude-newer`
