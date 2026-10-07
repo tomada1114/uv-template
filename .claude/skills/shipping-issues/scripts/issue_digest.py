@@ -76,6 +76,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 # Dependency phrasings seen in real issue bodies, EN + JA. Group 1 of a leading
 # phrase is a list ("#1, #2 and #3"); every number in it is read.
@@ -131,25 +132,52 @@ _BACKTICK_RUN_RE = re.compile(r"`+")
 # An HTML comment block (CommonMark HTML block type 2): a line that starts,
 # after up to three spaces, with `<!--`. It runs to the line holding `-->`.
 _HTML_COMMENT_OPEN_RE = re.compile(r"^ {0,3}<!--")
+# A list item's first line: a bullet or an ordered marker, then a space or tab.
+_LIST_ITEM_RE = re.compile(r"^ {0,3}(?:[-+*]|\d{1,9}[.)])(?:[ \t]|$)")
+
+
+def _indent_width(line: str) -> int:
+    """Leading whitespace in columns, a tab advancing to the next multiple of 4."""
+    width = 0
+    for char in line:
+        if char == " ":
+            width += 1
+        elif char == "\t":
+            width += 4 - width % 4
+        else:
+            break
+    return width
 
 
 def _code_spans(body: str) -> list[tuple[int, int]]:
-    """The [start, end) offsets of `body`'s fenced code blocks and inline code
-    spans, so a quoted ship-contract example is not read as the contract.
+    """The [start, end) offsets of `body`'s fenced and indented code blocks
+    and inline code spans, so a quoted ship-contract example or closing
+    keyword is not read as real.
 
     A fence closes on a line of the same character at least as long as the
     opener (an unclosed fence runs to the end). An inline span is a backtick
     run closed by the next run of the same length within one paragraph: a
     blank line, a fence, or an HTML comment block ends the paragraph, so a
     stray backtick before a contract block cannot pair with one after it (an
-    unmatched run is literal text). Indented code blocks, other HTML blocks,
-    and backslash-escaped backticks are not modelled."""
+    unmatched run is literal text).
+
+    An indented code block starts on a line indented four or more columns (a
+    tab counts to the next multiple of 4) that does not continue a paragraph:
+    an indented line straight after paragraph text is a lazy continuation of
+    it. It runs across blank lines until a non-blank line indented less. Once
+    a list item has been seen, indented lines are read as its continuation
+    rather than code until a blank line is followed by an unindented,
+    non-list line. Code nested inside list items, other HTML blocks, and
+    backslash-escaped backticks are not modelled."""
     spans: list[tuple[int, int]] = []
     paragraphs: list[tuple[int, int]] = []
     pos = 0
     fence: tuple[str, int, int] | None = None  # (char, length, start)
     in_comment = False
     para_start: int | None = None
+    indented: tuple[int, int] | None = None  # (start, end of last non-blank line)
+    in_list = False
+    after_blank = True
 
     def end_paragraph(at: int) -> None:
         nonlocal para_start
@@ -159,6 +187,22 @@ def _code_spans(body: str) -> list[tuple[int, int]]:
 
     for line in body.splitlines(keepends=True):
         stripped = line.rstrip("\r\n")
+        blank = not stripped.strip()
+        indent = _indent_width(stripped)
+        if indented is not None:
+            if blank or indent >= 4:
+                if not blank:
+                    indented = (indented[0], pos + len(line))
+                after_blank = blank
+                pos += len(line)
+                continue
+            spans.append(indented)
+            indented = None
+        if fence is None and not in_comment and not blank:
+            if _LIST_ITEM_RE.match(stripped):
+                in_list = True
+            elif after_blank and indent == 0:
+                in_list = False
         if fence is not None:
             char, length, start = fence
             close = re.fullmatch(r" {0,3}(%s{%d,})\s*" % (re.escape(char), length), stripped)
@@ -173,13 +217,18 @@ def _code_spans(body: str) -> list[tuple[int, int]]:
         elif _HTML_COMMENT_OPEN_RE.match(stripped):
             end_paragraph(pos)
             in_comment = "-->" not in stripped[stripped.index("<!--") + 4:]
-        elif not stripped.strip():
+        elif blank:
             end_paragraph(pos)
+        elif indent >= 4 and para_start is None and not in_list:
+            indented = (pos, pos + len(line))
         elif para_start is None:
             para_start = pos
+        after_blank = blank
         pos += len(line)
     if fence is not None:
         spans.append((fence[2], len(body)))
+    if indented is not None:
+        spans.append(indented)
     end_paragraph(len(body))
     for start, end in paragraphs:
         runs = list(_BACKTICK_RUN_RE.finditer(body, start, end))
@@ -265,10 +314,50 @@ def parse_ship_contract(body: str) -> dict[str, Any] | None:
     }
 
 
+# `(?<![\w-])` rather than `\b`: a hyphenated word such as `hot-fix #1` or
+# `pre-fixes #1` is not a closing keyword, though its suffix would be.
 CLOSING_RE = re.compile(
-    r"(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s*#(\d+)", re.IGNORECASE
+    r"(?<![\w-])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s*"
+    r"(?:(?P<url>https?://[^/\s]+/(?P<url_repo>[\w.-]+/[\w.-]+)/issues/)"
+    r"|(?:(?P<repo>[\w.-]+/[\w.-]+))?#)(?P<number>\d+)\b", re.IGNORECASE
 )
 BARE_REF_RE = re.compile(r"(?<![\w/])#(\d+)")
+
+
+def repository_from_url(url: str) -> tuple[str, str] | None:
+    """Keep the host as well as owner/repo when comparing issue ownership."""
+    parsed = urlsplit(url)
+    match = re.fullmatch(r"/([\w.-]+/[\w.-]+)/(?:issues|pull)/\d+/?", parsed.path)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc or not match:
+        return None
+    return parsed.netloc.lower(), match.group(1).lower()
+
+
+def closing_text(text: str) -> str:
+    """Mask examples without joining words across an ignored Markdown region."""
+    for start, end in sorted(_code_spans(text), reverse=True):
+        text = text[:start] + " " * (end - start) + text[end:]
+    return re.sub(r"<!--(?:.*?-->|.*\Z)", " ", text, flags=re.DOTALL)
+
+
+def pr_issue_references(pr: dict[str, Any], repository: tuple[str, str] | None) -> set[int]:
+    """Union GitHub's links with local prose and established branch ownership."""
+    refs = {ref["number"] for ref in pr.get("closingIssuesReferences", [])
+            if repository is not None and repository_from_url(ref.get("url", "")) == repository}
+    for field in ("title", "body"):
+        for match in CLOSING_RE.finditer(closing_text(pr.get(field) or "")):
+            qualified = match.group("repo") or match.group("url_repo")
+            if qualified:
+                if repository is None or qualified.lower() != repository[1]:
+                    continue
+                if match.group("url") and urlsplit(match.group("url")).netloc.lower() != repository[0]:
+                    continue
+            refs.add(int(match.group("number")))
+    # A bare digit anywhere is not enough: bump-foo-2-3-4 must not claim #2.
+    branch = pr.get("headRefName", "")
+    refs |= {int(n) for n in re.findall(r"(?:^|/)(\d{1,6})-", branch)}
+    refs |= {int(n) for n in re.findall(r"(?i)issues?[-_/](\d{1,6})", branch)}
+    return refs
 
 
 def normalize_label(name: str) -> str:
@@ -516,7 +605,7 @@ def _cache_key(issue_args: list[str]) -> str:
     so a run that asks for one issue's detail reuses the whole-backlog fetch a
     `--select` took seconds earlier — which is the entire point of the cache.
     """
-    return hashlib.sha256("\x00".join(issue_args).encode()).hexdigest()[:16]
+    return hashlib.sha256("\x00".join(["closing-references-v1", *issue_args]).encode()).hexdigest()[:16]
 
 
 def fetch_issues_and_prs(
@@ -547,7 +636,7 @@ def fetch_issues_and_prs(
     issues = run_gh(issue_args)
     prs = run_gh([
         "pr", "list", "--state", "open", "--limit", "100",
-        "--json", "number,title,body,headRefName,isDraft,url",
+        "--json", "number,title,body,headRefName,isDraft,url,closingIssuesReferences",
     ])
     status = "MISS"
     if path and not disabled:
@@ -798,16 +887,10 @@ def main() -> int:
 
     # Map issue number -> open PR that claims to close it.
     claimed: dict[int, dict[str, Any]] = {}
+    repository = next((repo for issue in issues
+                       if (repo := repository_from_url(issue.get("url", ""))) is not None), None)
     for pr in prs:
-        text = f"{pr.get('title', '')}\n{pr.get('body') or ''}\n{pr.get('headRefName', '')}"
-        refs = {int(n) for n in CLOSING_RE.findall(text)}
-        # Branch-name conventions that unambiguously encode an issue number:
-        # "123-slug", "feat/123-slug", "issue-123". A bare digit anywhere in the
-        # branch is not enough — "bump-foo-2-3-4" must not claim issue #2.
-        branch = pr.get("headRefName", "")
-        refs |= {int(n) for n in re.findall(r"(?:^|/)(\d{1,6})-", branch)}
-        refs |= {int(n) for n in re.findall(r"(?i)issues?[-_/](\d{1,6})", branch)}
-        for n in refs:
+        for n in pr_issue_references(pr, repository):
             claimed.setdefault(n, pr)
 
     # Dependency edges are read from every open issue, not just the filtered

@@ -613,6 +613,163 @@ class MainEndToEndTest(DigestRunner, unittest.TestCase):
         self.assertIsNotNone(rec["open_pr"])
         self.assertEqual(rec["open_pr"]["number"], 10)
 
+    def test_pr_template_body_does_not_claim_example_issue(self):
+        body = """## Summary
+
+<!-- What does this PR do? Link related issues with "Closes #123". -->
+<!-- Title should follow Conventional Commits, e.g. "fix: handle empty input". -->
+
+## Test Plan
+
+<!-- How was this tested? What commands did you run? -->
+
+## Checklist
+
+- [ ] Full local verification passes on the committed tree (`just verify`)
+- [ ] Docs updated, if a user-facing behavior, command, or setting changed
+- [ ] `CHANGELOG.md` updated, if this is a user-facing change
+- [ ] Breaking changes called out in the Summary
+"""
+        rc, out, err = self._run(["--json"], [gh_issue(123)], [gh_pr(10, body=body)])
+        self.assertEqual(rc, 0, err)
+        self.assertIsNone(json.loads(out)["issues"][0]["open_pr"])
+
+    def test_pr_examples_and_partial_keywords_do_not_claim_issues(self):
+        bodies = [
+            "<!-- Closes #123 -->",
+            "Before <!-- Closes #123 --> after",
+            "<!-- Closes #123",  # An unfinished template comment stays hidden.
+            "```text\nCloses #123\n```",
+            "~~~\nCloses #123\n~~~",
+            "```text\nCloses #123",
+            "````\n```\nCloses #123\n````",
+            "Example `Closes #123` only",
+            "Example ``Closes #123`` only",
+            "hotfix #123",
+            "encloses #123",
+            "Closes #123suffix",
+        ]
+        for body in bodies:
+            with self.subTest(body=body):
+                rc, out, err = self._run(["--json"], [gh_issue(123)],
+                                          [gh_pr(10, body=body)])
+                self.assertEqual(rc, 0, err)
+                self.assertIsNone(json.loads(out)["issues"][0]["open_pr"])
+
+    def test_pr_indented_code_block_does_not_claim_issue(self):
+        bodies = [
+            "    Closes #123",
+            "\tCloses #123",
+            "  \tCloses #123",
+            "Summary.\n\n    Closes #123\n",
+            "Summary.\n\n    Example:\n\n    Closes #123\n\nMore prose.",
+            "```\nx\n```\n    Closes #123",
+            "<!-- note -->\n    Closes #123",
+        ]
+        for body in bodies:
+            with self.subTest(body=body):
+                rc, out, err = self._run(["--json"], [gh_issue(123)],
+                                          [gh_pr(10, body=body)])
+                self.assertEqual(rc, 0, err)
+                self.assertIsNone(json.loads(out)["issues"][0]["open_pr"])
+
+    def test_pr_indented_line_outside_a_code_block_still_claims_issue(self):
+        bodies = [
+            # An indented code block cannot interrupt a paragraph.
+            "Summary line\n    Closes #123",
+            # List-item continuation, not code.
+            "- Summary\n\n    Closes #123",
+            "1. Summary\n\n    Closes #123",
+            "   Closes #123",
+            "    Example\nFixes #123",
+        ]
+        for body in bodies:
+            with self.subTest(body=body):
+                rc, out, err = self._run(["--json"], [gh_issue(123)],
+                                          [gh_pr(10, body=body)])
+                self.assertEqual(rc, 0, err)
+                self.assertIsNotNone(json.loads(out)["issues"][0]["open_pr"])
+
+    def test_pr_hyphenated_word_ending_in_a_keyword_does_not_claim_issue(self):
+        for body in ("hot-fix #123", "pre-fixes #123", "un-closed #123",
+                     "re-resolves #123"):
+            with self.subTest(body=body):
+                rc, out, err = self._run(["--json"], [gh_issue(123)],
+                                          [gh_pr(10, body=body)])
+                self.assertEqual(rc, 0, err)
+                self.assertIsNone(json.loads(out)["issues"][0]["open_pr"])
+
+    def test_pr_keyword_after_punctuation_or_at_line_start_claims_issue(self):
+        for body in ("Fixes #123", "(fixes #123)", "Summary.\nCloses #123",
+                     "- Resolves #123", "Done; fixed #123."):
+            with self.subTest(body=body):
+                rc, out, err = self._run(["--json"], [gh_issue(123)],
+                                          [gh_pr(10, body=body)])
+                self.assertEqual(rc, 0, err)
+                self.assertIsNotNone(json.loads(out)["issues"][0]["open_pr"])
+
+    def test_pr_closing_references_claim_only_current_repository(self):
+        cases = [
+            ("Closes acme/widgets#7", True),
+            ("Fixes ACME/Widgets#7", True),
+            ("Resolves https://github.com/acme/widgets/issues/7", True),
+            ("Closes other/widgets#7", False),
+            ("Closes https://github.com/other/widgets/issues/7", False),
+            ("Closes https://example.com/acme/widgets/issues/7", False),
+            ("Fixes: #7", True),
+            ("fixed #7", True),
+            ("Resolved #7", True),
+        ]
+        for body, claimed in cases:
+            with self.subTest(body=body):
+                rc, out, err = self._run(["--json"], [gh_issue(7)],
+                                          [gh_pr(10, body=body)])
+                self.assertEqual(rc, 0, err)
+                self.assertEqual(json.loads(out)["issues"][0]["open_pr"] is not None,
+                                 claimed)
+
+    def test_pr_api_references_union_with_prose_and_branch_ownership(self):
+        pr = gh_pr(10, body="Fixes #8", head="codex/9-feature")
+        pr["closingIssuesReferences"] = [
+            {"number": 7, "url": "https://github.com/acme/widgets/issues/7"},
+            {"number": 10, "url": "https://github.com/other/widgets/issues/10"},
+        ]
+        rc, out, err = self._run(["--json"], [gh_issue(n) for n in (7, 8, 9, 10)], [pr])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual({r["number"] for r in json.loads(out)["issues"]
+                          if r["open_pr"] is not None}, {7, 8, 9})
+        fields = next(c for c in self.gh_calls if c[:2] == ["pr", "list"])
+        self.assertIn("closingIssuesReferences", fields[fields.index("--json") + 1])
+
+    def test_pr_api_foreign_repository_same_number_does_not_claim_local_issue(self):
+        for url in ("https://github.com/other/widgets/issues/7",
+                    "https://example.com/acme/widgets/issues/7"):
+            with self.subTest(url=url):
+                pr = gh_pr(10)
+                pr["closingIssuesReferences"] = [{"number": 7, "url": url}]
+                rc, out, err = self._run(["--json"], [gh_issue(7)], [pr])
+                self.assertEqual(rc, 0, err)
+                self.assertIsNone(json.loads(out)["issues"][0]["open_pr"])
+
+    def test_pr_visible_keyword_after_ignored_examples_claims_issue(self):
+        pr = gh_pr(10, title="Example `Closes #6`", body=(
+            "<!-- Closes #6 -->\n```\nCloses #6\n```\nFixes #7"))
+        rc, out, err = self._run(["--json"], [gh_issue(6), gh_issue(7)], [pr])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual({r["number"] for r in json.loads(out)["issues"]
+                          if r["open_pr"] is not None}, {7})
+
+    def test_pr_branch_conventions_preserve_issue_ownership(self):
+        cases = [("7-feature", True), ("feat/7-feature", True),
+                 ("issue-7", True), ("issues/7", True),
+                 ("bump-foo-7-2-3", False), ("hotfix-7", False)]
+        for head, claimed in cases:
+            with self.subTest(head=head):
+                rc, out, err = self._run(["--json"], [gh_issue(7)], [gh_pr(10, head=head)])
+                self.assertEqual(rc, 0, err)
+                self.assertEqual(json.loads(out)["issues"][0]["open_pr"] is not None,
+                                 claimed)
+
     def test_pr_draft_flag_surfaces_in_markdown(self):
         issues = [gh_issue(5, title="claimed")]
         prs = [gh_pr(10, body="Closes #5", draft=True)]
@@ -764,6 +921,17 @@ class ShipContractInCodeTest(unittest.TestCase):
             with self.subTest(tick=tick):
                 body = f"{CONTRACT}\n\nWrite {tick}{self.EXAMPLE}{tick} like so."
                 self.assertEqual(idg.parse_ship_contract(body)["tier"], "P1")
+
+    def test_indented_code_example_is_ignored(self):
+        for indent in ("    ", "\t"):
+            with self.subTest(indent=repr(indent)):
+                body = f"Quoted:\n\n{indent}{self.EXAMPLE}\n\n{CONTRACT}\n"
+                self.assertEqual(idg.parse_ship_contract(body)["tier"], "P1")
+                self.assertEqual(len(idg.find_ship_contracts(body)), 1)
+
+    def test_contract_in_a_list_item_continuation_is_read(self):
+        body = f"- Item\n\n    {CONTRACT}\n"
+        self.assertEqual(idg.parse_ship_contract(body)["tier"], "P1")
 
     def test_only_a_fenced_example_means_no_contract(self):
         self.assertIsNone(idg.parse_ship_contract(f"```\n{self.EXAMPLE}\n```\n"))
