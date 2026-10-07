@@ -169,10 +169,14 @@ jobs:
           enable-cache: true
           python-version: "3.14"
 
+      - name: Install dependencies
+        run: uv sync --group dev --locked
+
       - name: zizmor
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: uvx zizmor .github/workflows/
+          RUST_LOG: zizmor=info
+        run: uv run --locked pre-commit run zizmor --all-files --verbose
 
   # <!-- template-only -->
   # Bootstraps a scratch clone of the commit under test as a sample app, so the

@@ -564,7 +564,9 @@ def test_bootstrap_removes_every_template_only_block_and_the_smoke_job(sample_ap
     ci = texts[".github/workflows/ci.yml"]
     assert "Template Bootstrap Smoke" not in ci
     assert "name: Workflow Security Lint" in ci
-    assert ci.endswith("run: uvx zizmor .github/workflows/\n")
+    assert ci.endswith(
+        "run: uv run --locked pre-commit run zizmor --all-files --verbose\n"
+    )
     assert "This is the" not in texts["README.md"]
     assert "\n\n\n" not in texts["README.md"]
 
