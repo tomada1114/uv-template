@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A Codex issue-to-draft-PR workflow and linked-worktree commands. Worktree
+  cleanup previews one selected branch by default and leaves dirty worktrees or
+  branches with commits beyond the merged PR head in place
 - `.claude/settings.json` with a SessionStart hook that runs `just install`
   (falling back to `uvx --from rust-just just install` when `just` is
   missing) at the start or resume of a Claude Code cloud session, where

@@ -59,7 +59,10 @@ just verify          # Non-mutating gate: lock-check → agents-check → check-
 just check-harness   # Harness drift (skills, Skills table, recipes, ruleset, labels, workflows) + the Product section check
 just test-skills     # Run the unittest suites bundled under .agents/skills/*/scripts/tests
 just run *ARGS       # Run the CLI, e.g. `just run todo list` (uv run --locked my-app ...)
-just worktree-clean  # Remove agent worktrees under .claude/worktrees with a merged PR
+just worktree-prepare # Recreate the locked Python environment in an existing linked worktree
+just worktree-setup ISSUE BRANCH BASE ROOT VERIFY # Provision one issue worktree with its baseline
+just worktree-clean ROOT BRANCH # Preview cleanup of one named, merged worktree
+just worktree-clean-apply ROOT BRANCH # Apply the preview; keeps dirty or unmerged worktrees
 just agents-sync     # Regenerate the .claude/skills mirror from .agents/skills
 just agents-check    # Fail when the skills mirror has drifted
 just clean           # Remove build artifacts and caches
@@ -144,6 +147,7 @@ Skills are authored under `.agents/skills/` (Codex CLI) and mirrored into
 | `authoring-skills` | adding, editing, or reviewing a skill under `.agents/skills/`, or a skill never fires |
 | `building-api-routes` | adding or changing an HTTP route, request or response model, or API dependency, and the TestClient tests for it |
 | `changing-gates` | editing a hook, a CI workflow, the ruleset, or a ruff, mypy, pytest, or coverage setting, or asking whether a change weakens a gate |
+| `codex-cloud-shipping-issue` | implementing one GitHub issue from a Codex-managed checkout through a draft PR, with current-head review and CI evidence; never for merging |
 | `create-pr` | opening or updating a pull request by hand |
 | `designing-clis` | adding or changing a `my-app` command, its arguments, or its output, and the CliRunner tests for it |
 | `designing-core-logic` | adding a use case, domain rule, port, adapter, or `MY_APP_*` setting, or wiring the composition root |

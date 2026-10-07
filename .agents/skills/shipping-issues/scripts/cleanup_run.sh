@@ -25,14 +25,13 @@
 #      (never the default branch), each matched against the merged PR's head
 #      by origin's tip, as reported by that same ls-remote
 #
-# With one or more --branch <name>: the local-branch pass and the remote pass
-# (with --remote) consider ONLY the named branches — each still subject to
+# With one or more --branch <name>: the worktree, local-branch, and optional
+# remote passes consider ONLY the named branches — each still subject to
 # every guard above (merged PR, no open PR on the ref, not the default
-# branch, not checked out in the main checkout or a surviving worktree) — and
-# the automatic worktree-agent-* local pass is skipped, so a named
+# branch, not checked out in the main checkout or a surviving worktree). The
+# automatic worktree-agent-* local pass is skipped, so a named
 # worktree-agent-* branch is deleted only if it independently clears the
-# merged-PR guard. Without --branch, behavior is unchanged. The worktree pass
-# (item 1) is unaffected either way — it is already scoped by --worktree-root.
+# merged-PR guard. Without --branch, behavior is unchanged.
 #
 # Usage: cleanup_run.sh [--dry-run] [--remote] [--worktree-root <path>]
 #                        [--merged-only] [--force] [--branch <name> ...]
@@ -139,6 +138,17 @@ else
       "$worktree_root"/*) ;;
       *) return 0 ;;  # outside the given root — never touch it
     esac
+    if [ ${#wanted_branches[@]} -gt 0 ]; then
+      local selected=0 wanted
+      for wanted in "${wanted_branches[@]}"; do
+        if [ "$wt_branch" = "$wanted" ]; then selected=1; break; fi
+      done
+      if [ "$selected" -ne 1 ]; then
+        echo "SKIPPED (branch not selected with --branch): $wt_path [${wt_branch:-detached HEAD}]"
+        surviving_worktrees="$surviving_worktrees $wt_path"
+        return 0
+      fi
+    fi
     if [ "$merged_only" -eq 1 ]; then
       if [ "$wt_detached" -eq 1 ]; then
         echo "SKIPPED (detached HEAD): $wt_path"
