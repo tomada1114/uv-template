@@ -6,9 +6,10 @@ nowhere else, so swapping a repository is a change to this module only.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from contextlib import ExitStack
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 from my_app.adapters.closed_llm import ClosedLlm
 from my_app.adapters.memory import InMemoryTodoRepository
@@ -17,6 +18,8 @@ from my_app.core.errors import LlmConfigurationError
 from my_app.core.services import TodoService
 
 if TYPE_CHECKING:
+    from types import TracebackType
+
     from my_app.core.ports import Clock, LlmPort, TodoRepository
     from my_app.settings import Settings
 
@@ -26,6 +29,24 @@ class Container:
     """The services an entry point may call, built once per process."""
 
     todos: TodoService
+    _resources: ExitStack = field(default_factory=ExitStack, repr=False, compare=False)
+
+    def close(self) -> None:
+        """Release every resource the composition root registered, at most once."""
+        self._resources.close()
+
+    def __enter__(self) -> Self:
+        """Keep ownership until the surrounding context exits."""
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool:
+        """Forward exception details and suppression to registered resources."""
+        return bool(self._resources.__exit__(exc_type, exc_value, traceback))
 
 
 def utc_now() -> datetime:
@@ -41,13 +62,21 @@ def build_container(settings: Settings, clock: Clock = utc_now) -> Container:
         clock: Stamps new to-dos; tests pass a fixed one.
 
     Returns:
-        The services, ready for an entry point to call.
+        The services and their owned resources, ready for an entry point to
+        call. Close the container, or use it as a context manager, when done.
     """
-    return Container(todos=TodoService(_build_repository(settings), clock))
+    with ExitStack() as resources:
+        repository = _build_repository(settings, resources)
+        todos = TodoService(repository, clock)
+        return Container(todos=todos, _resources=resources.pop_all())
 
 
-def _build_repository(settings: Settings) -> TodoRepository:
-    """Return the SQLite repository when a path is configured, else memory."""
+def _build_repository(settings: Settings, _resources: ExitStack) -> TodoRepository:
+    """Return the SQLite repository when a path is configured, else memory.
+
+    Neither current adapter holds a resource between calls. A resource-holding
+    adapter registers its cleanup on ``_resources`` before returning.
+    """
     if (path := settings.sqlite_path) is not None:
         return SqliteTodoRepository(path)
     return InMemoryTodoRepository()

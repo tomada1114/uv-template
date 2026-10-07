@@ -149,12 +149,30 @@ function that picks it, driven by a setting.
 ```python
 def build_container(settings: Settings, clock: Clock = utc_now) -> Container:
     # ... docstring elided
-    return Container(todos=TodoService(_build_repository(settings), clock))
+    with ExitStack() as resources:
+        todos = TodoService(_build_repository(settings, resources), clock)
+        return Container(todos=todos, _resources=resources.pop_all())
 ```
 
 Tests build containers through the same function: the `make_container` fixture in
 `tests/conftest.py` calls `build_container` with the fixed clock and in-memory storage
 by default, and `tests/test_composition.py` covers the wiring itself.
+
+## An adapter that holds a resource
+
+`build_container` owns an `ExitStack` and passes it to adapter builders. Register a
+resource immediately with `resources.enter_context(adapter)` or
+`resources.callback(adapter.close)`; never close an adapter in a service. A failed
+build closes the stack before propagating the error. A successful build transfers it
+to the frozen `Container`, whose `close()` is idempotent and whose context manager
+forwards exception details to registered context managers on exit and preserves their
+suppression decision. Direct `close()` exits without an active exception. Cleanup
+failures propagate while remaining callbacks still run.
+
+The API builds services in its factory and closes that container in its lifespan;
+the CLI's lazy accessor registers cleanup on the root context. A supplied container
+(`container=` or `obj=`) stays caller-owned: close it explicitly or use it as a context
+manager. Current adapters acquire resources per call and register nothing here.
 
 ## Adding a use case
 
@@ -183,7 +201,8 @@ For a new outside dependency — another store, a remote service, a source of ra
    builds the adapter (choosing between implementations by a `Settings` field when
    there is more than one) and passes it in, and a new service gets its `Container`
    field.
-6. A new setting follows "Settings are read once, at the boundary"; a new driver
+6. An adapter retaining a resource follows "An adapter that holds a resource".
+7. A new setting follows "Settings are read once, at the boundary"; a new driver
    follows "The direction dependencies point".
 
 Run the narrowest checks while iterating: `uv run --locked pytest tests/core/

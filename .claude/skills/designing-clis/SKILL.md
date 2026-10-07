@@ -62,6 +62,9 @@ Commands call `get_container(ctx)` from `cli/context.py` when they need services
 The accessor reuses the nearest supplied `ctx.obj`, including a caller's `obj=` through
 `CliRunner.invoke`. With none supplied, it builds through `build_container(load_settings())`
 and caches on the invocation's root context, so sibling commands share one container.
+It registers the built container's `close()` with the root's `call_on_close`, including
+when a command fails. A supplied `obj=` stays caller-owned and is never closed by the
+CLI.
 Groups do not build services in a callback: subcommand `--help` must work without
 reading settings or creating a database, even under invalid configuration.
 

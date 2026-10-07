@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from http import HTTPStatus
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -23,6 +25,9 @@ from my_app.core.errors import (
 )
 from my_app.settings import Settings
 
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
 APP_TITLE = "My App"
 
 
@@ -39,15 +44,28 @@ def create_app(
         settings: Configuration to build services from; read from the
             environment when omitted. Ignored when ``container`` is given.
         container: Services already built by the composition root. Tests pass
-            one built with a fixed clock; production code leaves it out.
+            one built with a fixed clock; production code leaves it out. The
+            caller owns a supplied container; lifespan shutdown closes only a
+            container this factory builds.
 
     Returns:
         The application, ready for uvicorn or ``TestClient``.
     """
-    app = FastAPI(title=APP_TITLE, version=__version__)
+    owns_container = container is None
     if container is None:
         container = build_container(settings if settings is not None else Settings())
-    app.state.container = container
+    services = container
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            if owns_container:
+                services.close()
+
+    app = FastAPI(title=APP_TITLE, version=__version__, lifespan=lifespan)
+    app.state.container = services
     app.include_router(health.router)
     app.include_router(todos.router)
     # The decorator form, unlike add_exception_handler, type-checks a handler

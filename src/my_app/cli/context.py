@@ -23,5 +23,6 @@ def get_container(ctx: typer.Context) -> Container:
         owner = owner.parent
     if owner.obj is None:
         owner.obj = build_container(load_settings())
+        owner.call_on_close(owner.obj.close)
     container: Container = owner.obj
     return container
