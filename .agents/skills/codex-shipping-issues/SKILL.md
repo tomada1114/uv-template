@@ -1,5 +1,5 @@
 ---
-name: codex-cloud-shipping-issue
+name: codex-shipping-issues
 description: >
   Use when shipping a GitHub issue from a Codex Cloud or Codex-managed checkout through
   a regular pull request, current-head Codex review and CI, and an authorized merge;
@@ -11,14 +11,16 @@ description: >
 
 **Owns:** one issue's acceptance, implementation, local verification, regular PR,
 Codex review, CI evidence, and landing at the user's authorized boundary.
-**Does not own:** backlog-wide shipping (`shipping-issues`), authoring a PR on an
-existing branch (`create-pr`), or the repository's standing permissions.
+**Does not own:** Claude Code's shipping workflow (`shipping-issues`), authoring a PR
+on an existing branch (`create-pr`), or the repository's standing permissions.
 
-This workflow is complete within the checkout: use the sibling skills in
+Codex uses this repository-local skill for issue shipping. A personal skill of the
+same name may exist; this copy owns the repository workflow. This workflow is
+complete within the checkout: use the sibling skills in
 `.agents/skills/` and the reference below. No globally installed
 `codex-shipping-issues`, Git/GitHub workflow, orchestration, or model-routing skill
 is required. Local `shipping-issues` helpers may be reused without invoking its
-full workflow or inheriting its remote-write permissions. Run inline by default.
+Claude Code workflow or inheriting its remote-write permissions. Run inline by default.
 
 ## Authority and stop point
 
@@ -101,8 +103,9 @@ host supports PR attachments.
 
 Read [review, CI and landing](references/review-and-ci.md) before publication.
 When the run records automatic Codex review on PR opening, wait for that initial
-review without immediately posting a duplicate request. Do not assume later pushes
-trigger another review. Observe CI while review runs and fix failures within scope.
+review without immediately posting a duplicate request. Automatic review runs once
+on opening; pushing corrections does not start another automatic review. Request
+a new review explicitly when the reviewed diff changes and authorization covers it. Observe CI while review runs and fix failures within scope.
 After a correction changes the diff, obtain fresh review and CI evidence, using an
 explicit review request within the recorded authorization when necessary.
 

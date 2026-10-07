@@ -7,7 +7,7 @@ Refresh head/base whenever assessing review or CI. A changed head or base that c
 the diff invalidates earlier verdicts. Record review completion IDs and commit identity,
 check names, run URLs and conclusions separately; green CI is not review evidence.
 
-## Observe the opening review
+## Observe the opening-only automatic review
 
 Discover connected review and PR actions. Read submitted reviews, inline threads,
 resolution state, PR conversation and task metadata where available. Follow MCP
@@ -19,6 +19,22 @@ PR and observe that initial run. Record opening time, head/base and review activ
 Do not post an explicit request while that automatic run is active, or interpret the
 initial delay as failure. This is a run-specific setup, not a universal Codex default.
 Do not change review settings or close/reopen the PR to trigger another run.
+
+Record these states independently of CI:
+
+| Review state | Action |
+| --- | --- |
+| Not started / queued | Wait for the opening-triggered run; do not post a duplicate. |
+| Running | Observe its summary/task and CI in bounded waits. |
+| Completed, findings | Read all findings and fix accepted in-scope ones. |
+| Completed, no findings | Verify trusted identity and reviewed head/diff before accepting. |
+| Diff changed after review | Invalidate the verdict; request fresh review explicitly when authorized. |
+| Failed / unavailable | Report the evidence failure; do not infer a clear review from CI. |
+
+A trusted completed summary identifying the current commit, its no-findings signal
+and empty findings/threads together can establish a clean result. Completion alone
+does not mean approval; a completed review can still contain a P1 finding.
+A thumbs-up alone, without terminal state and matching diff, is insufficient.
 
 A terminal result must come from the trusted Codex integration and identify the reviewed
 current diff. Read all findings. A display name, acknowledgement, queued task, reaction,

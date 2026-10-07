@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Rename the repository-local Codex workflow to `codex-shipping-issues` and require
+  it for Codex issue shipping. The existing `shipping-issues` remains Claude Code
+  only. Observe the opening-only automatic review and explicitly request fresh
+  review after a changed diff within the run's authorization
+
 - Codex uses GitHub MCP exclusively for remote GitHub operations, with local Git
   for checkout, commit and push. Missing MCP capabilities are reported without
   invoking `gh` or helpers that call it
