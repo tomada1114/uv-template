@@ -90,7 +90,7 @@ table is `_status_for` in `api/app.py`, and nowhere else:
 |---|---|
 | `TodoNotFoundError` | 404 `HTTPStatus.NOT_FOUND` |
 | `InvalidTodoError` | 422 `HTTPStatus.UNPROCESSABLE_CONTENT` |
-| `LlmConfigurationError` | 503 `HTTPStatus.SERVICE_UNAVAILABLE` — the LLM is closed |
+| `LlmConfigurationError` | 503 `HTTPStatus.SERVICE_UNAVAILABLE` — the LLM is closed or unusable: no key, a key the provider rejects, or a proxy setting the client cannot use |
 | `LlmRateLimitError` | 429 `HTTPStatus.TOO_MANY_REQUESTS` |
 | `LlmTimeoutError` | 504 `HTTPStatus.GATEWAY_TIMEOUT` |
 | `LlmProviderError` | 502 `HTTPStatus.BAD_GATEWAY` |

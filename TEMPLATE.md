@@ -97,8 +97,9 @@ its values (`core/llm.py`) are plain Python, and adapters implement it: a
   protect until an app writes one. 503 rather than 500, because here a 500
   means a bug and an unconfigured feature is not one.
 - **Bounded retries inside one deadline.** Two retries on 429, 502, 503, or
-  a failed connect, waiting 0.5 s then 1.0 s or the provider's `Retry-After`
-  up to 8 s; a longer `Retry-After` ends the call. `timeout` is one budget
+  a connect error (never on a timeout, a connect timeout included), waiting
+  0.5 s then 1.0 s or the provider's `Retry-After` up to 8 s; a longer
+  `Retry-After` ends the call. `timeout` is one budget
   for the call, retries included, so retries never multiply it; callers default
   to 60 s. Each network phase is bounded by the budget left and the deadline is
   checked between phases, body chunks, and attempts, so a pathologically slow
