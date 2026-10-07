@@ -485,8 +485,10 @@ def test_hygiene_findings_reusable_workflow_call_needs_pin_not_timeout(
     )
 
     assert hygiene_findings(make_workflow(text)) == [
-        f"{W}: job 'call': `uses: org/repo/.github/workflows/x.yml@main` is not "
-        "pinned to a full commit SHA"
+        (
+            f"{W}: job 'call': `uses: org/repo/.github/workflows/x.yml@main` is not "
+            "pinned to a full commit SHA"
+        )
     ]
 
 
@@ -641,8 +643,10 @@ def test_hygiene_findings_action_yaml_extension_is_read(tmp_path: Path) -> None:
     )
 
     assert hygiene_findings(tmp_path) == [
-        f"{ACTIONS_DIR}/x/action.yaml: step 1: `uses: actions/checkout@main` is not "
-        "pinned to a full commit SHA"
+        (
+            f"{ACTIONS_DIR}/x/action.yaml: step 1: `uses: actions/checkout@main` is not "
+            "pinned to a full commit SHA"
+        )
     ]
 
 

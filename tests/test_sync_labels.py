@@ -70,8 +70,10 @@ def test_parse_labels_reads_quoted_and_bare_values() -> None:
         ("  name: a\n", r"outside a list item"),
         ("labels:\n", r"unexpected content"),
         (
-            "- name: a\n  color: ffffff\n  description: x\n"
-            "- name: a\n  color: ffffff\n  description: y\n",
+            (
+                "- name: a\n  color: ffffff\n  description: x\n"
+                "- name: a\n  color: ffffff\n  description: y\n"
+            ),
             r"duplicated label names: \['a'\]",
         ),
     ],

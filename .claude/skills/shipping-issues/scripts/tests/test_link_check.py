@@ -61,7 +61,7 @@ class Run:
     `--body-file` edit with its exit code, every `sleep` argument, and the
     files the script left in its TMPDIR (read before that dir is removed)."""
 
-    def __init__(self, proc, calls, body_edits, saved_bodies, sleeps, leftovers):
+    def __init__(self, proc, calls, *, body_edits, saved_bodies, sleeps, leftovers):
         self.proc = proc
         self.calls = calls
         self.body_edits = body_edits
@@ -103,8 +103,9 @@ def run_resave(args, responses, *, sequences=None, exits=None, sleep_body=None):
         leftovers = {
             f.name: f.read_text(encoding="utf-8") for f in Path(tmp_td).iterdir()
         }
-        return Run(proc, list(fake.calls), fake.body_edits, fake.saved_bodies,
-                   sleeps, leftovers)
+        return Run(proc, list(fake.calls), body_edits=fake.body_edits,
+                   saved_bodies=fake.saved_bodies, sleeps=sleeps,
+                   leftovers=leftovers)
 
 
 def base_prefix(pr):

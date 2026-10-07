@@ -58,14 +58,18 @@ def cooldown_findings(root: Path) -> list[str]:
     match = _DAYS.match(window) if isinstance(window, str) else None
     if match is None:
         return [
-            f"{PYPROJECT}: [tool.uv] exclude-newer is {window!r}, not a day count "
-            f"({DEPENDABOT}'s uv cooldown must equal it)"
+            (
+                f"{PYPROJECT}: [tool.uv] exclude-newer is {window!r}, not a day count "
+                f"({DEPENDABOT}'s uv cooldown must equal it)"
+            )
         ]
     days = match["days"] or match["iso"]
     if not cooldown.isdigit() or int(cooldown) != int(days):
         return [
-            f"{DEPENDABOT}: the uv cooldown.default-days is {cooldown!r}, but "
-            f"{PYPROJECT}'s exclude-newer is {days} days; change both together"
+            (
+                f"{DEPENDABOT}: the uv cooldown.default-days is {cooldown!r}, but "
+                f"{PYPROJECT}'s exclude-newer is {days} days; change both together"
+            )
         ]
     return []
 
@@ -126,8 +130,10 @@ def test_cooldown_findings_different_days_fails(make_root: MakeRoot) -> None:
     )
 
     assert cooldown_findings(root) == [
-        f"{DEPENDABOT}: the uv cooldown.default-days is '7', but {PYPROJECT}'s "
-        "exclude-newer is 14 days; change both together"
+        (
+            f"{DEPENDABOT}: the uv cooldown.default-days is '7', but {PYPROJECT}'s "
+            "exclude-newer is 14 days; change both together"
+        )
     ]
 
 
@@ -140,6 +146,8 @@ def test_cooldown_findings_absolute_window_fails_closed(make_root: MakeRoot) -> 
     )
 
     assert cooldown_findings(root) == [
-        f"{PYPROJECT}: [tool.uv] exclude-newer is '2026-07-21T00:00:00Z', not a day "
-        f"count ({DEPENDABOT}'s uv cooldown must equal it)"
+        (
+            f"{PYPROJECT}: [tool.uv] exclude-newer is '2026-07-21T00:00:00Z', not a day "
+            f"count ({DEPENDABOT}'s uv cooldown must equal it)"
+        )
     ]

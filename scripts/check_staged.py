@@ -257,28 +257,40 @@ class AllowlistProblemKind(str, enum.Enum):
 ALLOWLIST_REMEDIES: Final[dict[AllowlistProblemKind, tuple[str, str]]] = {
     AllowlistProblemKind.FILE: (
         f"a regular UTF-8 text file named {ALLOWLIST_PATH} at the repository root",
-        f"replace it with a regular UTF-8 file, git add {ALLOWLIST_PATH}, "
-        "and commit again",
+        (
+            f"replace it with a regular UTF-8 file, git add {ALLOWLIST_PATH}, "
+            "and commit again"
+        ),
     ),
     AllowlistProblemKind.SYNTAX: (
-        "`path <file>` or `content <file> <blob id>` below a `# reason` comment, "
-        "the file's path from the repository root, unquoted, as "
-        "`git -c core.quotePath=false ls-files --full-name` prints it",
-        f"fix line {{line}} of {ALLOWLIST_PATH}, git add {ALLOWLIST_PATH}, "
-        "and commit again",
+        (
+            "`path <file>` or `content <file> <blob id>` below a `# reason` comment, "
+            "the file's path from the repository root, unquoted, as "
+            "`git -c core.quotePath=false ls-files --full-name` prints it"
+        ),
+        (
+            f"fix line {{line}} of {ALLOWLIST_PATH}, git add {ALLOWLIST_PATH}, "
+            "and commit again"
+        ),
     ),
     AllowlistProblemKind.TOO_BROAD: (
         'one exact file per entry; globs, directories, and "." are not accepted',
-        "list each file on its own line (`git ls-files -- <directory>` prints "
-        f"them), git add {ALLOWLIST_PATH}, and commit again",
+        (
+            "list each file on its own line (`git ls-files -- <directory>` prints "
+            f"them), git add {ALLOWLIST_PATH}, and commit again"
+        ),
     ),
     AllowlistProblemKind.STALE: (
-        "every entry names a file in this commit that the gate would otherwise "
-        "refuse; a content entry carries the file's current blob id "
-        "(`git rev-parse :<file>`)",
-        f"remove line {{line}} of {ALLOWLIST_PATH} if this change deleted or "
-        "renamed its file; any other edit to it is a human's reviewed decision; "
-        f"then git add {ALLOWLIST_PATH} and commit again",
+        (
+            "every entry names a file in this commit that the gate would otherwise "
+            "refuse; a content entry carries the file's current blob id "
+            "(`git rev-parse :<file>`)"
+        ),
+        (
+            f"remove line {{line}} of {ALLOWLIST_PATH} if this change deleted or "
+            "renamed its file; any other edit to it is a human's reviewed decision; "
+            f"then git add {ALLOWLIST_PATH} and commit again"
+        ),
     ),
 }
 

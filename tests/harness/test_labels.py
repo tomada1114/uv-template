@@ -371,8 +371,10 @@ def test_label_findings_two_ecosystems_one_without_labels_fails(
     root = make_root({DEPENDABOT: TWO_ECOSYSTEMS.format(uv_labels="")})
 
     assert label_findings(root) == [
-        f"{DEPENDABOT}: the 'uv' update sets no `labels:`; with more than one "
-        "ecosystem Dependabot adds an undeclared ecosystem label"
+        (
+            f"{DEPENDABOT}: the 'uv' update sets no `labels:`; with more than one "
+            "ecosystem Dependabot adds an undeclared ecosystem label"
+        )
     ]
 
 

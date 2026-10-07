@@ -24,7 +24,7 @@ from _fakegh import FakeGh  # noqa: E402
 import issue_digest as idg  # noqa: E402
 
 
-def gh_issue(number, title="issue", labels=None, body="", updated=None,
+def gh_issue(number, title="issue", labels=None, *, body="", updated=None,
              created=None, milestone=None, assignees=None):
     updated = updated or "2026-01-01T00:00:00Z"
     created = created or updated
@@ -396,7 +396,7 @@ class DigestRunner:
     inheriting it from a TestCase would re-run that class's own tests inside
     each of them."""
 
-    def _run(self, args, issues, prs=None, path_override=None,
+    def _run(self, args, issues, prs=None, *, path_override=None,
              state_dir=None, cache=False):
         """Run main() once. `cache=True` re-enables the digest cache (FakeGh
         disables it by default) and `state_dir` pins where it lives, so a test
