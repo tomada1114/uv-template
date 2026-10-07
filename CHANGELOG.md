@@ -323,6 +323,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `shipping-issues`' `link_check.sh` read every PR body as having no closing
+  keyword under mawk 1.3.4 (Ubuntu 24.04's default awk, and the Claude Code
+  cloud VM's), which panics on the `{0,3}` interval in its fence regex; it now
+  spells the 0-3 spaces as an alternation, and `test_shell_syntax.py` rejects
+  an interval in any bundled script's awk regex
 - Security Audit no longer lets a dispatched scan replace a pending scheduled
   one (or the reverse): outside pull requests its concurrency group is keyed
   per run. Dependency Review's concurrency comment now describes what it does
