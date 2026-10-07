@@ -161,6 +161,14 @@ project environment. Its tests sit beside it in `scripts/tests/test_*.py`, writt
 `.agents/skills/*/scripts/tests/` suite — a new skill's tests are picked up without a
 runner change.
 
+The floor is Python 3.9 (macOS's `/usr/bin/python3`) and bash 3.2 (macOS's
+`/bin/bash`). Ruff holds the scripts to 3.9 syntax (`pyproject.toml`'s
+`per-file-target-version`), CI's `Skill Scripts (Python 3.9)` job runs every suite
+under 3.9, and the `shellcheck` pre-commit hook (also run by CI's `Lint & Type
+Check`) lints every `.sh`. bash 3.2 is checked only locally: `test_shell_syntax.py`
+parses each script with `/bin/bash`, which is 3.2 on a Mac and bash 5 on CI's Linux
+runners, so CI cannot check it.
+
 Ruff lints these scripts with the scoped relaxations in `pyproject.toml`'s
 `[tool.ruff.lint.per-file-ignores]` and leaves their layout alone
 (`[tool.ruff.format] exclude`), because the scripts are ported from the sibling
