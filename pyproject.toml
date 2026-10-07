@@ -183,8 +183,10 @@ runtime-evaluated-decorators = [
 ]
 
 # The core (src/my_app/core) must stay framework- and I/O-free so every entry
-# point and adapter can share it. These modules are banned everywhere, then
-# allowed back below only in the layers that exist to use them.
+# point and adapter can share it. ALLOWED_STDLIB in tests/core/test_imports.py
+# is the authoritative import rule; these editor-time checks are a fast subset.
+# These modules are banned everywhere, then allowed back below only in the
+# layers that exist to use them.
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "fastapi".msg = "the core is framework-free; use fastapi only in my_app.api"
 "typer".msg = "the core is framework-free; use typer only in my_app.cli"
