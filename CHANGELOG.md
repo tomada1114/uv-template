@@ -36,6 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.github/actions/` (`action.yml` or `action.yaml`): each step's `uses:` must be
   pinned to a commit SHA with a `# v` comment, a checkout must not keep its
   credentials, and no step may set `continue-on-error`
+- The harness's recipe check now also reads README.md, CONTRIBUTING.md,
+  `docs/**`, and the agent definitions (`.claude/agents/`, `.codex/agents/`),
+  so a renamed or removed `just` recipe they still name fails `just verify`.
+  CHANGELOG.md and a superseded or rejected ADR are history and stay unread
 - Seven process skills under `.agents/skills/` (mirrored to
   `.claude/skills/`): `writing-tests` and `placing-tests` (replacing
   `tests/AGENTS.md`), `tdd`, `managing-dependencies` (the `exclude-newer`

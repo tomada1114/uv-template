@@ -1,8 +1,14 @@
-"""(c) Every ``just <recipe>`` the agent-facing documents name exists.
+"""(c) Every ``just <recipe>`` the agent- and human-facing documents name exists.
 
-A renamed or removed recipe must not leave AGENTS.md, CLAUDE.md, a skill, or a
-file under ``.github/`` pointing an agent at nothing. Only code is read, so
-English prose ("just to be safe") never counts:
+A renamed or removed recipe must not leave AGENTS.md, CLAUDE.md, a skill, a
+file under ``.github/``, README.md, CONTRIBUTING.md, a document under
+``docs/``, or an agent definition (``.claude/agents/*.md``,
+``.codex/agents/*.toml``) pointing a reader at nothing. Each is optional: a
+missing file or directory names nothing, and a present file that is not UTF-8
+fails the check. Two kinds of record are history, not instructions, so they
+are not read: CHANGELOG.md, and an ADR under ``docs/architecture/adr/`` whose
+status line reads Superseded or Rejected (its body stays as it was decided).
+Only code is read, so English prose ("just to be safe") never counts:
 
 - in Markdown and in YAML text (issue forms and comments render as Markdown),
   the inline code spans and the lines of a shell-fenced block (a bare fence
@@ -41,11 +47,19 @@ JUSTFILE = "justfile"
 DOCUMENT_GLOBS = (
     "AGENTS.md",
     "CLAUDE.md",
+    "README.md",
+    "CONTRIBUTING.md",
+    "docs/**/*.md",
     ".agents/skills/**/*.md",
+    ".claude/agents/**/*.md",
+    ".codex/agents/**/*.toml",
     ".github/**/*.md",
     ".github/**/*.yml",
     ".github/**/*.yaml",
 )
+ADR_GLOB = "docs/architecture/adr/[0-9][0-9][0-9][0-9]-*.md"
+# An ADR in one of these states keeps its body as it was decided.
+FROZEN_ADR_STATUSES = ("Superseded", "Rejected")
 SKILL_SCRIPTS = ".agents/skills/*/scripts/*.py"
 WORKFLOW_PARENT = ".github/workflows"
 # Column-0 justfile lines that look like a recipe header but are not one.
@@ -66,6 +80,7 @@ _FENCE = re.compile(r"^\s*(?:`{3,}|~{3,})\s*(?P<info>[\w-]*)")
 # prompt template, a python one) is prose whose inline spans alone count.
 SHELL_FENCES = frozenset({"bash", "sh", "shell", "console", "zsh"})
 _SPAN = re.compile(r"`([^`]+)`")
+_ADR_STATUS = re.compile(r"^\s*-\s+\*\*Status:\*\*\s*(?P<status>.*)$", re.MULTILINE)
 
 
 def justfile_recipes(text: str) -> set[str]:
@@ -141,11 +156,18 @@ def script_snippets(text: str) -> Iterator[tuple[int, str]]:
                 )
 
 
+def _is_frozen_adr(path: Path) -> bool:
+    """Whether an ADR's first status line marks it superseded or rejected."""
+    status = _ADR_STATUS.search(path.read_text(encoding="utf-8"))
+    return status is not None and status["status"].startswith(FROZEN_ADR_STATUSES)
+
+
 def documents(root: Path) -> list[Path]:
     """Return every document this check reads, sorted and without repeats."""
     patterns = (*DOCUMENT_GLOBS, SKILL_SCRIPTS)
     found = {path for pattern in patterns for path in root.glob(pattern)}
-    return sorted(path for path in found if path.is_file())
+    frozen = {path for path in root.glob(ADR_GLOB) if _is_frozen_adr(path)}
+    return sorted(path for path in found - frozen if path.is_file())
 
 
 def _snippets(path: Path, root: Path) -> list[tuple[int, str]]:
@@ -303,6 +325,38 @@ def test_recipe_findings_existing_or_no_recipe_passes(
             4,
             id="issue-form",
         ),
+        pytest.param(
+            "README.md", "# App\n\n```bash\njust docs # build\n```\n", 4, id="readme"
+        ),
+        pytest.param(
+            "CONTRIBUTING.md",
+            "## Commands\n\nRun `just test`, then `just docs`.\n",
+            3,
+            id="contributing",
+        ),
+        pytest.param(
+            "docs/architecture/roadmap.md", "- Now: `just docs`\n", 1, id="docs-roadmap"
+        ),
+        pytest.param(
+            "docs/architecture/adr/0001-store.md",
+            "# ADR-0001: Store\n\n- **Status:** Accepted 2026-01-01\n\n"
+            "Run `just docs`.\n",
+            5,
+            id="accepted-adr",
+        ),
+        pytest.param(
+            ".claude/agents/executor.md",
+            "---\nname: executor\n---\n\nRun `just docs` before reporting.\n",
+            5,
+            id="claude-agent",
+        ),
+        pytest.param(
+            ".codex/agents/executor.toml",
+            'name = "executor"\ndeveloper_instructions = """\n'
+            'Run `just docs` before reporting.\n"""\n',
+            3,
+            id="codex-agent",
+        ),
     ],
 )
 def test_recipe_findings_missing_recipe_names_file_and_recipe(
@@ -360,6 +414,59 @@ def test_recipe_findings_other_justfile_is_reported(
     assert len(findings) == 1
     assert findings[0].startswith("AGENTS.md:")
     assert f"`just {flag}` names another justfile" in findings[0]
+
+
+@pytest.mark.parametrize(
+    ("relative", "text"),
+    [
+        pytest.param(
+            "docs/architecture/adr/0002-old.md",
+            "# ADR-0002: Old\n\n- **Status:** Superseded by [ADR-0003](0003-new.md) "
+            "2026-02-01\n\nRun `just docs`.\n",
+            id="superseded-adr",
+        ),
+        pytest.param(
+            "docs/architecture/adr/0004-no.md",
+            "# ADR-0004: No\n\n- **Status:** Rejected 2026-02-01\n\nRun `just docs`.\n",
+            id="rejected-adr",
+        ),
+        pytest.param(
+            "CHANGELOG.md", "## [1.0.0]\n\n- Removed `just docs`.\n", id="changelog"
+        ),
+    ],
+)
+def test_recipe_findings_historical_record_is_not_read(
+    make_root: MakeRoot, relative: str, text: str
+) -> None:
+    assert recipe_findings(make_root({relative: text})) == []
+
+
+def test_recipe_findings_adr_status_in_a_later_line_is_ignored(
+    make_root: MakeRoot,
+) -> None:
+    text = (
+        "# ADR-0005: Partly\n\n- **Status:** Accepted 2026-01-01\n\n"
+        "Run `just docs`.\n\n- **Status:** Superseded is only quoted here\n"
+    )
+
+    findings = recipe_findings(
+        make_root({"docs/architecture/adr/0005-partly.md": text})
+    )
+
+    assert findings == [
+        f"docs/architecture/adr/0005-partly.md:5: `just docs` names no recipe in "
+        f"the {JUSTFILE}"
+    ]
+
+
+def test_recipe_findings_undecodable_document_fails_closed(
+    make_root: MakeRoot,
+) -> None:
+    root = make_root({})
+    (root / "README.md").write_bytes(b"Run `just docs` \xff\n")
+
+    with pytest.raises(UnicodeDecodeError):
+        recipe_findings(root)
 
 
 def test_recipe_findings_without_justfile_fails(tmp_path: Path) -> None:

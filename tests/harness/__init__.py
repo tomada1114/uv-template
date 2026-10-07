@@ -10,7 +10,9 @@ repository and fails on a fixture built under ``tmp_path``:
   ``SKILL.md`` exists;
 - (b) ``test_skills.py``: AGENTS.md's Skills table lists exactly those skills;
 - (c) ``test_just_recipes.py``: every ``just <recipe>`` named in AGENTS.md,
-  CLAUDE.md, the skills, and ``.github/**`` exists in the justfile;
+  CLAUDE.md, the skills, ``.github/**``, README.md, CONTRIBUTING.md,
+  ``docs/**`` (bar a superseded or rejected ADR), and the agent definitions
+  exists in the justfile;
 - (d) ``test_ruleset_contexts.py``: every required context in
   ``.github/rulesets/main.json`` is a job that runs on every pull request and
   cannot be skipped, and one with ``needs:`` has a step that fails when a
