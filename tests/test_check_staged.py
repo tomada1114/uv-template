@@ -32,6 +32,10 @@ PRE_COMMIT_CONFIG = REPO_ROOT / ".pre-commit-config.yaml"
 HOOK_ID = "check-staged"
 BLOCKED = 1
 GIT_FAILED = 2
+ALLOWLIST_INVALID = 3
+ALLOWLIST = ".check-staged-allow"
+OID40 = "3b18e512dba79e4c8300dd08aeb37f8e728b8dad"
+OID64 = "0123456789abcdef" * 4
 
 
 def _load_module() -> ModuleType:
@@ -153,6 +157,33 @@ def make_repo(tmp_path: Path) -> Callable[..., GitRepo]:
         return repo
 
     return factory
+
+
+def _allow(repo: GitRepo, *lines: str) -> None:
+    """Write `.check-staged-allow` from `lines` and stage it."""
+    repo.stage(ALLOWLIST, "".join(f"{line}\n" for line in lines))
+
+
+def _blob_id(repo: GitRepo, relative: str) -> str:
+    """Return the blob id staged at `relative`, as `git rev-parse :<path>` prints it."""
+    return repo.git("rev-parse", f":{relative}").stdout.strip()
+
+
+def _logging_git(tmp_path: Path) -> tuple[Path, Path]:
+    """Return a directory holding a `git` that logs its argv, and the log file."""
+    real_git = shutil.which("git")
+    assert real_git is not None
+    log = tmp_path / "git-calls.log"
+    wrapper_dir = tmp_path / "bin"
+    wrapper_dir.mkdir()
+    wrapper = wrapper_dir / "git"
+    wrapper.write_text(
+        f'#!/bin/sh\nprintf "%s\\n" "$*" >> {shlex.quote(str(log))}\n'
+        f'exec {shlex.quote(real_git)} "$@"\n',
+        encoding="utf-8",
+    )
+    wrapper.chmod(0o755)
+    return wrapper_dir, log
 
 
 def _load_pre_commit_config() -> dict[str, object]:
@@ -500,6 +531,545 @@ def test_check_reads_all_blobs_with_one_cat_file_batch(
 
 
 # --------------------------------------------------------------------------- #
+#  The allowlist, parsed on its own
+# --------------------------------------------------------------------------- #
+
+
+def _problems(text: str) -> list[tuple[str, int | None]]:
+    _, problems = check_staged.parse_allowlist(text)
+    return [(problem.kind.name, problem.line) for problem in problems]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param("", id="empty"),
+        pytest.param("# a reason\n# and another\n", id="comments-only"),
+        pytest.param("\n   \n\t\n", id="blank-only"),
+    ],
+)
+def test_parse_allowlist_without_entries_is_empty(text: str) -> None:
+    allowlist, problems = check_staged.parse_allowlist(text)
+
+    assert (allowlist.entries, problems) == ((), [])
+
+
+def test_parse_allowlist_valid_entries_keep_their_line_numbers() -> None:
+    text = (
+        "# Public root CA; holds no private key.\n"
+        "path deploy/certs/ca.pem\n"
+        "\n"
+        "# Fake key and token the parser tests feed in.\n"
+        "path tests/fixtures/secrets/aws.txt\n"
+        f"content tests/fixtures/secrets/aws.txt {OID40}\n"
+        f"content tests/data/a b.txt {OID64}\n"
+    )
+
+    allowlist, problems = check_staged.parse_allowlist(text)
+
+    entry = check_staged.AllowEntry
+    assert problems == []
+    assert allowlist.entries == (
+        entry(kind="path", path="deploy/certs/ca.pem", blob_id=None, line=2),
+        entry(kind="path", path="tests/fixtures/secrets/aws.txt", blob_id=None, line=5),
+        entry(
+            kind="content",
+            path="tests/fixtures/secrets/aws.txt",
+            blob_id=OID40,
+            line=6,
+        ),
+        entry(kind="content", path="tests/data/a b.txt", blob_id=OID64, line=7),
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "line"),
+    [
+        pytest.param("# r\nallow a.pem\n", 2, id="unknown-keyword"),
+        pytest.param("# r\n  path a.pem\n", 2, id="leading-whitespace"),
+        pytest.param("# r\npath\n", 2, id="path-without-path"),
+        pytest.param("# r\npath \n", 2, id="path-with-empty-path"),
+        pytest.param("# r\ncontent a.txt\n", 2, id="content-without-id"),
+        pytest.param(f"# r\ncontent a.txt {OID40.upper()}\n", 2, id="upper-case-id"),
+        pytest.param(f"# r\ncontent a.txt {OID40[:39]}\n", 2, id="39-hex-id"),
+        pytest.param("# r\npath /abs/file.pem\n", 2, id="absolute"),
+        pytest.param("# r\npath C:/file.pem\n", 2, id="drive-letter"),
+        pytest.param("# r\npath docs\\id_rsa-rotation.md\n", 2, id="backslash"),
+        pytest.param("# r\npath a//b.pem\n", 2, id="empty-segment"),
+        pytest.param("# r\npath ./a.pem\n", 2, id="dot-segment"),
+        pytest.param("# r\npath a/../b.pem\n", 2, id="dot-dot-segment"),
+        pytest.param("# r\npath a.pem \n", 2, id="trailing-space"),
+        pytest.param("# r\npath a\0b.pem\n", 2, id="nul-character"),
+        pytest.param("path a.pem\n", 1, id="no-reason-at-start"),
+        pytest.param("# r\n\npath a.pem\n", 3, id="blank-after-reason"),
+        pytest.param("# r\npath a.pem\npath a.pem\n", 3, id="duplicate"),
+    ],
+)
+def test_parse_allowlist_malformed_line_is_a_syntax_problem(
+    text: str, line: int
+) -> None:
+    assert _problems(text) == [("SYNTAX", line)]
+
+
+def test_parse_allowlist_duplicate_names_the_first_line() -> None:
+    _, problems = check_staged.parse_allowlist(
+        "# r\npath a.pem\n\n# again\npath a.pem\n"
+    )
+
+    (problem,) = problems
+    assert (problem.line, problem.detail) == (5, "duplicates line 2")
+
+
+def test_parse_allowlist_reports_every_problem_in_line_order() -> None:
+    text = "path a.pem\n# r\npath *\npath ok.pem\nwhat\n"
+
+    assert _problems(text) == [("SYNTAX", 1), ("TOO_BROAD", 3), ("SYNTAX", 5)]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        pytest.param("*", id="star"),
+        pytest.param("**", id="double-star"),
+        pytest.param("*.pem", id="extension-glob"),
+        pytest.param("secrets/*", id="directory-glob"),
+        pytest.param("id_rsa?", id="question-mark"),
+        pytest.param("tests/fixtures/secrets/", id="trailing-slash"),
+        pytest.param(".", id="dot"),
+    ],
+)
+@pytest.mark.parametrize(
+    "template",
+    [
+        pytest.param("path {}", id="path"),
+        pytest.param(f"content {{}} {OID40}", id="content"),
+    ],
+)
+def test_parse_allowlist_broad_path_is_too_broad(path: str, template: str) -> None:
+    text = f"# Everything, please.\n{template.format(path)}\n"
+
+    assert _problems(text) == [("TOO_BROAD", 2)]
+
+
+VALID_ALLOWLIST = f"# r\npath a.pem\ncontent b.txt {OID40}\n"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param(VALID_ALLOWLIST.replace("\n", "\r\n"), id="crlf"),
+        pytest.param(f"\ufeff{VALID_ALLOWLIST}", id="bom"),
+    ],
+)
+def test_parse_allowlist_crlf_and_bom_parse_like_lf(text: str) -> None:
+    expected = check_staged.parse_allowlist(VALID_ALLOWLIST)
+
+    assert check_staged.parse_allowlist(text) == expected
+    assert (len(expected[0].entries), expected[1]) == (2, [])
+
+
+def test_parse_allowlist_problem_detail_never_echoes_the_line() -> None:
+    token = SECRET_SAMPLES["GitHub token"]
+    text = "\n".join(
+        [
+            f"path {token}",
+            "# r",
+            f"what {token}",
+            f" path {token}",
+            f"path {token}/",
+            f"path {token}*",
+            f"path /{token}",
+            f"content {token}",
+            f"content {token} {token}",
+            f"path {token} ",
+            f"path {token}",
+            f"path {token}",
+        ],
+    )
+
+    _, problems = check_staged.parse_allowlist(text)
+
+    assert len(problems) == 10
+    assert [problem for problem in problems if token in problem.detail] == []
+
+
+# --------------------------------------------------------------------------- #
+#  The allowlist against a real index
+# --------------------------------------------------------------------------- #
+
+ROTATION_DOC = "docs/id_rsa-rotation.md"
+CA_CERT = "deploy/certs/ca.pem"
+GITHUB_FIXTURE = "tests/data/fake_token.txt"
+PUBLIC_CERT = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
+
+
+def _stale(line: int) -> str:
+    return f"ERR_STAGED_ALLOWLIST_STALE: .check-staged-allow:{line}:"
+
+
+def test_check_path_entry_lets_a_blocked_path_through(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    repo = make_repo()
+    repo.stage(ROTATION_DOC, "How we rotate SSH keys.\n")
+    _allow(repo, "# A runbook about keys, not a key.", f"path {ROTATION_DOC}")
+
+    result = repo.run_check()
+
+    assert (result.returncode, result.stderr) == (0, "")
+
+
+def test_check_blocked_path_without_an_entry_is_refused(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    repo = make_repo()
+    repo.stage(ROTATION_DOC, "How we rotate SSH keys.\n")
+    _allow(repo, "# Nothing exempt yet.")
+
+    result = repo.run_check()
+
+    assert result.returncode == BLOCKED
+    assert f"refused {ROTATION_DOC}: an id_rsa* file is an SSH key" in result.stderr
+
+
+def test_check_path_entry_does_not_skip_the_content_scan(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    fixture = "tests/fixtures/secrets/aws.txt"
+    repo = make_repo()
+    repo.stage(fixture, f"{_aws_key()}\n")
+    _allow(repo, "# Fake AWS key the parser tests feed in.", f"path {fixture}")
+
+    result = repo.run_check()
+
+    assert result.returncode == BLOCKED
+    assert (
+        f"refused {fixture}: content matches the AWS access key pattern"
+        in result.stderr
+    )
+
+
+def test_check_path_and_content_entries_together_pass(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    fixture = "tests/fixtures/secrets/aws.txt"
+    repo = make_repo()
+    repo.stage(fixture, f"{_aws_key()}\n")
+    _allow(
+        repo,
+        "# Fake AWS key the parser tests feed in.",
+        f"path {fixture}",
+        f"content {fixture} {_blob_id(repo, fixture)}",
+    )
+
+    result = repo.run_check()
+
+    assert (result.returncode, result.stderr) == (0, "")
+
+
+def test_check_content_entry_lets_that_exact_content_through(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    repo = make_repo()
+    repo.stage(GITHUB_FIXTURE, f"{SECRET_SAMPLES['GitHub token']}\n")
+    _allow(
+        repo,
+        "# A fake token the client tests send.",
+        f"content {GITHUB_FIXTURE} {_blob_id(repo, GITHUB_FIXTURE)}",
+    )
+
+    result = repo.run_check()
+
+    assert (result.returncode, result.stderr) == (0, "")
+
+
+def test_check_edited_content_is_judged_again(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    token = SECRET_SAMPLES["GitHub token"]
+    repo = make_repo()
+    repo.stage(GITHUB_FIXTURE, f"{token}\n")
+    _allow(
+        repo,
+        "# A fake token the client tests send.",
+        f"content {GITHUB_FIXTURE} {_blob_id(repo, GITHUB_FIXTURE)}",
+    )
+    repo.stage(GITHUB_FIXTURE, f"{token}\nand a second line\n")
+
+    result = repo.run_check()
+
+    assert result.returncode == ALLOWLIST_INVALID
+    assert _stale(2) in result.stderr
+    assert (
+        f"refused {GITHUB_FIXTURE}: content matches the GitHub token pattern"
+        in result.stderr
+    )
+    assert token not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        pytest.param("path *", id="path-star"),
+        pytest.param(f"content * {OID40}", id="content-star"),
+    ],
+)
+def test_check_star_entry_exempts_nothing(
+    make_repo: Callable[..., GitRepo], entry: str
+) -> None:
+    repo = make_repo()
+    repo.stage(".env", "TOKEN=1\n")
+    repo.stage("secrets/db.yml", "password: hunter2\n")
+    _allow(repo, "# Everything, please.", entry)
+
+    result = repo.run_check()
+
+    assert result.returncode == ALLOWLIST_INVALID
+    assert "ERR_STAGED_ALLOWLIST_TOO_BROAD: .check-staged-allow:2:" in result.stderr
+    assert "refused" not in result.stderr
+
+
+def test_check_entry_naming_a_directory_is_too_broad(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    repo = make_repo()
+    repo.stage("secrets/a.txt", "a\n")
+    repo.stage("secrets/b.txt", "b\n")
+    _allow(repo, "# Every fixture in there.", "path secrets")
+
+    result = repo.run_check()
+
+    assert result.returncode == ALLOWLIST_INVALID
+    assert (
+        "ERR_STAGED_ALLOWLIST_TOO_BROAD: .check-staged-allow:2: "
+        "names a directory in the index" in result.stderr
+    )
+    assert "refused" not in result.stderr
+
+
+def test_check_path_entry_for_a_file_not_in_the_index_is_stale(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    repo = make_repo()
+    _allow(repo, "# A certificate that never arrived.", f"path {CA_CERT}")
+
+    result = repo.run_check()
+
+    assert result.returncode == ALLOWLIST_INVALID
+    assert _stale(2) in result.stderr
+
+
+def test_check_path_entry_no_rule_refuses_is_stale(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    repo = make_repo()
+    repo.stage("src/app.py", "print('hello')\n")
+    _allow(repo, "# Not needed at all.", "path src/app.py")
+
+    result = repo.run_check()
+
+    assert result.returncode == ALLOWLIST_INVALID
+    assert _stale(2) in result.stderr
+    assert "refused" not in result.stderr
+
+
+def _commit_allowlisted_cert(repo: GitRepo) -> None:
+    repo.write(CA_CERT, PUBLIC_CERT)
+    repo.write(ALLOWLIST, f"# Public root CA; holds no private key.\npath {CA_CERT}\n")
+    repo.commit_all("add the CA certificate")
+
+
+def test_check_deleting_an_allowlisted_file_keeping_its_entry_is_stale(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    repo = make_repo()
+    _commit_allowlisted_cert(repo)
+    repo.git("rm", "--quiet", CA_CERT)
+
+    result = repo.run_check()
+
+    assert result.returncode == ALLOWLIST_INVALID
+    assert _stale(2) in result.stderr
+
+
+def test_check_deleting_an_allowlisted_file_with_its_entry_passes(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    repo = make_repo()
+    _commit_allowlisted_cert(repo)
+    repo.git("rm", "--quiet", CA_CERT)
+    _allow(repo, "# Nothing exempt any more.")
+
+    result = repo.run_check()
+
+    assert (result.returncode, result.stderr) == (0, "")
+
+
+def test_check_renaming_an_allowlisted_file_is_stale_and_refused(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    repo = make_repo()
+    _commit_allowlisted_cert(repo)
+    repo.git("mv", CA_CERT, "deploy/certs/root-ca.pem")
+
+    result = repo.run_check()
+
+    assert result.returncode == ALLOWLIST_INVALID
+    assert _stale(2) in result.stderr
+    assert "refused deploy/certs/root-ca.pem: a .pem or .key file" in result.stderr
+
+
+def test_check_content_entry_on_a_submodule_is_stale(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    repo = make_repo()
+    commit = repo.head()
+    repo.git("update-index", "--add", "--cacheinfo", f"160000,{commit},vendor/lib")
+    _allow(repo, "# A vendored library.", f"content vendor/lib {commit}")
+
+    result = repo.run_check()
+
+    assert result.returncode == ALLOWLIST_INVALID
+    assert _stale(2) in result.stderr
+
+
+def test_check_content_entry_for_content_with_no_secret_is_stale(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    repo = make_repo()
+    repo.stage("notes.txt", "nothing secret here\n")
+    _allow(
+        repo,
+        "# Once held a fake token.",
+        f"content notes.txt {_blob_id(repo, 'notes.txt')}",
+    )
+
+    result = repo.run_check()
+
+    assert result.returncode == ALLOWLIST_INVALID
+    assert _stale(2) in result.stderr
+
+
+def test_check_unstaged_allowlist_exempts_nothing(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    repo = make_repo()
+    repo.stage(ROTATION_DOC, "How we rotate SSH keys.\n")
+    repo.write(ALLOWLIST, f"# A runbook, not a key.\npath {ROTATION_DOC}\n")
+
+    assert repo.run_check().returncode == BLOCKED
+
+
+def test_check_staged_allowlist_applies_after_the_worktree_copy_changes(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    repo = make_repo()
+    repo.stage(ROTATION_DOC, "How we rotate SSH keys.\n")
+    _allow(repo, "# A runbook, not a key.", f"path {ROTATION_DOC}")
+    repo.write(ALLOWLIST, "# reverted in the working tree only\n")
+
+    assert repo.run_check().returncode == 0
+
+
+def test_check_allowlist_content_is_scanned_like_any_file(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    repo = make_repo()
+    repo.stage(ROTATION_DOC, "How we rotate SSH keys.\n")
+    _allow(
+        repo,
+        f"# The runbook mentions {SECRET_SAMPLES['GitHub token']}",
+        f"path {ROTATION_DOC}",
+    )
+
+    result = repo.run_check()
+
+    assert result.returncode == BLOCKED
+    assert (
+        "refused .check-staged-allow: content matches the GitHub token pattern"
+        in result.stderr
+    )
+
+
+def _stage_allowlist_symlink(repo: GitRepo) -> None:
+    repo.write("link-target.txt", "elsewhere")
+    target = repo.git("hash-object", "-w", "link-target.txt").stdout.strip()
+    repo.git("update-index", "--add", "--cacheinfo", f"120000,{target},{ALLOWLIST}")
+
+
+def _stage_non_utf8_allowlist(repo: GitRepo) -> None:
+    repo.stage(ALLOWLIST, b"# Latin-1 \xe9\npath a.pem\n")
+
+
+def _stage_allowlist_directory(repo: GitRepo) -> None:
+    repo.stage(f"{ALLOWLIST}/x", "# r\n")
+
+
+@pytest.mark.parametrize(
+    "stage_allowlist",
+    [
+        pytest.param(_stage_allowlist_symlink, id="symlink"),
+        pytest.param(_stage_non_utf8_allowlist, id="not-utf8"),
+        pytest.param(_stage_allowlist_directory, id="directory"),
+    ],
+)
+def test_check_allowlist_that_is_not_a_text_file_fails_closed(
+    make_repo: Callable[..., GitRepo],
+    stage_allowlist: Callable[[GitRepo], None],
+) -> None:
+    repo = make_repo()
+    repo.stage(".env", "TOKEN=1\n")
+    stage_allowlist(repo)
+
+    result = repo.run_check()
+
+    assert result.returncode == ALLOWLIST_INVALID
+    assert result.stderr.startswith("ERR_STAGED_ALLOWLIST_FILE: .check-staged-allow:")
+    assert "refused" not in result.stderr
+
+
+def test_check_reports_expected_and_next_for_each_allowlist_problem(
+    make_repo: Callable[..., GitRepo],
+) -> None:
+    repo = make_repo()
+    _allow(repo, "# r", "path *")
+
+    result = repo.run_check()
+
+    assert result.stderr.splitlines() == [
+        "ERR_STAGED_ALLOWLIST_TOO_BROAD: .check-staged-allow:2: "
+        "the path is a glob (* or ?)",
+        "Expected: one exact file per entry; globs, directories, and "
+        '"." are not accepted',
+        "Next: list each file on its own line (`git ls-files -- <directory>` "
+        "prints them), git add .check-staged-allow, and commit again",
+    ]
+
+
+def test_check_with_an_allowlist_reads_blobs_with_two_cat_file_batches(
+    make_repo: Callable[..., GitRepo],
+    tmp_path: Path,
+) -> None:
+    wrapper_dir, log = _logging_git(tmp_path)
+    repo = make_repo()
+    repo.stage(ROTATION_DOC, "How we rotate SSH keys.\n")
+    for name in ("a.txt", "b.txt"):
+        repo.stage(name, f"{name}\n")
+    repo.stage("d.txt", _aws_key())
+    _allow(repo, "# A runbook, not a key.", f"path {ROTATION_DOC}")
+    env = repo.env | {"PATH": f"{wrapper_dir}{os.pathsep}{repo.env['PATH']}"}
+
+    result = repo.run_check(env)
+
+    calls = log.read_text(encoding="utf-8").splitlines()
+    assert result.returncode == BLOCKED
+    assert [call for call in calls if call.startswith("cat-file")] == [
+        "cat-file --batch",
+        "cat-file --batch",
+    ]
+
+
+# --------------------------------------------------------------------------- #
 #  The hook as installed by pre-commit, on every kind of commit
 # --------------------------------------------------------------------------- #
 
@@ -712,4 +1282,83 @@ def test_commit_at_a_rebase_stop_with_secret_is_refused(hooked_repo: GitRepo) ->
 
     assert result.returncode != 0
     assert "refused shared.txt" in result.stdout + result.stderr
+    assert hooked_repo.head() == before
+
+
+def test_ordinary_commit_with_its_path_entry_passes(hooked_repo: GitRepo) -> None:
+    before = hooked_repo.head()
+    hooked_repo.stage(CA_CERT, PUBLIC_CERT)
+    _allow(hooked_repo, "# Public root CA; holds no private key.", f"path {CA_CERT}")
+
+    hooked_repo.git("commit", "--quiet", "-m", "add the CA certificate")
+
+    assert hooked_repo.head() != before
+
+
+def test_commit_with_pathspec_ignores_an_entry_left_out_of_it(
+    hooked_repo: GitRepo,
+) -> None:
+    before = hooked_repo.head()
+    hooked_repo.stage(CA_CERT, PUBLIC_CERT)
+    _allow(hooked_repo, "# Public root CA; holds no private key.", f"path {CA_CERT}")
+
+    result = hooked_repo.git("commit", "-m", "cert", "--", CA_CERT, check=False)
+
+    assert result.returncode != 0
+    assert f"refused {CA_CERT}: a .pem or .key file" in result.stdout + result.stderr
+    assert hooked_repo.head() == before
+
+
+def test_clean_merge_of_an_allowlisted_file_and_its_entry_passes(
+    hooked_repo: GitRepo,
+) -> None:
+    hooked_repo.git("switch", "--quiet", "-c", "side")
+    hooked_repo.write(CA_CERT, PUBLIC_CERT)
+    hooked_repo.write(ALLOWLIST, f"# Public root CA.\npath {CA_CERT}\n")
+    hooked_repo.git("add", "--", CA_CERT, ALLOWLIST)
+    hooked_repo.git("commit", "--quiet", "--no-verify", "-m", "side")
+    hooked_repo.git("switch", "--quiet", "main")
+    before = hooked_repo.head()
+
+    hooked_repo.git("merge", "--quiet", "--no-ff", "--no-edit", "side")
+
+    assert hooked_repo.head() != before
+
+
+def _token_file_with_entry(repo: GitRepo, line: str) -> None:
+    """Write the fake token file ending in `line`, and an entry for that content."""
+    repo.stage(GITHUB_FIXTURE, f"{SECRET_SAMPLES['GitHub token']}\n{line}\n")
+    repo.write(
+        ALLOWLIST,
+        "# A fake token the client tests send.\n"
+        f"content {GITHUB_FIXTURE} {_blob_id(repo, GITHUB_FIXTURE)}\n",
+    )
+    repo.git("add", "--", ALLOWLIST)
+
+
+def test_conflicted_merge_changing_allowlisted_content_is_refused(
+    hooked_repo: GitRepo,
+) -> None:
+    _token_file_with_entry(hooked_repo, "base")
+    hooked_repo.git("commit", "--quiet", "-m", "base token")
+    hooked_repo.git("switch", "--quiet", "-c", "side")
+    _token_file_with_entry(hooked_repo, "side")
+    hooked_repo.git("commit", "--quiet", "--no-verify", "-m", "side token")
+    hooked_repo.git("switch", "--quiet", "main")
+    _token_file_with_entry(hooked_repo, "main")
+    hooked_repo.git("commit", "--quiet", "--no-verify", "-m", "main token")
+    before = hooked_repo.head()
+    assert hooked_repo.git("merge", "side", check=False).returncode != 0
+    hooked_repo.stage(GITHUB_FIXTURE, f"{SECRET_SAMPLES['GitHub token']}\nresolved\n")
+    hooked_repo.git("checkout", "--ours", "--", ALLOWLIST)
+    hooked_repo.git("add", "--", ALLOWLIST)
+
+    result = hooked_repo.git("commit", "--no-edit", check=False)
+
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert _stale(2) in output
+    assert (
+        f"refused {GITHUB_FIXTURE}: content matches the GitHub token pattern" in output
+    )
     assert hooked_repo.head() == before

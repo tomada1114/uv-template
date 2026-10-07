@@ -46,8 +46,8 @@ says which gate looks wrong and why, and a human decides.
   `exclude-newer`), or a blanket or stale `exclude-newer-package` entry
   (`managing-dependencies`).
 - **The pre-commit layer:** removing a hook, narrowing its `files`, `types`, or
-  `stages`, loosening `scripts/check_staged.py`'s rules, `--no-verify`, `SKIP=<id>`, or
-  an edit to `.git/hooks/`.
+  `stages`, loosening `scripts/check_staged.py`'s rules, adding an entry to
+  `.check-staged-allow`, `--no-verify`, `SKIP=<id>`, or an edit to `.git/hooks/`.
 - **CI and the ruleset:** removing a job or a step; gating a required job with `if:`,
   `paths`, or `paths-ignore`; dropping a context from `.github/rulesets/main.json`;
   adding a bypass actor; widening a workflow's `permissions`; unpinning an action from
