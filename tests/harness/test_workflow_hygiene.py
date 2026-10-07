@@ -25,7 +25,7 @@ Per workflow under ``.github/workflows/``:
 Per local action under ``.github/actions/`` (``**/action.yml`` or
 ``action.yaml``), when its ``runs.using`` is ``composite``, every step meets the
 step rules above: a pinned ``uses:``, ``persist-credentials: false`` on a
-checkout, and no ``continue-on-error``. An action with another ``runs.using``
+checkout, and no ``continue-on-error``; and no line has ``|| true``. An action with another ``runs.using``
 (a JavaScript or Docker action) has no ``uses:`` steps to check; a Docker
 action's image and Dockerfile are not read. An action file without a readable
 ``runs.using`` fails closed. No directory, no action, no finding.
@@ -182,6 +182,15 @@ def _job_problems(job_id: str, job: Mapping, path: Path, *, is_push: bool) -> li
     return problems
 
 
+def _or_true_problems(path: Path, relative: str) -> list[str]:
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return [
+        f"{relative}:{number}: `|| true` swallows a failure"
+        for number, line in enumerate(lines, start=1)
+        if not line.lstrip().startswith("#") and _OR_TRUE.search(line)
+    ]
+
+
 def workflow_problems(path: Path) -> list[str]:
     """Return every hygiene problem of one workflow file."""
     relative = f"{WORKFLOWS_DIR}/{path.name}"
@@ -194,12 +203,7 @@ def workflow_problems(path: Path) -> list[str]:
         problems.append(
             f"{relative}: top-level permissions must be {{}} or contents: read"
         )
-    lines = path.read_text(encoding="utf-8").splitlines()
-    problems.extend(
-        f"{relative}:{number}: `|| true` swallows a failure"
-        for number, line in enumerate(lines, start=1)
-        if not line.lstrip().startswith("#") and _OR_TRUE.search(line)
-    )
+    problems.extend(_or_true_problems(path, relative))
     is_push = "push" in events
     if is_push and "concurrency" in top:
         problems.extend(_concurrency_problems(top["concurrency"], relative, path))
@@ -220,24 +224,37 @@ def action_files(root: Path) -> list[Path]:
 
 
 def action_problems(path: Path, root: Path) -> list[str]:
-    """Return every hygiene problem of one local action's composite steps."""
+    """Return every hygiene problem of one local action's composite steps.
+
+    The scanner names a file by its basename, and every action is an
+    ``action.yml``, so an unreadable one is re-raised under its relative path.
+    """
     relative = path.relative_to(root).as_posix()
+    try:
+        return _composite_problems(path, relative)
+    except UnreadableYamlError as exc:
+        detail = str(exc).removeprefix(f"{path.name}: ")
+        msg = f"{relative}: {detail}"
+        raise UnreadableYamlError(msg) from exc
+
+
+def _composite_problems(path: Path, relative: str) -> list[str]:
     runs = read_workflow(path).get("runs")
     if runs is None:
-        msg = f"{relative}: no `runs:`"
+        msg = f"{path.name}: no `runs:`"
         raise UnreadableYamlError(msg)
     value, block = runs
     if value:
-        msg = f"{relative}: cannot read an inline `runs: {value}`"
+        msg = f"{path.name}: cannot read an inline `runs: {value}`"
         raise UnreadableYamlError(msg)
     settings = mapping(block, path)
     using = entry_value(settings.get("using"))
     if using is None:
-        msg = f"{relative}: no `runs.using`"
+        msg = f"{path.name}: no `runs.using`"
         raise UnreadableYamlError(msg)
     if using != COMPOSITE_ACTION:
         return []
-    problems: list[str] = []
+    problems = _or_true_problems(path, relative)
     for number, step in enumerate(steps(settings, path), start=1):
         name = entry_value(step.get("name"))
         label = f"{relative}: step {number}" + (f" ({name})" if name else "")
@@ -599,6 +616,12 @@ A = f"{ACTIONS_DIR}/setup/action.yml"
             f"{A}: step 3 (Install): `continue-on-error: true` lets a failure pass",
             id="continue-on-error",
         ),
+        pytest.param(
+            "      run: uv sync --locked\n",
+            "      run: uv sync --locked || true\n",
+            f"{A}:12: `|| true` swallows a failure",
+            id="or-true",
+        ),
     ],
 )
 def test_hygiene_findings_action_violation_names_action(
@@ -637,13 +660,22 @@ def test_hygiene_findings_action_yaml_extension_is_read(tmp_path: Path) -> None:
         ),
         pytest.param(
             COMPOSITE.replace("    - uses: actions", "  - uses: actions"),
-            r"action\.yml: cannot read",
+            r"cannot read '  - uses: actions",
             id="bad-step-indent",
+        ),
+        pytest.param(
+            COMPOSITE.replace(
+                "      with:\n        persist-credentials: false\n",
+                "      with: {persist-credentials: false}\n",
+            ),
+            r"cannot read a checkout step's `with: ",
+            id="inline-with",
         ),
     ],
 )
 def test_hygiene_findings_unreadable_action_fails_closed(
     make_action: MakeWorkflow, text: str, message: str
 ) -> None:
-    with pytest.raises(UnreadableYamlError, match=message):
+    # The repository-relative path, not a bare `action.yml`, names the file.
+    with pytest.raises(UnreadableYamlError, match=rf"^{re.escape(A)}: {message}"):
         hygiene_findings(make_action(text))

@@ -37,7 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The harness's workflow hygiene check now also reads composite actions under
   `.github/actions/` (`action.yml` or `action.yaml`): each step's `uses:` must be
   pinned to a commit SHA with a `# v` comment, a checkout must not keep its
-  credentials, and no step may set `continue-on-error`
+  credentials, no step may set `continue-on-error`, and no line may end a
+  command with `|| true`; an unreadable action is named by its path from the
+  repository root
 - The harness's recipe check now also reads README.md, CONTRIBUTING.md,
   `docs/**`, and the agent definitions (`.claude/agents/`, `.codex/agents/`),
   so a renamed or removed `just` recipe they still name fails `just verify`.
