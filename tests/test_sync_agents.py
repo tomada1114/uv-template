@@ -116,7 +116,13 @@ def test_main_check_exits_one_on_drift(
     _write(tmp_path / sync_agents.SOURCE_DIRECTORY / "a" / "SKILL.md", "x")
 
     assert sync_agents.main(["--check"], root=tmp_path) == 1
-    assert "ERR_AGENTS_DRIFT" in capsys.readouterr().err
+    error = capsys.readouterr().err
+    assert "ERR_AGENTS_DRIFT" in error
+    assert (
+        "Expected: identical file contents and executable permissions in both trees."
+        in error
+    )
+    assert "Next: edit .agents/skills/ only, then run `just agents-sync`" in error
 
 
 def test_main_sync_then_check_passes(tmp_path: Path) -> None:
@@ -134,4 +140,7 @@ def test_main_reports_unsupported_entry(
     (tmp_path / sync_agents.SOURCE_DIRECTORY).symlink_to(tmp_path / "real")
 
     assert sync_agents.main(["--check"], root=tmp_path) == 1
-    assert "ERR_AGENTS_UNSUPPORTED_ENTRY" in capsys.readouterr().err
+    error = capsys.readouterr().err
+    assert "ERR_AGENTS_UNSUPPORTED_ENTRY" in error
+    assert "Expected: a real directory" in error
+    assert "Next: replace the link with a real directory" in error

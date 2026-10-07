@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -110,6 +111,13 @@ def gh_command(label: Label) -> list[str]:
     ]
 
 
+def _fail(code: str, detail: str, expected: str, next_step: str) -> int:
+    print(f"{code}: {detail}", file=sys.stderr)
+    print(f"Expected: {expected}", file=sys.stderr)
+    print(f"Next: {next_step}", file=sys.stderr)
+    return 1
+
+
 def main(argv: list[str] | None = None, labels_file: Path = LABELS_FILE) -> int:
     """Upsert every declared label (or print the plan) and return an exit code."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -120,25 +128,43 @@ def main(argv: list[str] | None = None, labels_file: Path = LABELS_FILE) -> int:
     try:
         labels = parse_labels(labels_file.read_text(encoding="utf-8"))
     except (OSError, LabelsFileError) as error:
-        print(f"ERR_LABELS_FILE: {labels_file}: {error}", file=sys.stderr)
-        return 1
+        return _fail(
+            "ERR_LABELS_FILE",
+            f"{labels_file}: {error}",
+            "a flat label list with name, color (6 lowercase hex digits), and description",
+            f"fix {labels_file} and rerun `just labels`",
+        )
     failures = 0
     for label in labels:
         command = gh_command(label)
         if args.dry_run:
-            print(" ".join(command))
+            print(shlex.join(command))
             continue
-        result = subprocess.run(  # noqa: S603 -- fixed argv, no shell
-            command, check=False, capture_output=True, text=True
-        )
+        try:
+            result = subprocess.run(  # noqa: S603 -- fixed argv, no shell
+                command, check=False, capture_output=True, text=True
+            )
+        except OSError as error:
+            return _fail(
+                "ERR_LABELS_GH",
+                f"cannot run gh: {error}",
+                "gh available on PATH and executable",
+                "install GitHub CLI or fix its executable permissions, then rerun "
+                "`just labels`",
+            )
         if result.returncode != 0:
             failures += 1
             print(f"failed: {label.name}: {result.stderr.strip()}", file=sys.stderr)
         else:
             print(f"synced: {label.name}")
     if failures:
-        print(f"ERR_LABELS_SYNC: {failures} label(s) failed", file=sys.stderr)
-        return 1
+        return _fail(
+            "ERR_LABELS_SYNC",
+            f"{failures} label(s) failed",
+            "every declared label created or updated",
+            "resolve the gh errors above (check authentication and repository access), "
+            "then rerun `just labels`",
+        )
     return 0
 
 
