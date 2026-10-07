@@ -147,7 +147,7 @@ Skills are authored under `.agents/skills/` (Codex CLI) and mirrored into
 | `authoring-skills` | adding, editing, or reviewing a skill under `.agents/skills/`, or a skill never fires |
 | `building-api-routes` | adding or changing an HTTP route, request or response model, or API dependency, and the TestClient tests for it |
 | `changing-gates` | editing a hook, a CI workflow, the ruleset, or a ruff, mypy, pytest, or coverage setting, or asking whether a change weakens a gate |
-| `codex-cloud-shipping-issue` | implementing one GitHub issue from a Codex-managed checkout through a draft PR, with current-head review and CI evidence; never for merging |
+| `codex-cloud-shipping-issue` | shipping one GitHub issue from a Codex-managed checkout through a regular PR, current-head Codex review and CI, and an explicitly authorized merge |
 | `create-pr` | opening or updating a pull request by hand |
 | `designing-clis` | adding or changing a `my-app` command, its arguments, or its output, and the CliRunner tests for it |
 | `designing-core-logic` | adding a use case, domain rule, port, adapter, or `MY_APP_*` setting, or wiring the composition root |
