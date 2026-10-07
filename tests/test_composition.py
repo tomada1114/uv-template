@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 import tomllib
-from contextlib import ExitStack
+from contextlib import ExitStack, suppress
 from datetime import UTC
 from pathlib import Path
 
@@ -251,3 +251,44 @@ def test_build_container_success_keeps_registered_resources_until_close(monkeypa
     container.close()
 
     assert closed == ["owned"]
+
+
+def test_container_context_failure_forwards_exception_details_to_resource(
+    make_container,
+):
+    exits: list[tuple[object, object, object]] = []
+
+    class RecordingResource:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            exits.append((exc_type, exc_value, traceback))
+            return False
+
+    resources = ExitStack()
+    resources.enter_context(RecordingResource())
+    container = Container(make_container().todos, _resources=resources)
+    error = ValueError("operation failed")
+
+    with pytest.raises(ValueError, match="operation failed"), container:
+        raise error
+
+    assert exits == [(ValueError, error, error.__traceback__)]
+    container.close()
+    assert len(exits) == 1
+
+
+def test_container_context_failure_preserves_resource_suppression(make_container):
+    closed: list[str] = []
+    resources = ExitStack()
+    resources.callback(closed.append, "remaining")
+    resources.enter_context(suppress(ValueError))
+    container = Container(make_container().todos, _resources=resources)
+    message = "intentionally suppressed"
+
+    with container:
+        raise ValueError(message)
+
+    container.close()
+    assert closed == ["remaining"]

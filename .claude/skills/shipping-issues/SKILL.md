@@ -10,7 +10,8 @@ description: >-
 
 # Shipping Issues (Claude Code)
 
-Claude Code only. In Codex, use `codex-shipping-issues`; do not run this workflow.
+Claude Code only. In Codex, use `codex-shipping-issues`; do not run this workflow. In a
+Claude Code cloud session, read [cloud-sessions.md](references/cloud-sessions.md) first.
 **Done:** the PR is merged, the issue is CLOSED, and no gate was deleted or weakened.
 
 **Invoking this skill is the sign-off for exactly the remote writes it lists, for this
@@ -181,10 +182,9 @@ the final tool call ([details](references/closing-out.md#cleanup-scope)).
 
 ### 10. Report
 
-No prescribed format, but never omit
-[these facts](references/closing-out.md#what-the-report-must-not-omit) — above all an
-issue left open behind a merged PR, a criterion shipped `not-met`, and every `DEFERRED`
-design's open question.
+No prescribed format, but never omit [these facts](references/closing-out.md#what-the-report-must-not-omit)
+— above all an issue left open behind a merged PR, a criterion shipped `not-met`, and
+every `DEFERRED` design's open question.
 
 ## Stop conditions
 

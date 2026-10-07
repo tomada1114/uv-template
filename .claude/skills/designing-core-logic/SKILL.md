@@ -149,7 +149,9 @@ function that picks it, driven by a setting.
 ```python
 def build_container(settings: Settings, clock: Clock = utc_now) -> Container:
     # ... docstring elided
-    return Container(todos=TodoService(_build_repository(settings), clock))
+    with ExitStack() as resources:
+        todos = TodoService(_build_repository(settings, resources), clock)
+        return Container(todos=todos, _resources=resources.pop_all())
 ```
 
 Tests build containers through the same function: the `make_container` fixture in
@@ -163,7 +165,9 @@ resource immediately with `resources.enter_context(adapter)` or
 `resources.callback(adapter.close)`; never close an adapter in a service. A failed
 build closes the stack before propagating the error. A successful build transfers it
 to the frozen `Container`, whose `close()` is idempotent and whose context manager
-closes on exit. Cleanup failures propagate while remaining callbacks still run.
+forwards exception details to registered context managers on exit and preserves their
+suppression decision. Direct `close()` exits without an active exception. Cleanup
+failures propagate while remaining callbacks still run.
 
 The API builds services in its factory and closes that container in its lifespan;
 the CLI's lazy accessor registers cleanup on the root context. A supplied container

@@ -18,6 +18,8 @@ from my_app.core.errors import LlmConfigurationError
 from my_app.core.services import TodoService
 
 if TYPE_CHECKING:
+    from types import TracebackType
+
     from my_app.core.ports import Clock, LlmPort, TodoRepository
     from my_app.settings import Settings
 
@@ -37,9 +39,14 @@ class Container:
         """Keep ownership until the surrounding context exits."""
         return self
 
-    def __exit__(self, *exc_info: object) -> None:
-        """Release owned resources on normal or exceptional context exit."""
-        self.close()
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool:
+        """Forward exception details and suppression to registered resources."""
+        return bool(self._resources.__exit__(exc_type, exc_value, traceback))
 
 
 def utc_now() -> datetime:
