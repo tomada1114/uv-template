@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `shipping-issues` gains `references/cloud-sessions.md` for a run in a Claude Code
+  cloud session: stop and have the owner reconnect GitHub when every push fails (never
+  route around it), expect the proxy to refuse branch deletion and unpinned GraphQL
+  calls, let CI's OSV-Scanner stand in for a blocked `api.osv.dev`, and rebuild run
+  state from GitHub on a fresh VM
 - A repository-local Codex issue workflow through regular PRs, current-head
   review and CI, and explicitly authorized merges, without personal global skills.
   The initial opening-triggered review is addressed before current-head CI and
