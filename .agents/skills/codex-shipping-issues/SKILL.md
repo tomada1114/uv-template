@@ -1,8 +1,9 @@
 ---
-name: codex-cloud-shipping-issue
+name: codex-shipping-issues
 description: >
   Use when shipping a GitHub issue from a Codex Cloud or Codex-managed checkout through
-  a regular pull request, current-head Codex review and CI, and an authorized merge;
+  a regular pull request, one opening-triggered Codex review, current-head CI and an
+  authorized merge;
   preparing or cleaning a linked worktree; or checking the evidence for a PR-only run.
   Uses repository-local skills and helpers without requiring personal global skills.
 ---
@@ -11,14 +12,16 @@ description: >
 
 **Owns:** one issue's acceptance, implementation, local verification, regular PR,
 Codex review, CI evidence, and landing at the user's authorized boundary.
-**Does not own:** backlog-wide shipping (`shipping-issues`), authoring a PR on an
-existing branch (`create-pr`), or the repository's standing permissions.
+**Does not own:** Claude Code's shipping workflow (`shipping-issues`), authoring a PR
+on an existing branch (`create-pr`), or the repository's standing permissions.
 
-This workflow is complete within the checkout: use the sibling skills in
+Codex uses this repository-local skill for issue shipping. A personal skill of the
+same name may exist; this copy owns the repository workflow. This workflow is
+complete within the checkout: use the sibling skills in
 `.agents/skills/` and the reference below. No globally installed
 `codex-shipping-issues`, Git/GitHub workflow, orchestration, or model-routing skill
 is required. Local `shipping-issues` helpers may be reused without invoking its
-full workflow or inheriting its remote-write permissions. Run inline by default.
+Claude Code workflow or inheriting its remote-write permissions. Run inline by default.
 
 ## Authority and stop point
 
@@ -28,7 +31,7 @@ request. Keep evidence outside the checkout. Reuse that agreement after correcti
 or a resume; ask only for necessary writes outside it.
 
 - A request to ship an issue through merge authorizes the necessary commits, branch
-  push, regular PR creation/updates, review requests and replies, in-scope repairs,
+  push, regular PR creation/updates, in-scope review corrections,
   and gated merge/issue closure. Default to `stop_at=merge` for that request.
 - A request to create a PR authorizes its necessary commit, push and PR publication;
   use `stop_at=pr` unless the user also authorizes merge. A bare invocation grants no
@@ -44,10 +47,11 @@ or a resume; ask only for necessary writes outside it.
 ## 1. Establish the checkout and environment
 
 Resolve repository identity and default branch through the connected GitHub
-integration, including its authenticated-user check. Prefer connected actions for
-remote reads and writes; local Git owns checkout, commit and push. Use `gh` only for
-capabilities the connector cannot supply, after a harmless read succeeds. A CLI
-failure does not invalidate successful connector evidence; never read credentials.
+MCP integration, including its authenticated-user check. Use MCP exclusively for
+remote GitHub reads and writes; local Git owns checkout, commit and push. Do not
+run `gh`, authentication probes or helpers that invoke it for live GitHub data.
+No CLI or direct HTTP fallback: report missing capabilities/evidence and preserve
+state. Mocked CLI fixtures in required checks remain permitted. Never read credentials.
 
 Inspect branch, status, worktrees, local author identity and remote base. Preserve
 unrelated changes. Use the managed worktree assigned to this chat. If the primary
@@ -73,8 +77,8 @@ report the missing evidence without narrowing acceptance.
 Use the supplied issue number, otherwise select one ready issue by actual dependency
 state then existing priority labels. Read the full body, every comment, related PRs
 and dependency issues through the connector. Do not backfill labels or create tracker
-writes. The local `shipping-issues` plan helper is optional; its CLI authentication
-failure does not block connector-based selection.
+writes. Select through MCP; do not run the `shipping-issues` plan helper, which
+uses live `gh` operations. Local-only helpers and MCP-exported data are permitted.
 
 Write an acceptance-to-check map before editing. Scope and product/design decisions
 must be settled, with observable pass/fail acceptance. Resolve routine technical
@@ -99,17 +103,22 @@ for this branch instead of creating another. Attach the PR to this chat when the
 host supports PR attachments.
 
 Read [review, CI and landing](references/review-and-ci.md) before publication.
-When the run records automatic Codex review on PR opening, wait for that initial
-review without immediately posting a duplicate request. Do not assume later pushes
-trigger another review. Observe CI while review runs and fix failures within scope.
-After a correction changes the diff, obtain fresh review and CI evidence, using an
-explicit review request within the recorded authorization when necessary.
+Wait for the first automatic Codex review triggered on opening. Read all its findings,
+fix accepted in-scope ones and inspect the correction diff locally. Observe CI while
+that review runs and diagnose failures within scope. Record the reviewed commit and
+findings separately from the current head.
+
+After the initial review completes, do not request or wait for a second review, even
+when corrections or base integration change the diff. Repeat affected checks and
+`just verify`, push normally and wait for current-head CI. This is the owner's
+single-review policy; it does not claim the final head received cloud review.
+Repository-required approvals remain separate and cannot be bypassed.
 
 ## 5. Finish at the authorized boundary
 
-At `stop_at=pr`, finish only after acceptance, current-head CI and terminal Codex
-review pass; preserve the open PR and branch. At `stop_at=merge`, proceed to landing
-as soon as all current gates and required approvals pass, without asking again for
+At `stop_at=pr`, finish after acceptance, completed initial review with accepted
+findings addressed, and current-head CI; preserve the open PR and branch.
+At `stop_at=merge`, proceed to landing as soon as all current gates and required approvals pass, without asking again for
 already authorized merge. Verify remote merged state, merge commit and issue closure.
 Do not switch, pull or clean the user's busy primary checkout.
 
@@ -121,8 +130,9 @@ attempt cap; honor explicit user deadlines and host limits.
 
 Report the issue, PR URL, head SHA, acceptance and local checks, separate Codex review
 and CI evidence, observed merge/issue state, and any missing evidence. Never report
-PR creation as verified landing. Cleanup is separate: only after a verified merge
-and explicit cleanup authority, preview with `just worktree-clean <root> <branch>`
-and apply that exact preview with `just worktree-clean-apply <root> <branch>`.
-Use the host lifecycle for a host-managed worktree. Verify checkout and registration
-outcomes; preserve dirty worktrees and commits newer than the merged PR head.
+PR creation as verified landing. Cleanup requires verified merge and explicit
+cleanup authority. Use the host lifecycle for a host-managed worktree. Do not run
+`just worktree-clean` or `just worktree-clean-apply` in Codex: their cleanup helper
+uses live `gh` operations. For manual worktrees, verify merge evidence through MCP
+and inspect local state before authorized Git cleanup. Verify checkout and
+registration outcomes; preserve dirty worktrees and newer commits.

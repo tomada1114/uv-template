@@ -147,7 +147,7 @@ Skills are authored under `.agents/skills/` (Codex CLI) and mirrored into
 | `authoring-skills` | adding, editing, or reviewing a skill under `.agents/skills/`, or a skill never fires |
 | `building-api-routes` | adding or changing an HTTP route, request or response model, or API dependency, and the TestClient tests for it |
 | `changing-gates` | editing a hook, a CI workflow, the ruleset, or a ruff, mypy, pytest, or coverage setting, or asking whether a change weakens a gate |
-| `codex-cloud-shipping-issue` | shipping one GitHub issue from a Codex-managed checkout through a regular PR, current-head Codex review and CI, and an explicitly authorized merge |
+| `codex-shipping-issues` | shipping one GitHub issue from a Codex-managed checkout through a regular PR, one initial Codex review with findings addressed, current-head CI, and an explicitly authorized merge |
 | `create-pr` | opening or updating a pull request by hand |
 | `designing-clis` | adding or changing a `my-app` command, its arguments, or its output, and the CliRunner tests for it |
 | `designing-core-logic` | adding a use case, domain rule, port, adapter, or `MY_APP_*` setting, or wiring the composition root |
@@ -158,7 +158,7 @@ Skills are authored under `.agents/skills/` (Codex CLI) and mirrored into
 | `placing-tests` | adding a test file or a fixture, running one test, or a coverage run below the floor |
 | `recording-architecture-decisions` | a change owes an ADR, or an ADR under `docs/architecture/` is proposed, accepted, or superseded |
 | `running-the-app` | running the CLI or a server of your own to observe a change, and stopping that server afterwards |
-| `shipping-issues` | shipping the next issue or the whole backlog: rank, implement, review, PR, CI, merge |
+| `shipping-issues` | Claude Code only: shipping the next issue or the whole backlog: rank, implement, review, PR, CI, merge |
 | `smart-commit` | grouping working-tree changes into commits, or a pre-commit hook refuses a commit |
 | `starting-an-app` | setting up an app cut from this template: the Product section, the bootstrap pull request, labels, ruleset, security settings, dropping an entry point or the sample domain, the first ADRs; in the template, the bootstrap itself |
 | `steering-the-roadmap` | asked what to work on next, or the Now / Next / Later roadmap moves |
@@ -197,6 +197,13 @@ model is inherited. `tests/test_agent_tiers.py` holds their instructions equal.
   The ruleset blocks a force-push to or deletion of `main` only once a human has
   applied it with `just ruleset`; nothing else blocks a force-push or
   `gh pr merge --admin`, so this instruction is the rule itself.
+- In Codex, always load the repository-local `codex-shipping-issues` for issue
+  shipping; it takes precedence over a global skill of the same name. The existing
+  `shipping-issues` workflow is Claude Code only and is never executed by Codex.
+- In Codex, use GitHub MCP for all remote GitHub operations; never invoke `gh`
+  directly or through live-GitHub helpers, and never use a direct HTTP fallback.
+  Report missing MCP capabilities. Local checkout, commit and push use Git;
+  repository checks using mocked CLI fixtures remain permitted.
 - Never bypass a git hook — no `--no-verify`, no `SKIP=<hook id>`, no edit to
   `.git/hooks/`. `--no-verify` switches off the secret gate of the
   [enforcement layers](#enforcement-layers) along with everything else.
