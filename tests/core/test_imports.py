@@ -1,15 +1,14 @@
-"""The core stays framework-free: it imports only the stdlib and itself.
+"""Keep the core deterministic and independent of frameworks and I/O.
 
-Ruff's TID251 rule bans the same modules at lint time; this test backs it up
-and is stricter, since it also rejects any third-party import (Pydantic
-included) and any reach out of ``my_app.core`` into another layer. It walks
-``core/`` recursively, so a subpackage added later is checked too.
+ALLOWED_STDLIB is the authoritative import boundary; Ruff's TID251 is a
+fast subset. The AST call check rejects bare I/O and dynamic-execution
+builtins and recognizable date/datetime clock reads. Both gates walk core
+subpackages and imports inside type-checking branches.
 """
 
 from __future__ import annotations
 
 import ast
-import sys
 from pathlib import Path
 
 import pytest
@@ -18,7 +17,38 @@ import my_app.core
 
 CORE_PACKAGE = "my_app.core"
 CORE_DIR = Path(my_app.core.__file__).parent
-BANNED_MODULES = frozenset({"fastapi", "typer", "uvicorn", "sqlite3", "httpx"})
+# Pure, deterministic stdlib modules the core may import. Adding one is a
+# reviewed edit: it must do no I/O and read no clock, randomness, or
+# environment. Anything else goes behind a port (designing-core-logic).
+ALLOWED_STDLIB = frozenset(
+    {
+        "__future__",
+        "abc",
+        "bisect",
+        "collections",
+        "copy",
+        "dataclasses",
+        "datetime",
+        "decimal",
+        "enum",
+        "fractions",
+        "functools",
+        "heapq",
+        "itertools",
+        "math",
+        "operator",
+        "re",
+        "statistics",
+        "string",
+        "textwrap",
+        "types",
+        "typing",
+    }
+)
+FORBIDDEN_BUILTIN_CALLS = frozenset(
+    {"open", "input", "print", "breakpoint", "exec", "eval", "compile", "__import__"}
+)
+CLOCK_READ_METHODS = frozenset({"now", "utcnow", "today"})
 CORE_MODULE_PATHS = sorted(CORE_DIR.rglob("*.py"))
 
 
@@ -46,10 +76,29 @@ def _imported_modules(source: str, package: str = CORE_PACKAGE) -> set[str]:
 
 def _is_allowed(module: str) -> bool:
     top_level = module.partition(".")[0]
-    if top_level in BANNED_MODULES:
-        return False
     is_core = module == CORE_PACKAGE or module.startswith(f"{CORE_PACKAGE}.")
-    return is_core or top_level in sys.stdlib_module_names
+    return is_core or top_level in ALLOWED_STDLIB
+
+
+def _forbidden_calls(source: str) -> set[str]:
+    """Return forbidden calls with their source lines for actionable failures."""
+    forbidden: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call):
+            continue
+        match node.func:
+            case ast.Name(id=name) if name in FORBIDDEN_BUILTIN_CALLS:
+                forbidden.add(f"line {node.lineno}: {name}")
+            case ast.Attribute(value=receiver, attr=method) if (
+                method in CLOCK_READ_METHODS
+            ):
+                match receiver:
+                    case (
+                        ast.Name(id="datetime" | "date")
+                        | ast.Attribute(attr="datetime" | "date")
+                    ):
+                        forbidden.add(f"line {node.lineno}: {ast.unparse(node.func)}")
+    return forbidden
 
 
 def test_core_package_has_modules_to_check():
@@ -70,9 +119,32 @@ def test_core_module_imports_only_stdlib_and_core(path):
 
 
 @pytest.mark.parametrize(
+    "path",
+    CORE_MODULE_PATHS,
+    ids=lambda path: path.relative_to(CORE_DIR).as_posix(),
+)
+def test_core_module_calls_no_io_builtin(path):
+    forbidden = _forbidden_calls(path.read_text(encoding="utf-8"))
+
+    assert forbidden == set(), f"{path.relative_to(CORE_DIR)} calls {sorted(forbidden)}"
+
+
+@pytest.mark.parametrize(
     ("source", "module"),
     [
         pytest.param("import fastapi", "fastapi", id="fastapi"),
+        pytest.param("import os", "os", id="os"),
+        pytest.param("import socket", "socket", id="socket"),
+        pytest.param("import subprocess", "subprocess", id="subprocess"),
+        pytest.param(
+            "from urllib.request import urlopen", "urllib.request", id="urllib"
+        ),
+        pytest.param("import uuid", "uuid", id="uuid"),
+        pytest.param(
+            "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    import os",
+            "os",
+            id="type-checking-io",
+        ),
         pytest.param(
             "from typer.testing import CliRunner", "typer.testing", id="typer"
         ),
@@ -106,6 +178,7 @@ def test_import_check_subpackage_relative_escape_is_rejected():
     ("source", "package"),
     [
         pytest.param("from datetime import datetime", CORE_PACKAGE, id="stdlib"),
+        pytest.param("from decimal import Decimal", CORE_PACKAGE, id="decimal"),
         pytest.param(
             "from my_app.core.errors import AppError", CORE_PACKAGE, id="core-absolute"
         ),
@@ -119,3 +192,50 @@ def test_import_check_subpackage_relative_escape_is_rejected():
 )
 def test_import_check_allowed_import_is_accepted(source, package):
     assert all(_is_allowed(module) for module in _imported_modules(source, package))
+
+
+@pytest.mark.parametrize(
+    ("source", "call"),
+    [
+        pytest.param('open("x")', "open", id="open"),
+        pytest.param('input("x")', "input", id="input"),
+        pytest.param('print("x")', "print", id="print"),
+        pytest.param("breakpoint()", "breakpoint", id="breakpoint"),
+        pytest.param('exec("x")', "exec", id="exec"),
+        pytest.param('eval("x")', "eval", id="eval"),
+        pytest.param('compile("x", "x", "exec")', "compile", id="compile"),
+        pytest.param('__import__("os")', "__import__", id="dynamic-import"),
+        pytest.param("datetime.now(tz=UTC)", "datetime.now", id="datetime-now"),
+        pytest.param("datetime.utcnow()", "datetime.utcnow", id="datetime-utcnow"),
+        pytest.param("datetime.today()", "datetime.today", id="datetime-today"),
+        pytest.param("date.today()", "date.today", id="date-today"),
+        pytest.param(
+            "datetime.datetime.now()", "datetime.datetime.now", id="module-datetime-now"
+        ),
+        pytest.param(
+            "datetime.date.today()", "datetime.date.today", id="module-date-today"
+        ),
+    ],
+)
+def test_call_check_forbidden_call_is_rejected(source, call):
+    assert _forbidden_calls(source) == {f"line 1: {call}"}
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param("datetime(2026, 10, 7)", id="datetime-construction"),
+        pytest.param("date(2026, 10, 7)", id="date-construction"),
+        pytest.param("value.today()", id="unrelated-receiver"),
+        pytest.param("clock()", id="injected-clock"),
+        pytest.param('message = "open(x)"', id="string-literal"),
+    ],
+)
+def test_call_check_allowed_call_is_accepted(source):
+    assert _forbidden_calls(source) == set()
+
+
+def test_call_check_nested_call_reports_source_line():
+    source = "def read():\n    return open('x')"
+
+    assert _forbidden_calls(source) == {"line 2: open"}
