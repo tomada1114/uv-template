@@ -2,8 +2,9 @@
 
 ALLOWED_STDLIB is the authoritative import boundary; Ruff's TID251 is a
 fast subset. The AST call check rejects bare I/O and dynamic-execution
-builtins and recognizable date/datetime clock reads. Both gates walk core
-subpackages and imports inside type-checking branches.
+builtins, recognizable date/datetime clock reads, and local-time APIs without
+explicit timezones. Both gates walk core subpackages and imports inside
+type-checking branches.
 """
 
 from __future__ import annotations
@@ -80,12 +81,37 @@ def _is_allowed(module: str) -> bool:
     return is_core or top_level in ALLOWED_STDLIB
 
 
+def _has_explicit_timezone(call: ast.Call, position: int) -> bool:
+    timezone = next(
+        (keyword.value for keyword in call.keywords if keyword.arg == "tz"),
+        call.args[position] if len(call.args) > position else None,
+    )
+    return timezone is not None and not (
+        isinstance(timezone, ast.Constant) and timezone.value is None
+    )
+
+
+def _uses_local_timezone(call: ast.Call) -> bool:
+    match call.func:
+        case ast.Attribute(attr="astimezone"):
+            return not _has_explicit_timezone(call, 0)
+        case ast.Attribute(value=receiver, attr="fromtimestamp"):
+            match receiver:
+                case ast.Name(id="date") | ast.Attribute(attr="date"):
+                    return True
+                case ast.Name(id="datetime") | ast.Attribute(attr="datetime"):
+                    return not _has_explicit_timezone(call, 1)
+    return False
+
+
 def _forbidden_calls(source: str) -> set[str]:
     """Return forbidden calls with their source lines for actionable failures."""
     forbidden: set[str] = set()
     for node in ast.walk(ast.parse(source)):
         if not isinstance(node, ast.Call):
             continue
+        if _uses_local_timezone(node):
+            forbidden.add(f"line {node.lineno}: {ast.unparse(node.func)}")
         match node.func:
             case ast.Name(id=name) if name in FORBIDDEN_BUILTIN_CALLS:
                 forbidden.add(f"line {node.lineno}: {name}")
@@ -239,3 +265,83 @@ def test_call_check_nested_call_reports_source_line():
     source = "def read():\n    return open('x')"
 
     assert _forbidden_calls(source) == {"line 2: open"}
+
+
+@pytest.mark.parametrize(
+    ("source", "call"),
+    [
+        pytest.param(
+            "datetime.fromtimestamp(0)", "datetime.fromtimestamp", id="timestamp-no-tz"
+        ),
+        pytest.param(
+            "datetime.fromtimestamp(0, None)",
+            "datetime.fromtimestamp",
+            id="timestamp-positional-none",
+        ),
+        pytest.param(
+            "datetime.fromtimestamp(0, tz=None)",
+            "datetime.fromtimestamp",
+            id="timestamp-keyword-none",
+        ),
+        pytest.param(
+            "datetime.fromtimestamp(timestamp=0)",
+            "datetime.fromtimestamp",
+            id="timestamp-keyword-no-tz",
+        ),
+        pytest.param(
+            "datetime.datetime.fromtimestamp(0)",
+            "datetime.datetime.fromtimestamp",
+            id="module-timestamp",
+        ),
+        pytest.param(
+            "date.fromtimestamp(0)", "date.fromtimestamp", id="date-timestamp"
+        ),
+        pytest.param(
+            "datetime.date.fromtimestamp(0)",
+            "datetime.date.fromtimestamp",
+            id="module-date-timestamp",
+        ),
+        pytest.param(
+            "some_datetime.astimezone()",
+            "some_datetime.astimezone",
+            id="conversion-no-tz",
+        ),
+        pytest.param(
+            "some_datetime.astimezone(None)",
+            "some_datetime.astimezone",
+            id="conversion-positional-none",
+        ),
+        pytest.param(
+            "some_datetime.astimezone(tz=None)",
+            "some_datetime.astimezone",
+            id="conversion-keyword-none",
+        ),
+        pytest.param(
+            "record.timestamp.astimezone()",
+            "record.timestamp.astimezone",
+            id="attribute-conversion-no-tz",
+        ),
+    ],
+)
+def test_call_check_local_timezone_dependency_is_rejected(source, call):
+    assert _forbidden_calls(source) == {f"line 1: {call}"}
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param("datetime.fromtimestamp(0, UTC)", id="timestamp-positional-tz"),
+        pytest.param("datetime.fromtimestamp(0, tz=UTC)", id="timestamp-keyword-tz"),
+        pytest.param(
+            "datetime.fromtimestamp(timestamp=0, tz=UTC)", id="timestamp-all-keywords"
+        ),
+        pytest.param(
+            "datetime.datetime.fromtimestamp(0, UTC)", id="module-timestamp-tz"
+        ),
+        pytest.param("some_datetime.astimezone(UTC)", id="conversion-positional-tz"),
+        pytest.param("some_datetime.astimezone(tz=UTC)", id="conversion-keyword-tz"),
+        pytest.param("record.timestamp.astimezone(UTC)", id="attribute-conversion-tz"),
+    ],
+)
+def test_call_check_explicit_timezone_is_accepted(source):
+    assert _forbidden_calls(source) == set()
