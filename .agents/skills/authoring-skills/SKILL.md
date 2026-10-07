@@ -69,9 +69,9 @@ surface.
   parser rejects.
 
 Enforced by: `tests/harness/test_skills.py` (`just check-harness`), which reads the
-frontmatter strictly and fails on a third key, a `name` that is not the directory, or a
-description that is not printable ASCII within 600 characters. It does not judge
-whether the description is a good trigger.
+frontmatter strictly and fails on a third key, a `name` that is not the directory, a
+`description` not written as `description: >`, or one that is not printable ASCII
+within 600 characters. It does not judge whether the description is a good trigger.
 
 ## When a new skill is warranted
 

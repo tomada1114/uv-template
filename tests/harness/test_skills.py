@@ -37,6 +37,11 @@ SKILLS_HEADING = "## Skills"
 _FIELD = re.compile(r"^(?P<key>[A-Za-z0-9_-]+):(?:[ \t]+(?P<value>.*?))?[ \t]*$")
 _NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _BLOCK_SCALARS = frozenset({">", ">-", "|", "|-"})
+# authoring-skills "Frontmatter": `description` is "a folded block scalar
+# (`description: >`)"; the strip-chomping `>-` is the same scalar.
+_FOLDED = frozenset({">", ">-"})
+# Plain one-line values a strict YAML parser rejects or cuts short.
+_PLAIN_TRAPS = re.compile(r": |:\t|:$| #|\t#|^\? |^- |^[\[{&*!%@`|>]")
 _SEPARATOR_CELL = re.compile(r"^:?-+:?$")
 
 
@@ -53,14 +58,20 @@ def _block_scalar(indicator: str, block: list[str]) -> str:
 
 
 def _value(key: str, raw: str, block: list[str]) -> str | None:
-    """Return a field's string value, or None when it is not a string at all."""
+    """Return a field's string value, or None for another key's nested block."""
     if raw in _BLOCK_SCALARS:
-        if not any(line.strip() for line in block):
+        if not block:
             msg = f"{key}: empty block scalar"
             raise FrontmatterError(msg)
         return _block_scalar(raw, block)
+    if block and raw:
+        msg = f"{key}: a plain value continued on the next line; write `{key}: >`"
+        raise FrontmatterError(msg)
     if block:
-        return None  # a nested mapping or list
+        if key in KEYS:
+            msg = f"{key}: holds a nested mapping or list, not a string"
+            raise FrontmatterError(msg)
+        return None
     if raw[:1] in {'"', "'"}:
         quote = raw[0]
         inner = raw[1:-1]
@@ -68,14 +79,14 @@ def _value(key: str, raw: str, block: list[str]) -> str | None:
             msg = f"{key}: unsupported quoted value {raw!r}"
             raise FrontmatterError(msg)
         return inner
-    if raw[:1] in set("[{&*!%@`|>") or ": " in raw or " #" in raw:
+    if _PLAIN_TRAPS.search(raw):
         msg = f"{key}: a strict YAML parser rejects or cuts {raw!r}"
         raise FrontmatterError(msg)
     return raw
 
 
-def parse_frontmatter(text: str) -> tuple[dict[str, str | None], int]:
-    """Return the frontmatter fields and the index of its closing ``---`` line.
+def parse_frontmatter(text: str) -> tuple[dict[str, str | None], dict[str, str], int]:
+    """Return the fields, each field's raw inline form, and the closing line index.
 
     Raises:
         FrontmatterError: When the block is missing, unclosed, or unreadable.
@@ -90,11 +101,18 @@ def parse_frontmatter(text: str) -> tuple[dict[str, str | None], int]:
         msg = "has no closing --- line"
         raise FrontmatterError(msg) from None
     fields: dict[str, str | None] = {}
+    forms: dict[str, str] = {}
     index = 1
     while index < end:
+        if not lines[index].strip():
+            index += 1
+            continue
+        if lines[index].startswith("#"):
+            msg = f"line {index + 1}: a comment, which the frontmatter may not hold"
+            raise FrontmatterError(msg)
         match = _FIELD.match(lines[index])
         if match is None:
-            msg = f"line {index + 1}: cannot read {lines[index]!r}"
+            msg = f"line {index + 1}: not a `key: value` line: {lines[index]!r}"
             raise FrontmatterError(msg)
         key = match["key"]
         if key in fields:
@@ -105,8 +123,11 @@ def parse_frontmatter(text: str) -> tuple[dict[str, str | None], int]:
         while index < end and (not lines[index].strip() or lines[index][0] in " \t"):
             block.append(lines[index])
             index += 1
-        fields[key] = _value(key, match["value"] or "", block)
-    return fields, end
+        while block and not block[-1].strip():
+            block.pop()
+        forms[key] = match["value"] or ""
+        fields[key] = _value(key, forms[key], block)
+    return fields, forms, end
 
 
 def _description_problem(description: str | None) -> str | None:
@@ -126,7 +147,7 @@ def _description_problem(description: str | None) -> str | None:
 def _skill_problems(skill: Path, directory: str) -> list[str]:
     text = skill.read_text(encoding="utf-8")
     try:
-        fields, end = parse_frontmatter(text)
+        fields, forms, end = parse_frontmatter(text)
     except FrontmatterError as exc:
         return [f"frontmatter {exc}"]
     problems: list[str] = []
@@ -142,6 +163,11 @@ def _skill_problems(skill: Path, directory: str) -> list[str]:
         problems.append(f"name {directory!r} is not lowercase letters, digits, hyphens")
     if problem := _description_problem(fields.get("description")):
         problems.append(problem)
+    elif forms["description"] not in _FOLDED:
+        problems.append(
+            "description is not a folded block scalar (`description: >`), as "
+            "authoring-skills requires"
+        )
     body = len(text.splitlines()) - end - 1
     if body > BODY_LIMIT:
         problems.append(f"body is {body} lines, over {BODY_LIMIT}")
@@ -288,17 +314,17 @@ def test_skill_findings_well_formed_skill_passes(make_skill: MakeSkill) -> None:
     ("frontmatter", "problem"),
     [
         pytest.param(
-            "name: bar\ndescription: x\n",
+            "name: bar\ndescription: >\n  x\n",
             "name 'bar' does not match its directory 'foo'",
             id="name-mismatch",
         ),
         pytest.param(
-            "name: foo\ndescription: x\nallowed-tools: Bash\n",
+            "name: foo\ndescription: >\n  x\nallowed-tools: Bash\n",
             "frontmatter has keys other than name and description: ['allowed-tools']",
             id="extra-key",
         ),
         pytest.param(
-            "name: foo\ndescription: x\nmetadata:\n  platforms: codex\n",
+            "name: foo\ndescription: >\n  x\nmetadata:\n  platforms: codex\n",
             "frontmatter has keys other than name and description: ['metadata']",
             id="nested-extra-key",
         ),
@@ -313,7 +339,7 @@ def test_skill_findings_well_formed_skill_passes(make_skill: MakeSkill) -> None:
             id="non-ascii",
         ),
         pytest.param(
-            "name: foo\ndescription: " + "x" * (DESCRIPTION_LIMIT + 1) + "\n",
+            "name: foo\ndescription: >\n  " + "x" * (DESCRIPTION_LIMIT + 1) + "\n",
             f"description is {DESCRIPTION_LIMIT + 1} characters, over the "
             f"{DESCRIPTION_LIMIT} authoring-skills allows",
             id="over-limit",
@@ -325,14 +351,51 @@ def test_skill_findings_well_formed_skill_passes(make_skill: MakeSkill) -> None:
             id="colon-in-plain-value",
         ),
         pytest.param(
-            "name: foo\nname: foo\ndescription: x\n",
+            "name: foo\ndescription: Use when the harness runs\n",
+            "description is not a folded block scalar (`description: >`), as "
+            "authoring-skills requires",
+            id="plain-description",
+        ),
+        pytest.param(
+            "name: foo:\ndescription: >\n  x\n",
+            "frontmatter name: a strict YAML parser rejects or cuts 'foo:'",
+            id="value-ending-in-colon",
+        ),
+        pytest.param(
+            "name: ? foo\ndescription: >\n  x\n",
+            "frontmatter name: a strict YAML parser rejects or cuts '? foo'",
+            id="value-starting-with-question-mark",
+        ),
+        pytest.param(
+            "name: foo\t# skill\ndescription: >\n  x\n",
+            "frontmatter name: a strict YAML parser rejects or cuts 'foo\\t# skill'",
+            id="value-with-tab-comment",
+        ),
+        pytest.param(
+            "name: foo\nname: foo\ndescription: >\n  x\n",
             "frontmatter line 3: duplicate key 'name'",
             id="duplicate-key",
         ),
         pytest.param(
             "name: foo\n- description\n",
-            "frontmatter line 3: cannot read '- description'",
+            "frontmatter line 3: not a `key: value` line: '- description'",
             id="unreadable-line",
+        ),
+        pytest.param(
+            "# a skill\nname: foo\ndescription: >\n  x\n",
+            "frontmatter line 2: a comment, which the frontmatter may not hold",
+            id="comment-line",
+        ),
+        pytest.param(
+            "name: foo\ndescription: Use when\n  the harness runs\n",
+            "frontmatter description: a plain value continued on the next line; "
+            "write `description: >`",
+            id="multi-line-plain",
+        ),
+        pytest.param(
+            "name: foo\ndescription:\n  when: always\n",
+            "frontmatter description: holds a nested mapping or list, not a string",
+            id="nested-description",
         ),
     ],
 )
@@ -345,8 +408,15 @@ def test_skill_findings_bad_frontmatter_names_skill(
 
 
 def test_skill_findings_description_at_limit_passes(make_skill: MakeSkill) -> None:
-    description = " ".join(["word"] * (DESCRIPTION_LIMIT // 5))[:DESCRIPTION_LIMIT]
+    description = ("word " * DESCRIPTION_LIMIT)[: DESCRIPTION_LIMIT - 1] + "x"
+    assert len(description) == DESCRIPTION_LIMIT
     root = make_skill(frontmatter=f"name: foo\ndescription: >\n  {description}\n")
+
+    assert skill_findings(root) == []
+
+
+def test_skill_findings_blank_line_between_keys_passes(make_skill: MakeSkill) -> None:
+    root = make_skill(frontmatter="name: foo\n\ndescription: >\n  x\n\n")
 
     assert skill_findings(root) == []
 
