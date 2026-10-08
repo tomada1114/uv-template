@@ -129,7 +129,7 @@ Each Codex review is a round, at most 3 per PR: round 1's accepted findings are 
 fixed; rounds 2–3 fix accepted `P0`–`P2` and send a `P3` to step 9. Run
 `review_watch.py <pr>` once the PR opens and act on its verdict
 ([how](references/review-ci-merge.md#the-review)). **After every push**, run
-`review_watch.py <pr> --after-push <sha>` before reading CI: it waits a 180 s start
+`review_watch.py <pr> --after-push <sha>` before reading CI: it waits a 300 s start
 grace for a review of that push, then reports the next round or `NO_NEW_REVIEW`, which
 stands for that head alone. `NO_REVIEW`, or `ERROR` after one re-run, holds the PR and
 stops the run. Record `review` per round.

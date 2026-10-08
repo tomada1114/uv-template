@@ -63,7 +63,7 @@ Run it in the foreground with the call's timeout raised to 600000 ms; each slice
 re-reads the PR from scratch. Right after the PR opens, run it without `--after-push`.
 **After every push** — a fix, a CI repair, a merge of the default branch; a PR body or
 base repair pushes nothing and is not one — run it with `--after-push <sha>`, the
-commit just pushed, before reading CI: it waits a 180 s start grace, counted from its first call
+commit just pushed, before reading CI: it waits a 300 s start grace (`--start-grace`), counted from its first call
 for that SHA, for a review of the push to start, then for that review to settle. If the
 session is woken by PR activity meanwhile, that is a cue to run the script again,
 never a verdict.
