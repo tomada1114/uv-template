@@ -16,6 +16,6 @@ above). This file only records what Claude Code adds on top of them.
 - `.claude/skills/` is a generated mirror of `.agents/skills/`. Never hand-edit
   it: edit `.agents/skills/`, run `just agents-sync`, and commit both.
 - Hand a step to a sub-agent tier by `subagent_type` — `executor`, `architect`,
-  or `worker` — never by a bare `model`, which runs at the session's default
+  `scout`, or `worker` — never by a bare `model`, which runs at the session's default
   effort rather than the tier's. The definitions in `.claude/agents/` shadow
   same-named ones in `~/.claude/agents/` inside this repository.

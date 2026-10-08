@@ -169,7 +169,7 @@ needed in the main context again once this session has judged the result.
 
 ### The small-change step-down: `worker`
 
-`worker` is a small model at its highest effort — far cheaper per run than `executor`,
+`worker` is the cost tier — far cheaper per run than `executor`,
 and enough for a change that leaves nothing to find out. Hand the step 3 implementation
 to **`worker`** instead of `executor` when **all** of these hold:
 

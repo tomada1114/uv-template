@@ -54,7 +54,7 @@ number or `--include-design` ([step 2b](#2b-decide-a-design-that-gates-the-pick)
   ([closing-out.md](references/closing-out.md#approval-gated-commands)).
 - **Inline by default; tiers by name.** On a host with named sub-agents (AGENTS.md
   "Sub-agents"), a brief (`references/agent-*.md`) may go to the `worker`, `executor`,
-  or `architect` tier [cost-discipline.md](references/cost-discipline.md#tier-assignment)
+  `architect`, or `scout` tier [cost-discipline.md](references/cost-discipline.md#tier-assignment)
   names — by tier name, never a bare model name. A patch round or repeat CI repair on
   the same tier continues the same agent where the host allows.
 - **State lives in `<runstate>`** ([run-record.md](references/run-record.md)), never
