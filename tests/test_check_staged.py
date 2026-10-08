@@ -8,7 +8,6 @@ never matches a pattern itself -- and the gate does not refuse its own tests.
 
 from __future__ import annotations
 
-import importlib
 import importlib.util
 import json
 import os
@@ -21,6 +20,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+
+from tests.harness._yaml import as_mapping, load_yaml
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -187,13 +188,7 @@ def _logging_git(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def _load_pre_commit_config() -> dict[str, object]:
-    # pre-commit depends on PyYAML, so it is present wherever the hook runs;
-    # it ships no type stubs, hence the dynamic import.
-    yaml = importlib.import_module("yaml")
-    config: dict[str, object] = yaml.safe_load(
-        PRE_COMMIT_CONFIG.read_text(encoding="utf-8")
-    )
-    return config
+    return as_mapping(load_yaml(PRE_COMMIT_CONFIG), str(PRE_COMMIT_CONFIG))
 
 
 def _all_hooks(config: dict[str, object]) -> list[dict[str, object]]:

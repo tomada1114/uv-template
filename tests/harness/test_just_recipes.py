@@ -53,8 +53,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from tests.harness._shell import split_comment
 from tests.harness._workflows import jobs, read_workflow, steps
-from tests.harness._yaml import block_text, scalar, split_comment
+from tests.harness._yaml import block_text, scalar
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -591,7 +592,7 @@ def ci_recipe_findings(root: Path) -> list[str]:
     path = root / ".github/workflows/ci.yml"
     workflow_jobs = jobs(read_workflow(path), path)
     commands_by_job = {
-        scalar(job.get("name", (job_id, []))[0]): {
+        scalar(job.get("name", job_id)): {
             line.strip()
             for step in steps(job, path)
             if "run" in step
@@ -695,7 +696,7 @@ def test_ci_parallel_checks_propagate_each_failure(
         (
             step["run"]
             for step in steps(lint, path)
-            if scalar(step.get("name", ("", []))[0]) == "Run independent checks"
+            if scalar(step.get("name", "")) == "Run independent checks"
         ),
         None,
     )

@@ -1,4 +1,4 @@
-"""Reads GitHub Actions workflows through the fail-closed `_yaml` scanner.
+"""Reads GitHub Actions workflows through the shared safe YAML loader.
 
 Shared by the ruleset check (which jobs run on every pull request) and the
 workflow hygiene check (triggers, jobs, steps). Any layout the scanner cannot
@@ -13,19 +13,18 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field, replace
 from fnmatch import fnmatchcase
+from itertools import product
 from typing import TYPE_CHECKING
 
 from tests.harness._yaml import (
-    Entry,
     Mapping,
     UnreadableYamlError,
-    content_lines,
-    flow_list,
-    mapping,
+    as_mapping,
+    as_sequence,
+    as_str,
+    load_yaml,
     scalar,
     scalar_list,
-    sequence,
-    split_comment,
 )
 
 if TYPE_CHECKING:
@@ -70,76 +69,107 @@ def workflow_files(root: Path) -> list[Path]:
 
 
 def read_workflow(path: Path) -> Mapping:
-    """Return a workflow's top-level mapping."""
-    return mapping(content_lines(path.read_text(encoding="utf-8")), path)
+    """Return a workflow's validated top-level mapping."""
+    return as_mapping(load_yaml(path), str(path))
 
 
 def triggers(top: Mapping, path: Path) -> Mapping:
-    """Return ``event -> (inline value, block)`` for each event of ``on:``."""
-    on = top.get("on") or top.get("true")
-    if on is None:
+    """Read scalar, sequence or mapping trigger syntax from the same loader."""
+    if "on" not in top:
         msg = f"{path.name}: no `on:` trigger"
         raise UnreadableYamlError(msg)
-    value, block = on
-    if not value:
-        return mapping(block, path)
-    events = flow_list(value, path)
-    return {event: ("", []) for event in events or [scalar(value)]}
+    value = top["on"]
+    if isinstance(value, str):
+        return {value: None}
+    if isinstance(value, list):
+        return {as_str(event, f"{path}: on"): None for event in value}
+    return as_mapping(value, f"{path}: on")
 
 
 def jobs(top: Mapping, path: Path) -> dict[str, Mapping]:
-    """Return each job's mapping by job id."""
+    """Validate each job before a check consumes it."""
     return {
-        job_id: mapping(lines, path)
-        for job_id, (_, lines) in mapping(top.get("jobs", ("", []))[1], path).items()
+        job_id: as_mapping(value, f"{path}: jobs.{job_id}")
+        for job_id, value in as_mapping(top.get("jobs", {}), f"{path}: jobs").items()
     }
 
 
 def steps(job: Mapping, path: Path) -> list[Mapping]:
-    """Return each step's mapping."""
-    value, block = job.get("steps", ("", []))
-    if value:
-        msg = f"{path.name}: cannot read steps: {value!r}"
-        raise UnreadableYamlError(msg)
-    return [mapping(item, path) for item in sequence(block, path)]
+    """Validate every step and name its location when a shape is wrong."""
+    return [
+        as_mapping(value, f"{path}: steps[{index}]")
+        for index, value in enumerate(
+            as_sequence(job.get("steps", []), f"{path}: steps")
+        )
+    ]
 
 
 def _unfiltered_pull_request(events: Mapping, path: Path) -> bool:
     if "pull_request" not in events:
         return False
-    pr_value, pr_block = events["pull_request"]
-    if pr_value not in {"", "{}"}:
-        msg = f"{path.name}: cannot read pull_request: {pr_value!r}"
-        raise UnreadableYamlError(msg)
-    filters = mapping(pr_block, path)
+    value = events["pull_request"]
+    filters = {} if value is None else as_mapping(value, f"{path}: on.pull_request")
     if unknown := sorted(filters.keys() - _PR_FILTERS):
         msg = f"{path.name}: unknown pull_request filter {unknown}"
         raise UnreadableYamlError(msg)
     if {"paths", "paths-ignore", "branches-ignore"} & filters.keys():
         return False
     if "branches" in filters:
-        patterns = scalar_list(filters["branches"], path)
-        # A `!` pattern re-excludes branches; reading the order is not worth it.
+        patterns = scalar_list(
+            filters["branches"], path, where="on.pull_request.branches"
+        )
         if any(p.startswith("!") for p in patterns) or not any(
             fnmatchcase(DEFAULT_BRANCH, p) for p in patterns
         ):
             return False
     if "types" in filters:
-        return set(scalar_list(filters["types"], path)) >= PR_ACTIVITY
+        return (
+            set(scalar_list(filters["types"], path, where="on.pull_request.types"))
+            >= PR_ACTIVITY
+        )
     return True
 
 
-def _matrix_values(job: Mapping, key: str, path: Path) -> list[str]:
-    strategy = mapping(job.get("strategy", ("", []))[1], path)
-    matrix = mapping(strategy.get("matrix", ("", []))[1], path)
-    if key not in matrix:
-        msg = f"{path.name}: matrix.{key} is not declared in the job's matrix"
-        raise UnreadableYamlError(msg)
-    values = flow_list(matrix[key][0], path)
-    if values is None:
-        msg = f"{path.name}: matrix.{key} must be a one-line [a, b] list"
-        raise UnreadableYamlError(msg)
-    return values
+def _matrix_rows(job: Mapping, path: Path) -> list[Mapping]:
+    strategy = as_mapping(job.get("strategy", {}), f"{path}: strategy")
+    matrix = as_mapping(strategy.get("matrix", {}), f"{path}: strategy.matrix")
+    axes = {
+        key: as_sequence(value, f"{path}: matrix.{key}")
+        for key, value in matrix.items()
+        if key not in {"include", "exclude"}
+    }
+    original = (
+        [dict(zip(axes, values, strict=True)) for values in product(*axes.values())]
+        if axes
+        else []
+    )
+    exclusions = [
+        as_mapping(value, f"{path}: matrix.exclude")
+        for value in as_sequence(matrix.get("exclude", []), f"{path}: matrix.exclude")
+    ]
+    original = [
+        row
+        for row in original
+        if not any(
+            all(key in row and row[key] == value for key, value in excluded.items())
+            for excluded in exclusions
+        )
+    ]
+    rows = [dict(row) for row in original]
+    additions: list[Mapping] = []
+    # GitHub applies include after exclude and never merges into added rows.
+    for value in as_sequence(matrix.get("include", []), f"{path}: matrix.include"):
+        extra = as_mapping(value, f"{path}: matrix.include")
+        matched = False
+        for base, row in zip(original, rows, strict=True):
+            if all(
+                key not in axes or base[key] == value for key, value in extra.items()
+            ):
+                row.update(extra)
+                matched = True
+        if not matched:
+            additions.append(extra)
+    return rows + additions
 
 
 def _checks(path: Path) -> list[Check] | None:
@@ -149,15 +179,27 @@ def _checks(path: Path) -> list[Check] | None:
         return None
     checks: list[Check] = []
     for job_id, job in jobs(top, path).items():
-        names = [scalar(job.get("name", (job_id, []))[0]) or job_id]
-        for key in _MATRIX_REF.findall(names[0]):
-            pattern = re.compile(rf"\$\{{\{{\s*matrix\.{key}\s*\}}\}}")
-            names = [
-                pattern.sub(value, name)
-                for name in names
-                for value in _matrix_values(job, key, path)
-            ]
-        if_expr = split_comment(job["if"][0])[0] if "if" in job else None
+        name = as_str(job.get("name", job_id), f"{path}: jobs.{job_id}.name") or job_id
+        refs = _MATRIX_REF.findall(name)
+        names = [name]
+        if refs:
+            names = []
+            for row in _matrix_rows(job, path):
+                expanded = name
+                for match in _MATRIX_REF.finditer(name):
+                    expanded = expanded.replace(
+                        match[0],
+                        scalar(
+                            row.get(match["key"], ""), f"{path}: matrix.{match['key']}"
+                        ),
+                    )
+                names.append(expanded)
+            if not names:
+                msg = (
+                    f"{path.name}: matrix.{refs[0]} is not declared in the job's matrix"
+                )
+                raise UnreadableYamlError(msg)
+        if_expr = entry_value(job.get("if"))
         source = (JobSource(path, job),)
         checks.extend(Check(name, if_expr, "needs" in job, source) for name in names)
     return checks
@@ -193,6 +235,6 @@ def can_skip(check: Check) -> bool:
     return body not in _GUARDS
 
 
-def entry_value(entry: Entry | None) -> str | None:
+def entry_value(entry: object) -> str | None:
     """Return an entry's inline scalar, or None when the key is absent."""
-    return None if entry is None else scalar(entry[0])
+    return None if entry is None else scalar(entry)

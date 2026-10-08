@@ -36,7 +36,7 @@ repository and fails on a fixture built under ``tmp_path``:
   not duplicated here.
 
 The checks hold in the template and in an app the bootstrap cut from it, so
-none assumes a template-only file exists. No YAML library is a dependency:
-``_yaml.py`` is a fail-closed block scanner, and ``_workflows.py`` reads the
-workflow layout on top of it.
+none assumes a template-only file exists. ``_yaml.py`` loads YAML safely and
+validates consumed value shapes; ``_workflows.py`` interprets workflow triggers
+and matrices on top of that shared boundary.
 """
