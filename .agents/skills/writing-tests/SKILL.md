@@ -126,7 +126,7 @@ checked.
 - No shared mutable state and no ordering dependency. Each test passes alone
   (`uv run --locked pytest tests/<layer>/test_<module>.py::test_<name>`), in any order,
   in any process: `just test` runs the suite with `pytest-xdist` (`-n auto`) and CI
-  splits it into four shards, so a hidden dependency surfaces as a failure that moves.
+  also runs it across processes, so a hidden dependency surfaces as an intermittent failure.
 - No `time.sleep()`: inject the clock (`fixed_clock`) or patch it with `monkeypatch`.
 - No `@pytest.mark.skip`, `xfail`, or TODO test on `main` — fix the test or delete it.
   Skipping a test is weakening a gate (AGENTS.md's "Security and human approval").

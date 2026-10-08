@@ -116,12 +116,15 @@ class FakeGh:
         self.env: dict[str, str] = {}
         self.state_dir: Path | None = None
 
-    def __enter__(self) -> "FakeGh":
+    def __enter__(self) -> FakeGh:
         self._tmpdir = tempfile.TemporaryDirectory()
         bin_dir = Path(self._tmpdir.name) / "bin"
         bin_dir.mkdir()
         gh_path = bin_dir / "gh"
-        gh_path.write_text(_RUNNER, encoding="utf-8")
+        # The fixture needs only stdlib modules: avoid ambient site customization
+        # and repeat site-package startup in every CLI subprocess.
+        runner = _RUNNER.replace("#!/usr/bin/env python3", f"#!{sys.executable} -S", 1)
+        gh_path.write_text(runner, encoding="utf-8")
         gh_path.chmod(gh_path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
         config = [

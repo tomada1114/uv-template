@@ -38,6 +38,8 @@ Usage:
                     [--rank-only] [--select N] [--with-rank]
                     [--detail N]... [--detail-top K] [--no-rank]
                     [--audit] [--cache-ttl S] [--refresh] [--json]
+    issue_digest.py --issues-file PATH --prs-file PATH [the flags above, except
+                    --label/--assignee/--milestone]
 
 Output (default: markdown). `--json` emits the same data as a JSON object for
 programmatic consumers.
@@ -57,9 +59,21 @@ An issue labelled `tracking` (or `epic`) is a checklist of sub-issues, not work:
 it is dropped before ranking, never tiered, and listed on a `tracking:` line
 (`tracking_issues` in --json) so the caller ships its sub-issues instead.
 
+`--issues-file` and `--prs-file` (always together) rank REST JSON the caller
+fetched itself — `gh api --paginate --slurp` output of the open-issues and
+open-pulls endpoints, an array or an array of page arrays — instead of calling
+the GraphQL-backed `gh issue list` / `gh pr list`, which a Claude Code cloud
+session's GitHub proxy refuses. File mode starts no `gh` process, does not need
+`gh` on PATH, skips the fetch cache, drops issues-file items carrying
+`pull_request`, and applies `--limit` to the first N issues in file order. The
+server-side filters `--label`/`--assignee`/`--milestone` do not apply to it.
+
 Exit codes:
     0 = digest printed (may contain zero issues)
-    1 = gh invocation failed
+    1 = gh invocation failed, or an --issues-file/--prs-file could not be read
+        (`error: <path>: <reason>`)
+    2 = flag misuse (only one of --issues-file/--prs-file, or either combined
+        with --label/--assignee/--milestone)
 """
 
 from __future__ import annotations
@@ -693,6 +707,72 @@ def fetch_issues_and_prs(
     return issues, prs, status
 
 
+def _rest_items(path: str, label: str) -> list[dict[str, Any]]:
+    """The objects in a REST JSON file: an array, or `--slurp` pages (arrays of arrays).
+
+    Exits 1 with `error: <path>: <reason>` for a file that is missing,
+    unreadable, not JSON, or not one of those two shapes.
+    """
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except OSError as exc:
+        print(f"error: {path}: {exc.strerror or exc}", file=sys.stderr)
+        raise SystemExit(1)
+    except ValueError as exc:  # JSONDecodeError and UnicodeDecodeError
+        print(f"error: {path}: not valid JSON ({exc})", file=sys.stderr)
+        raise SystemExit(1)
+    shape = f"expected a JSON array of {label} objects or an array of such arrays"
+    if not isinstance(data, list):
+        print(f"error: {path}: {shape}", file=sys.stderr)
+        raise SystemExit(1)
+    items: list[Any] = []
+    for entry in data:
+        if isinstance(entry, list):
+            items.extend(entry)
+        else:
+            items.append(entry)
+    if not all(isinstance(item, dict) for item in items):
+        print(f"error: {path}: {shape}", file=sys.stderr)
+        raise SystemExit(1)
+    return items
+
+
+def _rest_issue(item: dict[str, Any]) -> dict[str, Any]:
+    """A REST issue as the dict `gh issue list --json` produces."""
+    return {
+        **item,
+        "labels": item.get("labels") or [],
+        "assignees": item.get("assignees") or [],
+        "createdAt": item.get("created_at") or "",
+        "updatedAt": item.get("updated_at") or "",
+        "url": item.get("html_url") or "",
+    }
+
+
+def _rest_pr(item: dict[str, Any]) -> dict[str, Any]:
+    """A REST pull request as the dict `gh pr list --json` produces.
+
+    REST has no closing references; the body, title and branch still claim issues.
+    """
+    return {
+        **item,
+        "headRefName": (item.get("head") or {}).get("ref") or "",
+        "isDraft": bool(item.get("draft")),
+        "url": item.get("html_url") or "",
+        "closingIssuesReferences": [],
+    }
+
+
+def read_rest_files(
+    issues_file: str, prs_file: str, limit: int
+) -> tuple[list[Any], list[Any]]:
+    """(issues, prs) from REST JSON files, shaped like the `gh` path's."""
+    issues = [_rest_issue(i) for i in _rest_items(issues_file, "issue")
+              if "pull_request" not in i]
+    prs = [_rest_pr(p) for p in _rest_items(prs_file, "pull request")]
+    return issues[:max(limit, 0)], prs
+
+
 def squeeze(text: str | None, limit: int) -> str:
     """Collapse whitespace, drop HTML comments and images, then truncate.
 
@@ -904,10 +984,24 @@ def main() -> int:
     p.add_argument("--refresh", action="store_true",
                    help="ignore the cache for this call and re-fetch — required "
                         "after anything this run did changes the backlog")
+    p.add_argument("--issues-file", metavar="PATH",
+                   help="rank open issues read from this REST JSON file "
+                        "(gh api --paginate --slurp) instead of calling gh; "
+                        "needs --prs-file")
+    p.add_argument("--prs-file", metavar="PATH",
+                   help="open pull requests from this REST JSON file; "
+                        "needs --issues-file")
     p.add_argument("--json", action="store_true", dest="as_json")
     args = p.parse_args()
 
-    if not shutil.which("gh"):
+    file_mode = args.issues_file is not None or args.prs_file is not None
+    if file_mode:
+        if args.issues_file is None or args.prs_file is None:
+            p.error("--issues-file and --prs-file must be given together")
+        if args.label or args.assignee or args.milestone:
+            p.error("--issues-file/--prs-file cannot be combined with "
+                    "--label, --assignee, or --milestone")
+    elif not shutil.which("gh"):
         print("error: gh CLI not found", file=sys.stderr)
         return 1
 
@@ -922,9 +1016,13 @@ def main() -> int:
     if args.milestone:
         issue_args += ["--milestone", args.milestone]
 
-    issues, prs, cache_status = fetch_issues_and_prs(
-        issue_args, args.cache_ttl, args.refresh
-    )
+    if file_mode:
+        issues, prs = read_rest_files(args.issues_file, args.prs_file, args.limit)
+        cache_status = "MISS"  # the cache is neither read nor written
+    else:
+        issues, prs, cache_status = fetch_issues_and_prs(
+            issue_args, args.cache_ttl, args.refresh
+        )
 
     # Map issue number -> open PR that claims to close it.
     claimed: dict[int, dict[str, Any]] = {}

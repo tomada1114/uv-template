@@ -224,7 +224,8 @@ class MainTest(unittest.TestCase):
             if name == "run_record.py":
                 self.recorded.append(cmd)
                 return 0, "", ""
-            raise AssertionError(f"unexpected command: {cmd}")
+            message = f"unexpected command: {cmd}"
+            raise AssertionError(message)
 
         out, err = io.StringIO(), io.StringIO()
         with patch.object(plan, "run", fake_run), \
@@ -276,8 +277,8 @@ class MainTest(unittest.TestCase):
     def test_a_missing_preflight_key_stops_the_run(self):
         # The silent version of this used to drop --verify from the batch
         # command, removing the baseline check with no message at all.
-        pre = "\n".join(l for l in PREFLIGHT.splitlines()
-                        if not l.startswith("verify_command:")) + "\n"
+        pre = "\n".join(line for line in PREFLIGHT.splitlines()
+                        if not line.startswith("verify_command:")) + "\n"
         rc, out, err = self._run([], [rank_row(1, touches=["a/"])], preflight=pre)
         self.assertEqual(rc, 1)
         self.assertIn("preflight-keys-missing: verify_command", out)

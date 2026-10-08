@@ -1,7 +1,7 @@
 """Self-checks of the agent harness: cross-file drift fails CI, not an agent.
 
 `just check-harness` runs this package (and `tests/test_product_section.py`);
-`just verify` and CI's test shards run it too. Each check passes on the
+`just verify` and CI's Coverage job run it too. Each check passes on the
 repository and fails on a fixture built under ``tmp_path``:
 
 - (a) ``test_skills.py``: every ``.agents/skills/<dir>/SKILL.md`` frontmatter
