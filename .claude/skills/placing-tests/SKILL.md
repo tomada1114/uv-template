@@ -49,7 +49,8 @@ rather than by a new file:
 
 - Used by every layer: `tests/conftest.py`. It holds `make_container`, `fixed_clock`,
   `fixed_now`, and the autouse fixture that keeps a developer's `MY_APP_*` variables
-  out of every test.
+  out of every test. `tests/settings_env.py` derives the cleanup from the settings
+  prefix and model aliases, shared with subprocess probes.
 - Used by one layer: that layer's `conftest.py` — `tests/api/conftest.py` holds
   `client`.
 - Used by one file: that file. A fixture moves up only when a second file needs it.

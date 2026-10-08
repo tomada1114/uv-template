@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 
 import pytest
 
 from my_app.composition import Container, build_container
-from my_app.settings import ENV_PREFIX, OPENROUTER_API_KEY_ENV, Settings
+from my_app.settings import Settings
+from tests.settings_env import without_settings_env
 
 FIXED_NOW = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
 
@@ -18,15 +20,10 @@ def _fixed_clock() -> datetime:
 
 @pytest.fixture(autouse=True)
 def _isolate_settings_env(monkeypatch):
-    """Keep a developer's own ``MY_APP_*`` variables out of every test.
-
-    Without this, a shell exporting ``MY_APP_DATABASE_URL`` would point the
-    tests at that database, and one exporting ``OPENROUTER_API_KEY`` for
-    another tool would open the LLM layer in tests that expect it closed.
-    """
-    monkeypatch.delenv(f"{ENV_PREFIX}DATABASE_URL", raising=False)
-    monkeypatch.delenv(OPENROUTER_API_KEY_ENV, raising=False)
-    monkeypatch.delenv(f"{ENV_PREFIX}LLM_MODEL", raising=False)
+    """Keep every settings input from the developer's shell out of tests."""
+    cleaned = without_settings_env(os.environ)
+    for name in set(os.environ) - cleaned.keys():
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture

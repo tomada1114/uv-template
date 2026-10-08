@@ -62,9 +62,8 @@ nothing. Teardown here is `cleanup_run.sh` and nothing else.
 
 ## Viability gate
 
-`worktree_setup.sh` reconstructs what a fresh worktree lacks — it copies the untracked
-local config, installs from the lockfile, and runs the project's own verification
-command. Whether that is _enough_ for a given repo is not worth predicting; it is worth
+`worktree_setup.sh` reconstructs what a fresh worktree lacks — it installs from the
+lockfile without copying local config, and runs the project's own verification command. Whether that is _enough_ for a given repo is not worth predicting; it is worth
 testing, once, cheaply.
 
 Provision the group's **first** worktree and read its `verdict:` line:

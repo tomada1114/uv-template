@@ -125,6 +125,7 @@ one pass.
 
 ## What replaced the agent hooks
 
+<!-- template-only -->
 The repository used to wire agent hook scripts into Claude Code and Codex CLI. Each
 behavior they had now lives here:
 
@@ -135,6 +136,8 @@ behavior they had now lives here:
 | Blocking writes to `uv.lock` (`guard.py`) | `just verify`'s `lock-check` (`uv lock --check`) |
 | Blocking writes to `.env*` and `secrets/**` (`guard.py`) | `check-staged` refuses them at commit time |
 | ruff and mypy before an agent ends its turn (`stop_check.py`) | The ruff and mypy pre-commit hooks, and `just verify` |
+
+<!-- /template-only -->
 
 Format-on-edit for Claude Code, in `.claude/settings.local.json` (needs `jq`):
 

@@ -32,6 +32,13 @@ core change:
   AGENTS.md's Quick Reference and the paragraph under it; `just check-harness` fails
   while one remains), and in `pyproject.toml`'s ruff config the `fastapi.*` entries and
   the `src/my_app/api/**` per-file-ignore;
+- update AGENTS.md's Overview and Architecture tree and bullets to describe only
+  the remaining entry point; in the paragraph after Quick Reference, remove the
+  server instructions that require the deleted API;
+- update README: remove Quickstart's `my-app serve`, curl, API docs and HTTP
+  column, all HTTP status/`detail` prose, LLM-backed route guidance, and the API
+  server Configuration note; rewrite Architecture for the remaining CLI and
+  remove the pointer to this deleted skill;
 - delete `.agents/skills/building-api-routes/`, remove its row from AGENTS.md's Skills
   table, and run `just agents-sync`.
 

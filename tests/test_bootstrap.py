@@ -21,12 +21,6 @@ if TYPE_CHECKING:
     from types import ModuleType
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-# The same scan as CI's smoke job: placeholder tokens in any case, and the
-# display placeholders as whole words.
-LEFTOVER_TOKENS = re.compile(
-    r"my-app|my_app|uv-template|your-username|you@example", re.IGNORECASE
-)
-LEFTOVER_PHRASES = re.compile(r"\b(?:My App|Your Name)\b")
 # A line the bootstrap treats as a template-only marker.
 MARKER_LINE = re.compile(r"^\s*(?:#\s*)?<!-- /?template-only -->\s*$", re.MULTILINE)
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
@@ -99,6 +93,19 @@ def _load_bootstrap_module() -> ModuleType:
 
 
 bootstrap = _load_bootstrap_module()
+# Both test and CI smoke scans are checked against the bootstrap vocabulary.
+LEFTOVER_TOKENS = re.compile(
+    "|".join(re.escape(value) for value in bootstrap.FORBIDDEN_TOKENS), re.IGNORECASE
+)
+LEFTOVER_PHRASES = re.compile(
+    r"(?<!\w)(?:"
+    + "|".join(
+        re.escape(value)
+        for value in (*bootstrap.FORBIDDEN_PHRASES, *bootstrap.PLACEHOLDER_DESCRIPTIONS)
+    )
+    + r")(?!\w)",
+    re.IGNORECASE,
+)
 
 
 @pytest.fixture(scope="session")
@@ -191,6 +198,57 @@ def _text_files(root: Path) -> dict[str, str]:
 
 
 # --- REQ-001: every placeholder is replaced --------------------------------
+
+
+def deleted_template_references(texts: dict[str, str]) -> list[str]:
+    allowed_lines: dict[str, tuple[str, ...]] = {
+        ".agents/skills/starting-an-app/SKILL.md": (
+            "also covers scripts/bootstrap.py, .template-origin, and its CI smoke job.",
+            "2. **Rename.** `scripts/bootstrap.py` renames the template into the app, writes",
+        ),
+        ".claude/skills/starting-an-app/SKILL.md": (
+            "also covers scripts/bootstrap.py, .template-origin, and its CI smoke job.",
+            "2. **Rename.** `scripts/bootstrap.py` renames the template into the app, writes",
+        ),
+    }
+    # Duration keys are historical timing metadata, and harness fixtures exercise
+    # optional template documents even when those documents are absent.
+    allowed_lines[".test_durations"] = ('"tests/test_bootstrap.py::',)
+    allowed_lines["tests/harness/test_just_recipes.py"] = (
+        'pytest.param("TEMPLATE.md", "Run `just docs`.',
+    )
+    patterns = {
+        deleted: re.compile(rf"(?<![\w.-]){re.escape(Path(deleted).name)}(?![\w.-])")
+        for deleted in bootstrap.KEEPABLE_FILES
+    }
+    return [
+        f"{relative}:{number}: {deleted}"
+        for relative, text in texts.items()
+        for number, line in enumerate(text.splitlines(), 1)
+        for deleted in bootstrap.KEEPABLE_FILES
+        if patterns[deleted].search(line)
+        and not any(allowed in line for allowed in allowed_lines.get(relative, ()))
+    ]
+
+
+@pytest.mark.parametrize(
+    ("reference", "deleted"),
+    [
+        pytest.param("bootstrap.py", "scripts/bootstrap.py", id="basename"),
+        pytest.param("./scripts/bootstrap.py", "scripts/bootstrap.py", id="relative"),
+        pytest.param(
+            "../tests/test_bootstrap.py", "tests/test_bootstrap.py", id="parent"
+        ),
+    ],
+)
+def test_deleted_template_reference_variants_are_detected(reference, deleted):
+    assert deleted_template_references({"docs/guide.md": reference}) == [
+        f"docs/guide.md:1: {deleted}"
+    ]
+
+
+def test_bootstrap_leaves_no_reference_to_a_deleted_template_file(sample_app):
+    assert deleted_template_references(_text_files(sample_app)) == []
 
 
 def test_bootstrap_sample_values_leave_no_placeholder_anywhere(sample_app):
@@ -412,6 +470,13 @@ def test_main_invalid_input_leaves_the_tree_byte_identical(clone, capsys, argv_t
 @pytest.mark.parametrize(
     ("relative", "old", "new", "message"),
     [
+        pytest.param(
+            "README.md",
+            "A short description of what this application does.",
+            "An unrecognized application description.",
+            r"README\.md: expected exactly one",
+            id="readme-description-drifted",
+        ),
         pytest.param(
             "SECURITY.md",
             "If that form is unavailable",
@@ -759,3 +824,79 @@ def test_git_env_disables_background_maintenance(
     _git(tmp_path, "init", "--quiet")
 
     assert _git(tmp_path, "config", "--get", key).strip() == expected
+
+
+def test_bootstrap_readme_description_is_the_supplied_value(sample_app):
+    text = (sample_app / "README.md").read_text(encoding="utf-8")
+    assert "Todo API" in text
+    assert bootstrap.PLACEHOLDER_DESCRIPTIONS[1] not in text
+
+
+def assert_smoke_contract(workflow: str) -> None:
+    smoke = workflow.split("- name: Assert no placeholder survived", 1)[1].split(
+        "- name:", 1
+    )[0]
+    patterns = re.findall(r"git grep[^\n]+ -E '([^']+)'", smoke)
+    assert patterns == [
+        "|".join(re.escape(value) for value in bootstrap.FORBIDDEN_TOKENS),
+        "|".join(
+            re.escape(value)
+            for value in (
+                *bootstrap.FORBIDDEN_PHRASES,
+                *bootstrap.PLACEHOLDER_DESCRIPTIONS,
+            )
+        ),
+    ], "smoke placeholder patterns drifted"
+    deletion_loop = re.search(r"for path in (.*?); do", smoke, re.DOTALL)
+    assert deletion_loop is not None
+    paths = deletion_loop.group(1).replace("\\\n", " ").split()
+    assert set(paths) == {*bootstrap.KEEPABLE_FILES, "src/my_app"}, (
+        "smoke deletion list drifted"
+    )
+
+
+def test_bootstrap_smoke_contract_matches_script_constants():
+    assert_smoke_contract(
+        (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    )
+
+
+@pytest.mark.parametrize(
+    "old",
+    [
+        pytest.param("you@example", id="token"),
+        pytest.param("TEMPLATE.md scripts/bootstrap.py", id="deleted-file"),
+    ],
+)
+def test_bootstrap_smoke_contract_drift_is_rejected(old):
+    workflow = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    changed = workflow.replace(old, "unexpected|", 1)
+    with pytest.raises(AssertionError, match=r"smoke .* drifted"):
+        assert_smoke_contract(changed)
+
+
+@pytest.mark.parametrize("description", bootstrap.PLACEHOLDER_DESCRIPTIONS)
+def test_bootstrap_leftover_scan_detects_description_placeholders(description):
+    assert any(
+        pattern.search(description) for pattern in (LEFTOVER_TOKENS, LEFTOVER_PHRASES)
+    )
+
+
+@pytest.mark.parametrize("description", bootstrap.PLACEHOLDER_DESCRIPTIONS)
+@pytest.mark.parametrize("variant", ["exact", "case", "embedded"])
+def test_bootstrap_placeholder_description_is_rejected_before_writing(
+    clone, description, variant
+):
+    value = (
+        description
+        if variant == "exact"
+        else description.upper()
+        if variant == "case"
+        else f"About: {description} More."
+    )
+    before = _snapshot(clone)
+    with pytest.raises(
+        bootstrap.BootstrapError, match=r"invalid description .*placeholder"
+    ):
+        _run(clone, description=value)
+    assert _snapshot(clone) == before

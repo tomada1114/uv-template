@@ -134,6 +134,19 @@ def run_script_with_stub_path(args, responses, stub_dir, *, exits=None, stderrs=
 
 
 class CiWatchTest(unittest.TestCase):
+    def test_fake_cli_ignores_site_customization(self):
+        with tempfile.TemporaryDirectory() as root:
+            Path(root, "sitecustomize.py").write_text(
+                'print("unexpected startup output")\n', encoding="utf-8"
+            )
+            with FakeGh({("version",): "fixture version\n"}) as fake:
+                env = dict(fake.env, PYTHONPATH=root)
+                proc = subprocess.run(
+                    ["gh", "version"], env=env, text=True, capture_output=True
+                )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(proc.stdout, "fixture version\n")
+
     def test_missing_pr_is_usage_error(self):
         proc, calls = run_script([], {})
 

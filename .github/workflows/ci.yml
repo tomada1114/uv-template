@@ -183,14 +183,15 @@ jobs:
           # the display placeholders are matched as whole words, as the
           # template's sites spell them.
           status=0
-          if git grep --cached -n -I -i -E 'my-app|my_app|uv-template|your-username|you@example' -- . ':!.template-origin'; then
+          if git grep --cached -n -I -i -E 'my\-app|my_app|uv\-template|your\-username|you@example\.com' -- . ':!.template-origin'; then
             echo "::error::the bootstrap left a placeholder token on the lines above"; status=1
           fi
-          if git grep --cached -n -I -w -E 'My App|Your Name' -- . ':!.template-origin'; then
+          if git grep --cached -n -I -i -w -E 'My\ App|Your\ Name|A\ short\ description\ of\ the\ project\.|A\ short\ description\ of\ what\ this\ application\ does\.' -- . ':!.template-origin'; then
             echo "::error::the bootstrap left a display placeholder on the lines above"; status=1
           fi
           for path in TEMPLATE.md scripts/bootstrap.py tests/test_bootstrap.py src/my_app \
-            .agents/skills/starting-an-app/references/bootstrap.md; do
+            .agents/skills/starting-an-app/references/bootstrap.md \
+            .claude/skills/starting-an-app/references/bootstrap.md; do
             if [ -e "$path" ]; then echo "::error::$path survived the bootstrap"; status=1; fi
           done
           grep -qx 'ENV_PREFIX = "TODO_API_"' src/todo_api/settings.py || { echo "::error::env prefix not renamed"; status=1; }
