@@ -276,6 +276,22 @@ jobs:
     }
 
 
+@pytest.mark.parametrize(
+    ("value", "context"), [("2026-10-08", "2026-10-08"), ("010", "10")]
+)
+def test_every_pr_checks_core_scalars_render_actual_context(
+    tmp_path: Path, value: str, context: str
+) -> None:
+    root = _workflow(
+        tmp_path,
+        "on: pull_request\njobs:\n  a:\n"
+        "    name: A (${{ matrix.x }})\n"
+        f"    strategy:\n      matrix:\n        x: [{value}]\n",
+    )
+
+    assert set(every_pr_checks(root)) == {f"A ({context})"}
+
+
 def test_every_pr_checks_partial_include_missing_name_property_is_empty(
     tmp_path: Path,
 ) -> None:

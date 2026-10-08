@@ -9,12 +9,14 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, cast
 
-import yaml
+# PyYAML publishes no stubs; only this file imports it and narrows its output.
+import yaml  # type: ignore[import-untyped]
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from yaml.nodes import MappingNode, Node, ScalarNode
+    # Node annotations stay inside the same untyped-library boundary.
+    from yaml.nodes import MappingNode, Node, ScalarNode  # type: ignore[import-untyped]
 
 type Mapping = dict[str, object]
 
@@ -48,7 +50,15 @@ class _Loader(yaml.SafeLoader):  # type: ignore[misc]  # PyYAML is untyped
 
 _Loader.yaml_implicit_resolvers = {
     key: [
-        (tag, pattern) for tag, pattern in resolvers if tag != "tag:yaml.org,2002:bool"
+        (tag, pattern)
+        for tag, pattern in resolvers
+        if tag
+        not in {
+            "tag:yaml.org,2002:bool",
+            "tag:yaml.org,2002:int",
+            "tag:yaml.org,2002:float",
+            "tag:yaml.org,2002:timestamp",
+        }
     ]
     for key, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
 }
@@ -57,6 +67,29 @@ _Loader.add_implicit_resolver(
     re.compile(r"^(?:true|false)$", re.IGNORECASE),
     list("tTfF"),
 )
+# Actions' YamlObjectReader uses YAML 1.2 core scalar resolution. Dates and
+# sexagesimal values stay strings; a leading zero is decimal, not YAML 1.1 octal.
+# https://yaml.org/spec/1.2.2/#1032-tag-resolution
+_Loader.add_implicit_resolver(
+    "tag:yaml.org,2002:int",
+    re.compile(r"^(?:[-+]?[0-9]+|0o[0-7]+|0x[0-9a-fA-F]+)$"),
+    list("-+0123456789"),
+)
+_Loader.add_implicit_resolver(
+    "tag:yaml.org,2002:float",
+    re.compile(
+        r"^(?:[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)(?:[eE][-+]?[0-9]+)?"
+        r"|[-+]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN))$"
+    ),
+    list("-+0123456789."),
+)
+
+
+def _integer(loader: _Loader, node: ScalarNode) -> int:
+    value: str = loader.construct_scalar(node)
+    # SafeLoader's constructor still assumes YAML 1.1 even with new resolvers.
+    base = 8 if value.startswith("0o") else 16 if value.startswith("0x") else 10
+    return int(value, base)
 
 
 def _string(loader: _Loader, node: ScalarNode) -> _Scalar:
@@ -104,6 +137,7 @@ def _mapping(loader: _Loader, node: MappingNode) -> dict[object, object]:
 
 _Loader.add_constructor("tag:yaml.org,2002:str", _string)
 _Loader.add_constructor("tag:yaml.org,2002:map", _mapping)
+_Loader.add_constructor("tag:yaml.org,2002:int", _integer)
 
 
 def load_yaml(path: Path, *, text: str | None = None) -> object:

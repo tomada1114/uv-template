@@ -20,6 +20,31 @@ def test_load_yaml_actions_words_preserve_strings(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("2026-10-08", "2026-10-08"),
+        ("2026-10-08T12:34:56Z", "2026-10-08T12:34:56Z"),
+        ("12:34", "12:34"),
+        ("010", 10),
+        ("-010", -10),
+        ("0o10", 8),
+        ("0x10", 16),
+        ("0b10", "0b10"),
+        ("1_000", "1_000"),
+        ("1e3", 1000.0),
+        (".5", 0.5),
+    ],
+)
+def test_load_yaml_core_scalars_match_actions(
+    tmp_path: Path, text: str, expected: object
+) -> None:
+    path = tmp_path / "workflow.yml"
+    path.write_text(f"value: {text}\n", encoding="utf-8")
+
+    assert _yaml.load_yaml(path) == {"value": expected}
+
+
+@pytest.mark.parametrize(
     ("text", "message"),
     [
         pytest.param("jobs: {a: {}, a: {}}\n", "duplicate key 'a'", id="duplicate"),
