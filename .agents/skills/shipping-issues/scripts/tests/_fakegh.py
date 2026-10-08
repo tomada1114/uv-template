@@ -54,7 +54,6 @@ from __future__ import annotations
 import json
 import os
 import stat
-import sys
 import tempfile
 from pathlib import Path
 
@@ -116,7 +115,7 @@ class FakeGh:
         self.env: dict[str, str] = {}
         self.state_dir: Path | None = None
 
-    def __enter__(self) -> "FakeGh":
+    def __enter__(self) -> FakeGh:
         self._tmpdir = tempfile.TemporaryDirectory()
         bin_dir = Path(self._tmpdir.name) / "bin"
         bin_dir.mkdir()

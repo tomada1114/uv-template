@@ -449,8 +449,8 @@ class ResaveTest(unittest.TestCase):
             "Closes ACME/Widgets#7\n":
                 "detail: the PR body has a closing keyword for #7, but GitHub has "
                 "not linked it (--fix re-saves the body)\n",
-            **{body: "detail: the PR body has no Closes/Fixes/Resolves keyword\n"
-               for body in UNLINKED_KEYWORD_BODIES},
+            **dict.fromkeys(UNLINKED_KEYWORD_BODIES,
+                            "detail: the PR body has no Closes/Fixes/Resolves keyword\n"),
         }
         for body, detail in cases.items():
             with self.subTest(body=body):
