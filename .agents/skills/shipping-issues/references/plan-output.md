@@ -27,8 +27,8 @@ that carry a duty for the calling session.
   non-mutating gate AGENTS.md names; `just check` runs `fmt` first and so rewrites the
   tree it is meant to judge. Two ways a guess goes wrong: a repo whose `test` is the
   unit tests while lint and type checks are separate gates gives a baseline that passes
-  while CI will fail; a recipe that starts a watcher or `mkdocs serve` never returns at
-  all. Overriding it is a one-word decision — say which command was
+  while CI will fail; a recipe that starts a watcher or a development server never
+  returns at all. Overriding it is a one-word decision — say which command was
   used, in the step 10 report.
 - `github:` — `write=no` means the label and follow-up writes will exit 2: rank from
   `~P<n>` suggestions and report findings instead of filing them.

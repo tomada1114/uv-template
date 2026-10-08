@@ -117,9 +117,8 @@ the same kind rather than a direct call.
 - Every implementation of a port runs the one shared contract suite. A new repository
   joins `tests/adapters/test_repository_contract.py` by adding a `pytest.param` to
   `REPOSITORY_FACTORIES`; behavior only it has (the SQLite file outliving the object,
-  persistence details) goes in `tests/adapters/test_<adapter>.py`. Thread safety and
-  unique ids under concurrent adds are shared contract behavior, tested for every
-  repository.
+  persistence details) goes in `tests/adapters/test_<adapter>.py`. Concurrent adds
+  must assign unique ids in every repository.
 - The in-memory adapter doubles as the core's fake: `tests/core/test_services.py`
   builds a service over `InMemoryTodoRepository()` and `fixed_clock` instead of mocking
   the port.
@@ -136,7 +135,8 @@ the vendor's own `OPENROUTER_API_KEY`, read through a `validation_alias`
 - turned into the form the composition root needs by a property (`sqlite_path` turns
   `database_url` into a `Path`), so adapters never parse configuration strings;
 - deleted from the environment by `tests/conftest.py`'s autouse `_isolate_settings_env`
-  fixture, so a developer's shell cannot leak into a test — add the new variable there;
+  fixture, which derives the prefix and aliases from `Settings`, so a developer's
+  shell cannot leak into a test without a hand-kept variable list;
 - listed in the README's Configuration table.
 
 ## The composition root wires everything once

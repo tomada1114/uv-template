@@ -17,7 +17,8 @@ from my_app.adapters.memory import InMemoryTodoRepository
 from my_app.adapters.openrouter import OpenRouterLlm
 from my_app.composition import Container, build_container, build_llm, utc_now
 from my_app.core.errors import LlmConfigurationError
-from my_app.settings import ENV_PREFIX, OPENROUTER_API_KEY_ENV, Settings
+from my_app.settings import OPENROUTER_API_KEY_ENV, Settings
+from tests.settings_env import without_settings_env
 
 PYPROJECT = Path(__file__).resolve().parents[1] / "pyproject.toml"
 _LLM_MODULES = '("httpx", "my_app.adapters.openrouter")'
@@ -124,18 +125,10 @@ def test_build_llm_import_error_other_than_httpx_propagates(monkeypatch):
         build_llm(Settings(openrouter_api_key=SecretStr("test-key")))
 
 
-def _env_without_llm_settings() -> dict[str, str]:
-    return {
-        name: value
-        for name, value in os.environ.items()
-        if name != OPENROUTER_API_KEY_ENV and not name.startswith(ENV_PREFIX)
-    }
-
-
 def _run_probe(probe: str) -> str:
     result = subprocess.run(  # noqa: S603 - fixed argv: this interpreter and a literal
         [sys.executable, "-c", probe],
-        env=_env_without_llm_settings(),
+        env=without_settings_env(os.environ),
         capture_output=True,
         check=True,
         text=True,

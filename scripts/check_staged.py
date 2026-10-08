@@ -88,8 +88,7 @@ FRAME_TERMINATOR: Final = b"\n"
 ENV_FILE_NAME: Final = ".env"
 DIRENV_FILE_NAME: Final = ".envrc"
 # A `.env.*` or `.envrc.*` name ending in one of these is a copy meant to be
-# committed, as in scripts/bootstrap.py's ENV_EXAMPLE_SUFFIXES; its content is
-# still scanned.
+# committed; its content is still scanned.
 SAMPLE_SUFFIXES: Final = (".example", ".sample", ".template")
 SECRETS_DIRECTORY: Final = "secrets"
 KEY_FILE_SUFFIXES: Final = (".pem", ".key")

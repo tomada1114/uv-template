@@ -10,9 +10,13 @@ Three places hold the reasoning, and each has one job:
 - `AGENTS.md`'s "Architecture" section describes the layout every project starts with —
   the `src/` package layout and where new code goes. It is
   the ground the ADRs build on, not a record of choices.
+<!-- template-only -->
 - `TEMPLATE.md`'s "Design Philosophy" holds the template's own reasoning: why the `src/`
   layout, strict mypy and Ruff, Just, the coverage floor. The template ships no ADRs of
   its own, and `scripts/bootstrap.py` deletes `TEMPLATE.md` from a new project.
+<!-- /template-only -->
+- `.template-origin` identifies the template repository and revision for an app
+  that needs to look up the original layout rationale.
 - The ADRs below record what the project decided after that: its runtime dependencies,
   its package boundaries, where it keeps state, which services it talks to, its Python
   floor, and how it ships.
@@ -56,8 +60,11 @@ skill that changes it.
 
 ## Decisions
 
+<!-- template-only -->
 The template ships this table empty: its own reasoning is in `TEMPLATE.md`'s Design
-Philosophy. The first row is the project's first ADR.
+Philosophy.
+<!-- /template-only -->
+The first row is the project's first ADR.
 
 | ADR | Decision | Status |
 |---|---|---|
