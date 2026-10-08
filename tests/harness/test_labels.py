@@ -424,3 +424,55 @@ def test_label_findings_pr_label_without_readable_label_fails_closed(
 
     with pytest.raises(UnreadableYamlError, match=r"pr-label\.yml: no `label=<name>`"):
         label_findings(root)
+
+
+PR_TITLE = ".github/workflows/check-pr-title.yml"
+
+
+def pr_type_findings(root: Path) -> list[str]:
+    """Require every labelled conventional type to pass the title gate."""
+    title = root / PR_TITLE
+    label = root / PR_LABEL
+    if not label.is_file():
+        return []
+    assert title.is_file(), "PR label workflow needs a title gate"
+    accepted: set[str] = set()
+    for job in jobs(read_workflow(title), title).values():
+        for step in steps(job, title):
+            if scalar(step.get("uses", ("", []))[0]).startswith(
+                "amannn/action-semantic-pull-request@"
+            ):
+                inputs = mapping(step.get("with", ("", []))[1], title)
+                assert "types" in inputs, "PR title gate must declare types explicitly"
+                accepted.update(block_text(inputs["types"]).split())
+    assert accepted, "PR title gate has no accepted types"
+    labelled = {
+        match[1]
+        for job in jobs(read_workflow(label), label).values()
+        for step in steps(job, label)
+        if "run" in step
+        for match in re.finditer(
+            r"^\s*([a-z][a-z0-9_-]*)\)", block_text(step["run"]), re.MULTILINE
+        )
+    }
+    assert labelled, "PR label workflow has no readable type arms"
+    return [
+        f"{PR_LABEL}: type {value!r} is rejected by the title gate"
+        for value in sorted(labelled - accepted)
+    ]
+
+
+def test_pr_type_findings_repository_types_are_accepted() -> None:
+    assert pr_type_findings(REPO_ROOT) == []
+
+
+def test_pr_type_findings_extra_label_arm_is_rejected(make_root: MakeRoot) -> None:
+    root = make_root(
+        {
+            PR_TITLE: "jobs:\n  title:\n    steps:\n      - uses: amannn/action-semantic-pull-request@pin\n        with:\n          types: |\n            fix\n",
+            PR_LABEL: PR_LABEL_TEXT.format(extra="unknown) label=bug ;;"),
+        }
+    )
+    assert pr_type_findings(root) == [
+        f"{PR_LABEL}: type 'unknown' is rejected by the title gate"
+    ]
