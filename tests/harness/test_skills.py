@@ -57,8 +57,11 @@ def test_mypy_targets_cover_authored_production_scripts() -> None:
     }
     production = set((REPO_ROOT / SKILLS_DIR).glob("*/scripts/*.py"))
     assert production <= covered
+    # Parts relative to the repository root: a checkout under a `.claude/`
+    # directory (a Claude Code worktree in .claude/worktrees/) is not a mirror.
     assert not any(
-        ".claude" in path.parts or (path.is_file() and path.parent.name == "tests")
+        ".claude" in path.relative_to(REPO_ROOT).parts
+        or (path.is_file() and path.parent.name == "tests")
         for path in covered
     )
 
