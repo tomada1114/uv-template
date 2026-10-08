@@ -232,8 +232,8 @@ runtime-evaluated-decorators = [
     "I001",    # import order kept as authored upstream
     "ISC003",  # explicit concatenation kept as authored upstream
     "PLR0911", # long dispatch functions mirror the documented exit codes
-    "PLR0912",
-    "PLR0915",
+    "PLR0912", # dispatch branches mirror documented CLI outcomes
+    "PLR0915", # sequential CLI steps retain the upstream layout
     "PLR2004", # exit codes and limits are documented in each script's header
     "PLW0603", # module-level CLI state set once from argv
     "RUF001",  # deliberate typographic characters in user-facing output
@@ -248,19 +248,13 @@ runtime-evaluated-decorators = [
     "S108",    # fixture paths under /tmp are never written
     "SLF001",  # tests reach a script's private helpers on purpose
     "N802",    # unittest's setUp/tearDown-style method names
-    "E741",
-    "EM102",
-    "TRY003",
-    "F401",
-    "C420",
     "PLC0415", # imports inside a test keep a fixture's module load local
-    "PLR0913",
-    "PLW2901",
-    "RUF005",
+    "PLR0913", # fake command runners expose independent response and exit fixtures
+    "PLW2901", # fixture loops deliberately rebind values for each scenario
+    "RUF005", # list concatenation keeps command argv fixtures explicit
     "RUF059",  # unpacked-but-unused results document the call's shape
     "RUF100",  # `noqa: E402` kept from upstream, where E402 is not ignored
-    "SIM117",
-    "UP037",
+    "SIM117", # nested contexts preserve the upstream unittest fixture layout
 ]
 
 [tool.ruff.lint.isort]
