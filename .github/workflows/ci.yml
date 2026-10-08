@@ -32,25 +32,26 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev --locked
 
-      - name: Skills mirror
-        run: uv run --locked python scripts/sync_agents.py --check
-
-      - name: Ruff check
-        run: uv run --locked ruff check .
-
-      - name: Ruff format check
-        run: uv run --locked ruff format --check .
-
-      - name: mypy
-        run: uv run --locked mypy src scripts tests
-
-      # Runs the pinned pre-commit hook, sharing its shellcheck version and
-      # file selection with local commits.
-      - name: shellcheck
-        run: uv run --locked pre-commit run shellcheck --all-files
-
-      - name: Skill script tests
-        run: PYTHONDONTWRITEBYTECODE=1 uv run --locked pytest -n auto -p no:cacheprovider .agents/skills/*/scripts/tests
+      # Both groups must finish successfully; recipe commands remain verbatim.
+      - name: Run independent checks
+        run: |
+          set -euo pipefail
+          (
+            PYTHONDONTWRITEBYTECODE=1 uv run --locked pytest -n auto -p no:cacheprovider .agents/skills/*/scripts/tests
+          ) &
+          skills_pid=$!
+          (
+            uv run --locked python scripts/sync_agents.py --check
+            uv run --locked ruff check .
+            uv run --locked ruff format --check .
+            uv run --locked mypy src scripts tests
+            uv run --locked pre-commit run shellcheck --all-files
+          ) &
+          lint_pid=$!
+          status=0
+          wait "$skills_pid" || status=$?
+          wait "$lint_pid" || status=$?
+          exit "$status"
 
   # Skill scripts promise to run on the system python3; 3.9 is macOS's
   # /usr/bin/python3. Stdlib only, so no project environment. Not a required

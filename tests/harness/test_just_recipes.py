@@ -43,7 +43,10 @@ cannot read, so that form is reported rather than skipped.
 from __future__ import annotations
 
 import io
+import os
 import re
+import subprocess
+import textwrap
 import tokenize
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -641,3 +644,42 @@ def test_ci_recipe_findings_drifted_command_is_rejected(tmp_path: Path) -> None:
         "Lint & Type Check: missing lint command: uv run --locked ruff check ."
         in ci_recipe_findings(tmp_path)
     )
+
+
+@pytest.mark.parametrize(
+    ("skill_rc", "lint_rc", "expected"), [(0, 0, 0), (1, 0, 1), (0, 1, 1)]
+)
+def test_ci_parallel_checks_propagate_each_failure(
+    tmp_path: Path, skill_rc: int, lint_rc: int, expected: int
+) -> None:
+    path = REPO_ROOT / ".github/workflows/ci.yml"
+    lint = jobs(read_workflow(path), path)["lint"]
+    run = next(
+        (
+            step["run"]
+            for step in steps(lint, path)
+            if scalar(step.get("name", ("", []))[0]) == "Run independent checks"
+        ),
+        None,
+    )
+    assert run is not None, "CI must run independent checks together and await both"
+    uv = tmp_path / "uv"
+    uv.write_text(
+        '#!/usr/bin/env bash\ncase "$*" in\n  *pytest*) exit "$SKILL_RC" ;;\n  *mypy*) exit "$LINT_RC" ;;\nesac\nexit 0\n',
+        encoding="utf-8",
+    )
+    uv.chmod(0o755)
+    proc = subprocess.run(  # noqa: S603 -- repository CI script with fixture-only uv
+        ["/bin/bash", "-euo", "pipefail", "-c", textwrap.dedent(block_text(run))],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
+            "SKILL_RC": str(skill_rc),
+            "LINT_RC": str(lint_rc),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == expected, proc.stderr
