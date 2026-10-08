@@ -94,11 +94,13 @@ Write an ordering constraint as `Depends on: #12` — this is the spelling autom
 parses. Prose like "after the guard work lands" is not machine-readable and will not be
 picked up.
 
-An issue carrying a `Depends on:` line also carries `blocked: dependency`. The label is
-**not** removed automatically when the blocker closes: whoever lands the blocking issue
-clears `blocked: dependency` by hand from every issue that named it. Do not assume the
-label update is someone else's automated job — it is a manual step in the same PR or a
-prompt follow-up that closes the blocker.
+An issue carrying a `Depends on:` line also carries `blocked: dependency`. Closing
+its blocker does not itself remove the label. The usual clearing step is the
+`shipping-issues` stale-label sweep: after verifying every named dependency is
+closed, it runs `apply_priority_labels.py --clear-dependency` within that workflow's
+label-write permission. If no such run follows, whoever lands the blocker clears
+its dependents' stale labels within authorized scope. This grants no label-write
+authority to the separate Codex workflow.
 
 ## A problem found outside the task
 
