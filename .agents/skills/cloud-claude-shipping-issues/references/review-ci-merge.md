@@ -9,7 +9,7 @@ The REST spelling of each call is in [rest-calls.md](rest-calls.md).
 
 - [A held design](#a-held-design)
 - [The review](#the-review)
-- [A later review](#a-later-review)
+- [The review gate before the merge](#the-review-gate-before-the-merge)
 - [CI](#ci)
 - [The merge](#the-merge)
 - [Branch upkeep after the merge](#branch-upkeep-after-the-merge)
@@ -39,80 +39,94 @@ the comment posted is cleared before step 3, never left for the next run to misr
 
 ## The review
 
-Opening a ready PR starts the Codex GitHub integration's review; this run never asks for
-one: no `@codex review` comment, no close and reopen, no reply to or resolution of a
-review thread. `review_watch.py` reads it over REST alone and says what it saw; its
-docstring holds the verdicts, the opening-review memory, and the `later_review:` line.
+Each Codex review — on opening, and possibly again after a fix push — is a **round**,
+and at most 3 are handled per PR. This run never asks for one: no `@codex review`
+comment, no close and reopen, no reply to or resolution of a review thread.
+`review_watch.py` reads the reviews over REST alone; its docstring holds the verdicts,
+the rounds memory (`<runstate>/review/<pr>-rounds.json`), and `--after-push`. The rounds
+policy is `shipping-issues`' own, unchanged here (**BACKGROUND:** `shipping-issues`, its
+PR-review and triage references):
+
+| Round | Fixed in this PR |
+| --- | --- |
+| 1, the opening review | every accepted finding, whatever its badge |
+| 2 and 3, after fix pushes | an accepted `P0`, `P1`, `P2` or unbadged `P?`; an accepted `P3` goes to step 9 as a follow-up |
+| 4 or later, past the cap | nothing: only `P0`, `P1` and `P?` are triaged, and an accepted one holds the PR; the rest are named in the report, untriaged |
 
 ```bash
 mkdir -p <runstate>/review
-python3 .agents/skills/shipping-issues/scripts/review_watch.py <pr> --timeout 540 > <runstate>/review/<pr>.log
-grep -E '^(verdict|trigger|review_status|reviewed_sha|head_sha|reviewed_is_head|completed_at|later_review|pr_age_seconds|findings|findings_file|detail):|^  - F' <runstate>/review/<pr>.log
+python3 .agents/skills/shipping-issues/scripts/review_watch.py <pr> [--after-push <sha>] --timeout 540 > <runstate>/review/<pr>.log
+grep -E '^(verdict|after_push|round|rounds|cap_reached|trigger|review_status|reviewed_sha|head_sha|reviewed_is_head|completed_at|later_review|pr_age_seconds|push_age_seconds|findings|round_findings|findings_file|detail):|^  - F' <runstate>/review/<pr>.log
 ```
 
-Run it in the foreground with the call's timeout raised to 600000 ms. If the session is
-woken by PR activity meanwhile, that is a cue to run the script again, never a verdict.
+Run it in the foreground with the call's timeout raised to 600000 ms; each slice
+re-reads the PR from scratch. Right after the PR opens, run it without `--after-push`.
+**After every push** — a fix, a CI repair, a merge of the default branch; a PR body or
+base repair pushes nothing and is not one — run it with `--after-push <sha>`, the
+commit just pushed, before reading CI: it waits a 180 s start grace, counted from its first call
+for that SHA, for a review of the push to start, then for that review to settle. If the
+session is woken by PR activity meanwhile, that is a cue to run the script again,
+never a verdict.
 
 | `verdict:` | Next |
 | --- | --- |
-| `CLEAN` | Nothing to fix; go to CI. |
-| `FINDINGS` | Triage every `F<n>` (below), fix the accepted ones, verify, commit, push, then run the watch again before CI. |
-| `PENDING_TIMEOUT` | Run the same call again. Past 1800 s of `pr_age_seconds:` with the review still running, treat it as `ERROR`. |
+| `CLEAN` | Nothing to fix in this round; go to CI. |
+| `FINDINGS` | Triage every finding of `round:` (below), fix what the round table calls for, verify, commit, push, then `--after-push` and CI for the new head. Out of scope → step 9. |
+| `NO_NEW_REVIEW` | No review of that push started within the grace (or the one that did failed): the latest settled round stands, for that head alone. Triage first any finding of that round not yet triaged; then CI. |
+| `PENDING_TIMEOUT` | Run the same call again. Past 1800 s of `pr_age_seconds:` (the opening review) or `push_age_seconds:` (a later one) with the review still running, treat it as `ERROR`. |
 | `NO_REVIEW` | The PR is held: open, unmerged, and the run stops (the branch is the next issue's too). Never a local review instead. |
 | `ERROR` | Read `detail:`. A GitHub read that failed: run once more. Anything else holds the PR as for `NO_REVIEW`. |
 
+With `cap_reached: yes`, `--after-push` waits for nothing and reports the latest round:
+fixes after round 3 are covered by local verification and current-head CI alone, and
+the report says so.
+
 **Triage.** Read each finding's body in the file `findings_file:` names, never in the
-PR conversation, and classify every one, each with a one-line reason that holds against
-the code: **accepted** (real, and part of this issue's change), **rejected** (wrong on
-reading the code), or **out of scope** (real, not this diff's: step 9). A finding that
-needs an owner's decision, or that this session cannot settle either way, holds the
-PR. **BACKGROUND:** `shipping-issues`, whose reference on triaging the review's
-findings is the long form of these rules. Write the ledger as you go, one line per
-finding, to `<runstate>/review/<pr>-triage.md`:
-`F<n> id=<comment id> accepted|rejected|out-of-scope — <reason> — fixed-in <sha>`.
+PR conversation, and classify every finding of the round being handled, each with a
+one-line reason that holds against the code, not against the badge: **accepted** (real,
+and part of this issue's change), **rejected** (wrong on reading the code), or **out of
+scope** (real, not this diff's: step 9). The round decides only what an accepted finding
+costs this PR, by the table above. A finding that needs an owner's decision, or that
+this session cannot settle either way, holds the PR. Finding numbers follow the
+reviews' order, so a new round's are appended and earlier ones never move. Write the
+ledger as you go, one line per finding, to `<runstate>/review/<pr>-triage.md`:
+`F<n> round=<r> id=<comment id> accepted|rejected|out-of-scope — <reason> — fixed-in <sha> | followup`.
+Record each round once triaged, and each `NO_NEW_REVIEW`, as `shipping-issues` does:
+`--event review --field pr=<pr> --field round=<k> --field verdict=<verdict> --field reviewed=<sha> --field findings=<round_findings> --field accepted=<n> --field followup=<n> --field fixed-in=<sha>`.
 
-**After every push** — a fix, a CI repair, or bringing the branch up to date — run
-`review_watch.py <pr>` again, into the same log. Once it has seen the opening review
-complete it answers at once, with the same verdict and the same `F<n>` numbers, a new
-finding appended after the old ones. Triage every `F<n>` whose `id=` is not in the
-ledger, and read `later_review:`. Then watch CI for the new head.
+## The review gate before the merge
 
-## A later review
-
-The review can run more than once on a PR: after a push, a second review may post more
-findings. The summary comment keeps one row, rewritten for the latest review, so the
-watch keeps the opening verdict in `<runstate>/review/<pr>-opening.json` and names the
-later one on `later_review:`. Its findings, as they are posted, are listed with the
-rest.
-
-Right before the merge, once CI is `PASS` for the head being merged, read the review
-one last time:
+The cloud merge has no `land_pr.sh --review-log`, so this check stands in for it. Once
+CI is `PASS` for `<head_sha>`, read the review for that head one last time:
 
 ```bash
-python3 .agents/skills/shipping-issues/scripts/review_watch.py <pr> --timeout 0 > <runstate>/review/<pr>.log
+python3 .agents/skills/shipping-issues/scripts/review_watch.py <pr> --after-push <head_sha> --timeout 0 > <runstate>/review/<pr>.log
+log=<runstate>/review/<pr>.log; sha=<head_sha>
+v=$(sed -n 's/^verdict: //p' "$log"); p=$(sed -n 's/^after_push: //p' "$log"); n=$(sed -n 's/^pr: //p' "$log")
+gate=shut
+case $v in
+  CLEAN|FINDINGS) gate=open ;;
+  NO_NEW_REVIEW) printf '%s\n' "$p" | grep -Eq '^[0-9a-f]{7,40}$' && case $sha in "$p"*) gate=open ;; esac ;;
+esac
+[ "$n" = <pr> ] || gate=shut; echo "review_gate: $gate (verdict $v, after_push $p, head $sha)"
 ```
 
-- Any `F<n>` not in the ledger is triaged now. An accepted one is fixed, verified, and
-  pushed, and the PR goes back through the review re-read and CI for the new head.
-- `later_review:` showing a review that has not completed: re-read once a minute, 8
-  reads at most (one foreground call, its timeout raised to 600000 ms), triage
-  what it lists, then merge on what is posted, and name in the report a later review
-  still running at the merge:
+- `review_gate: open` with `CLEAN`, or `FINDINGS` whose every `F<n>` is in the ledger
+  with the fixes its round calls for pushed and covered by this `PASS`, or
+  `NO_NEW_REVIEW` whose `after_push:` is the head being merged: merge.
+- An `F<n>` not in the ledger — even one from a review that settled after the grace — is
+  triaged first by its round's row; when the row calls for a fix, it is pushed and the
+  PR goes back through `--after-push` and CI for the new head. Never wait for a review that started late,
+  but never merge past a defect it already named.
+- `PENDING_TIMEOUT` (a head no settled round has read gets its own start grace here,
+  so a CI repair or a merge of the default branch counts as a push): run the same call
+  with `--timeout 540`, then the gate check again; never merge on it.
+- `review_gate: shut` for any other reason — another verdict, a `NO_NEW_REVIEW` about
+  another push, another PR's log: no merge; act on the verdict by the table above.
 
-  ```bash
-  for read in $(seq 1 8); do
-    python3 .agents/skills/shipping-issues/scripts/review_watch.py <pr> --timeout 0 > <runstate>/review/<pr>.log
-    grep -Eiq '^later_review: (none|.*(complete|fail|error|cancel))' <runstate>/review/<pr>.log && break
-    sleep 60
-  done; grep -E '^(verdict|later_review|findings):|^  - F' <runstate>/review/<pr>.log
-  ```
-
-- `later_review: none`, or a completed one whose findings are all in the ledger: merge.
-
-Never wait for a later review that is not shown, and never merge past a finding that is
-already posted and untriaged. A resumed run on a fresh VM has lost
-`<pr>-opening.json`: the watch then waits for whatever review the summary shows to
-complete, and the 1800 s cap above still holds.
+Leave `<runstate>/review/<pr>-rounds.json` in place until the PR merges. A run resumed
+on a fresh VM has lost it, along with the start grace's clock: the watch then counts
+the grace again from its first call there, and the 1800 s caps still hold.
 
 ## CI
 
@@ -121,8 +135,8 @@ Read CI only for the head the last push produced, with the call in
 
 | Last `verdict:` | Next |
 | --- | --- |
-| `PASS` | The [pre-merge review read](#a-later-review), then the merge, in the same turn. |
-| `FAIL` | Repair: reproduce with the matching local command ([a failing check](rest-calls.md#a-failing-check)), fix, `just verify`, commit, push, re-run the review watch, read CI again. At most 3 repairs per issue; a fourth `FAIL` stops the run. |
+| `PASS` | The [review gate](#the-review-gate-before-the-merge), then the merge, in the same turn. |
+| `FAIL` | Repair: reproduce with the matching local command ([a failing check](rest-calls.md#a-failing-check)), fix, `just verify`, commit, push, `--after-push` for the new head, read CI again. At most 3 repairs per issue; a fourth `FAIL` stops the run. |
 | `PENDING` | Run the call again. Past 1800 s of reads for one head, the PR is held and the run stops. |
 | `EMPTY` | Run the call again: check runs appear a little after a push. Still `EMPTY` 600 s after the push, there are no checks at all (`NO_CHECKS`): stop and ask the owner. |
 | `ERROR` | Run the call once more; a second `ERROR` is a stop, reported with the message. |
@@ -139,8 +153,8 @@ merge to that head ([rest-calls.md](rest-calls.md#the-merge)).
 | Reply | Next |
 | --- | --- |
 | 200, `merged: true` | Read the issue. `closed` → done; record it. Still `open` → read again after 10 s; still open → [close it with a back-reference comment](rest-calls.md#closing-an-issue-github-left-open) (`CLOSED_MANUALLY`); if that fails, the run stops with the issue named as left open. |
-| 409 | The head moved after the CI read. Re-run the review watch and CI for the new head; never retry with the old `sha`. |
-| 405 | Read the PR. `mergeable: false` is a conflict: `git fetch origin <default> && git merge origin/<default>` (a merge, never a rebase), resolve a mechanical conflict, `just verify`, push, then the review watch and CI again. A conflict that needs a product decision, or a 405 with `mergeable: true` (a required review or rule), holds the PR: stop and ask. `null` → read again. |
+| 409 | The head moved after the CI read. Run `--after-push` and CI for the new head; never retry with the old `sha`. |
+| 405 | Read the PR. `mergeable: false` is a conflict: `git fetch origin <default> && git merge origin/<default>` (a merge, never a rebase), resolve a mechanical conflict, `just verify`, push, then `--after-push` and CI again. A conflict that needs a product decision, or a 405 with `mergeable: true` (a required review or rule), holds the PR: stop and ask. `null` → read again. |
 | 403 | [A 403 from the proxy](cloud-host.md#a-403-from-the-proxy), or no merge permission: stop and report. |
 | anything else | Read the PR: only `merged: true` is a merge. Report the reply and stop. |
 
@@ -183,10 +197,11 @@ believes happened. **BACKGROUND:** `shipping-issues`, whose closing-out referenc
 the long form.
 
 - Any issue left open behind a merged PR — stated, never implied.
-- Per PR: the review's verdict and `reviewed_sha:`, every finding with its
-  classification and reason, the commit that fixed the accepted ones, any later review
-  and whether it had completed at the merge, and that fixes after the review were
-  covered by local verification and current-head CI. A held PR is named as held, open.
+- Per PR: each round's verdict and `reviewed_sha:`, every finding with its round,
+  classification and reason, the commit that fixed the accepted ones and the `P3`s sent
+  to follow-ups, a `NO_NEW_REVIEW` and the head it was measured for, a review whose
+  `completed_at:` is later than the merge, and that fixes no round read (after round 3,
+  or after a `NO_NEW_REVIEW`) were covered by local verification and current-head CI. A held PR is named as held, open.
 - Acceptance criteria that shipped `not-met`, and why; or that all were met; or that the
   issue carried none.
 - Every write beyond push, PR, and merge: a design decided (its comment URL, and the

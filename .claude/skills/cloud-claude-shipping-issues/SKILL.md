@@ -123,12 +123,14 @@ it ([why](references/cloud-host.md#auto-fix-stays-off)).
 
 ### 5. Wait for the review
 
-Run `review_watch.py <pr>` and act on its verdict; triage every `F<n>`, fix the accepted
-ones, and push ([how](references/review-ci-merge.md#the-review)). **After every push,
-run it again** and triage any `F<n>` not yet triaged: the review can come more than
-once, and the watch appends a later one's findings and names it on `later_review:`.
-`NO_REVIEW`, or `ERROR` after one re-run, holds the PR and stops the run. Record
-`review`.
+Each Codex review is a round, at most 3 per PR: round 1's accepted findings are all
+fixed; rounds 2–3 fix accepted `P0`–`P2` and send a `P3` to step 9. Run
+`review_watch.py <pr>` once the PR opens and act on its verdict
+([how](references/review-ci-merge.md#the-review)). **After every push**, run
+`review_watch.py <pr> --after-push <sha>` before reading CI: it waits a 180 s start
+grace for a review of that push, then reports the next round or `NO_NEW_REVIEW`, which
+stands for that head alone. `NO_REVIEW`, or `ERROR` after one re-run, holds the PR and
+stops the run. Record `review` per round.
 
 ### 6. Read CI
 
@@ -140,9 +142,10 @@ repair, at most 3 times. `PENDING` past 1800 s, or `EMPTY` 600 s after the push
 
 ### 7. Merge
 
-Right before the merge, read the review once more with `--timeout 0` and triage
-anything new; never merge past a posted, untriaged finding, and never wait on a later
-review that is not shown ([how](references/review-ci-merge.md#a-later-review)). Read
+Right before the merge, pass the [review gate](references/review-ci-merge.md#the-review-gate-before-the-merge):
+`review_watch.py <pr> --after-push <head_sha> --timeout 0` must read `CLEAN` or
+`FINDINGS` with every finding triaged, or `NO_NEW_REVIEW` for the head being merged;
+never merge past a posted, untriaged finding. Read
 the PR ([the call](references/rest-calls.md#reading-the-pr)): `closes: true` and the
 default branch as `base:`, else [repair it](references/rest-calls.md#repairing-the-prs-closing-link)
 and read CI again. Then squash-merge pinned to the head CI passed
@@ -193,9 +196,9 @@ Stop the run and report when:
 - a REST call answers 403 for GraphQL or repository scope, or a push or every call
   fails the same way after a retry ([cloud-host.md](references/cloud-host.md));
 - the digest selects nothing, or the named issue is not ready;
-- a PR is held: `NO_REVIEW`, a review `ERROR`, a finding that needs the owner, CI
-  pending past 1800 s, no checks at all (`NO_CHECKS`), a fourth CI `FAIL`, or a merge
-  refused for a reason other than a moved head;
+- a PR is held: `NO_REVIEW`, a review `ERROR`, a finding that needs the owner, one
+  accepted past round 3, CI pending past 1800 s, `NO_CHECKS`, a fourth CI `FAIL`, or a
+  merge refused for a reason other than a moved head;
 - the merged issue is still open after the close by hand, or a PR repair left its body
   or base wrong;
 - a conflict needs a product decision, or a held design needs one (`DEFERRED`);
