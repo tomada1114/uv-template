@@ -32,7 +32,9 @@ if TYPE_CHECKING:
 
 WORKFLOWS_DIR = ".github/workflows"
 
-_MATRIX_REF = re.compile(r"\$\{\{\s*matrix\.(?P<key>[A-Za-z0-9_-]+)\s*\}\}")
+_MATRIX_REF = re.compile(
+    r"\$\{\{\s*matrix\.(?P<key>[A-Za-z0-9_-]+)\s*\}\}", re.IGNORECASE
+)
 _EXPR = re.compile(r"^\$\{\{\s*(?P<body>.*?)\s*\}\}$")
 _GUARDS = {"!cancelled()", "always()"}
 # The ruleset protects the default branch; a pull_request filter has to let a PR
@@ -70,7 +72,8 @@ def workflow_files(root: Path) -> list[Path]:
 
 def read_workflow(path: Path) -> Mapping:
     """Return a workflow's validated top-level mapping."""
-    return as_mapping(load_yaml(path), str(path))
+    # Actions supports aliases but rejects YAML merge keys, including in actions.
+    return as_mapping(load_yaml(path, allow_merges=False), str(path))
 
 
 def triggers(top: Mapping, path: Path) -> Mapping:
@@ -130,9 +133,21 @@ def _unfiltered_pull_request(events: Mapping, path: Path) -> bool:
     return True
 
 
+def _matrix_mapping(value: object, where: str) -> Mapping:
+    """Use Actions' case-insensitive matrix property names at every stage."""
+    normalized: Mapping = {}
+    for key, item in as_mapping(value, where).items():
+        folded = key.casefold()
+        if folded in normalized:
+            msg = f"{where}: duplicate case-insensitive matrix key {key!r}"
+            raise UnreadableYamlError(msg)
+        normalized[folded] = item
+    return normalized
+
+
 def _matrix_rows(job: Mapping, path: Path) -> list[Mapping]:
     strategy = as_mapping(job.get("strategy", {}), f"{path}: strategy")
-    matrix = as_mapping(strategy.get("matrix", {}), f"{path}: strategy.matrix")
+    matrix = _matrix_mapping(strategy.get("matrix", {}), f"{path}: strategy.matrix")
     axes = {
         key: as_sequence(value, f"{path}: matrix.{key}")
         for key, value in matrix.items()
@@ -144,7 +159,7 @@ def _matrix_rows(job: Mapping, path: Path) -> list[Mapping]:
         else []
     )
     exclusions = [
-        as_mapping(value, f"{path}: matrix.exclude")
+        _matrix_mapping(value, f"{path}: matrix.exclude")
         for value in as_sequence(matrix.get("exclude", []), f"{path}: matrix.exclude")
     ]
     original = [
@@ -159,7 +174,7 @@ def _matrix_rows(job: Mapping, path: Path) -> list[Mapping]:
     additions: list[Mapping] = []
     # GitHub applies include after exclude and never merges into added rows.
     for value in as_sequence(matrix.get("include", []), f"{path}: matrix.include"):
-        extra = as_mapping(value, f"{path}: matrix.include")
+        extra = _matrix_mapping(value, f"{path}: matrix.include")
         matched = False
         for base, row in zip(original, rows, strict=True):
             if all(
@@ -190,7 +205,8 @@ def _checks(path: Path) -> list[Check] | None:
                     expanded = expanded.replace(
                         match[0],
                         scalar(
-                            row.get(match["key"], ""), f"{path}: matrix.{match['key']}"
+                            row.get(match["key"].casefold(), ""),
+                            f"{path}: matrix.{match['key']}",
                         ),
                     )
                 names.append(expanded)

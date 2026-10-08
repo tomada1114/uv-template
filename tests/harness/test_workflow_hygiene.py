@@ -705,3 +705,12 @@ def test_hygiene_findings_inline_action_mappings_pass(
     )
     assert hygiene_findings(make_action(text)) == []
     assert hygiene_findings(make_action("runs: {using: composite, steps: []}\n")) == []
+
+
+def test_hygiene_findings_action_merge_keys_fail_closed(
+    make_action: MakeWorkflow,
+) -> None:
+    text = "defaults: &defaults {using: composite, steps: []}\nruns: {<<: *defaults}\n"
+
+    with pytest.raises(UnreadableYamlError, match=r"merge keys.*GitHub Actions"):
+        hygiene_findings(make_action(text))
