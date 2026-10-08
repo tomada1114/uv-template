@@ -282,6 +282,37 @@ class VerdictTest(unittest.TestCase):
 
         self.assertEqual(field(proc.stdout, "verdict"), "NO_REVIEW")
 
+    def test_a_completed_security_review_alone_is_pending_not_clean(self):
+        pr = "7"
+        security_only = summary_body().replace("Code Review", "Security Review")
+        proc, _, _ = run_script(
+            [pr, "--timeout", "0"],
+            {
+                PR_VIEW(pr): pr_json(1000),
+                ISSUE_COMMENTS(pr): lines(summary(security_only)),
+                REACTIONS(pr): lines(reaction("+1")),
+            },
+        )
+
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertEqual(field(proc.stdout, "verdict"), "PENDING_TIMEOUT")
+        self.assertIn("no Code Review row", field(proc.stdout, "detail"))
+
+    def test_the_code_review_row_is_read_past_a_security_review_row(self):
+        pr = "7"
+        body = summary_body(status="🔄 **Running** since").replace(
+            "| 📝 **Code Review**",
+            "| 🔒 **Security Review** | ✅ **Completed** | `564ca82` | PR opened |\n"
+            "| 📝 **Code Review**",
+        )
+        proc, _, _ = run_script(
+            [pr, "--timeout", "0"],
+            {PR_VIEW(pr): pr_json(1000), ISSUE_COMMENTS(pr): lines(summary(body))},
+        )
+
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertEqual(field(proc.stdout, "review_status"), "Running")
+
     def test_a_running_review_past_the_grace_is_pending_not_no_review(self):
         pr = "7"
         running = summary(summary_body(status="🔄 **Running** since", sha="`564ca82`"))
