@@ -110,10 +110,8 @@ squash-merge commit subject, `.github/workflows/check-pr-title.yml` validates it
 Conventional Commit, and `.github/workflows/pr-label.yml` derives the PR's label from
 its type, so the type is not decoration.
 
-- The type is one `check-pr-title.yml` accepts and `pr-label.yml` maps; the workflow
-  sets no `types:` list of its own, so take a type this repository's history already
-  uses (`git log --format=%s -40`): `feat`, `fix`, `docs`, `refactor`, `ci`, `chore`,
-  `build`.
+- Choose a type from the explicit `types:` input in
+  `.github/workflows/check-pr-title.yml`, the canonical accepted-type list.
 - The scope is the area the change lives in, matching recent history: `skills`,
   `hooks`, `github`, `deps`, `bootstrap`, or a layer (`core`, `api`, `cli`).
 - The summary is imperative and lower-case, with no trailing period, and says what the
