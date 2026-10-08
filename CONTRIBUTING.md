@@ -109,8 +109,8 @@ Examples:
 - `fix(api): handle empty input`
 - `docs: update installation guide`
 
-Recommended types: `feat`, `fix`, `docs`, `refactor`, `test`, `ci`, `chore`,
-`perf`, `build`.
+The accepted types are declared in
+[the PR title workflow](.github/workflows/check-pr-title.yml) under `types:`.
 
 ### Shipped Changes
 

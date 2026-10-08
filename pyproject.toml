@@ -79,7 +79,6 @@ packages = ["src/my_app"]
 # --------------------------------------------------------------------------- #
 
 [tool.ruff]
-target-version = "py314"
 line-length = 88
 src = ["src", "tests", "scripts"]
 # The generated skills mirror is linted through its source, .agents/skills.

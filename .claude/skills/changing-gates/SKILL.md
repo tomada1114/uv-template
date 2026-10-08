@@ -61,6 +61,19 @@ says which gate looks wrong and why, and a human decides.
 A change that tightens a gate is welcome, but still owes the pull request body three
 things: which rule or option moved, why, and what now fails that did not before.
 
+## Python baseline
+
+When changing the supported Python floor, update `pyproject.toml`'s `requires-python`
+and minor-version classifier, mypy's `python_version`, `.python-version`, and the
+Python tag in `.devcontainer/devcontainer.json` together. Any explicit Ruff target
+or project CI Python pin must agree too. `tests/harness/test_python_baseline.py`
+rejects mismatches; run `just check-harness` after changing the baseline.
+
+Ruff infers its target from `requires-python` in this repository's discovered
+configuration. CI leaves `setup-uv`'s `python-version` unset so `uv sync` follows
+`.python-version`, rather than overriding it with `UV_PYTHON`. The separate stdlib
+skill compatibility job still explicitly runs Python 3.9 with `--no-project`.
+
 ## The layers and what each sees
 
 AGENTS.md's "Enforcement layers" names the layers. Keeping them in step is this skill's:
