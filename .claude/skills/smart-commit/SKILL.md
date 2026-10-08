@@ -57,7 +57,7 @@ the judgment no pattern sees:
 - A real key or token in an innocently named file — a fixture, a config, a log.
 - Personal data in a fixture or a test expectation.
 - Something the requester plainly did not mean to commit: a scratch file, a debug log, a
-  build artifact `.gitignore` happens to miss (`site/`, a stray `.coverage`), an
+  build artifact `.gitignore` happens to miss, an
   editor's backup.
 
 Judge a secret-shaped path by its name in `git status --short`, never by opening it.
