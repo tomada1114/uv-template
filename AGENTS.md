@@ -188,6 +188,10 @@ pins a `model` (`gpt-6-luna`) — the others inherit the session's.
 `tests/test_agent_tiers.py` holds their instructions equal.
 
 - Neither file declares a permission — no `sandbox_mode`, no tool list.
+- A model alias resolves per provider: on Bedrock, Vertex, Foundry, or Claude
+  Platform on AWS, `haiku` can map to an older Haiku without `max` effort. Pin the
+  model the tier expects there with `ANTHROPIC_DEFAULT_HAIKU_MODEL` (and
+  `ANTHROPIC_DEFAULT_OPUS_MODEL`) in your own settings, not in this repository.
 - Codex CLI loads `.codex/` only for a trusted project (in an untrusted
   checkout a step marked for a tier runs inline), and `.codex/agents/worker.toml`
   replaces Codex's built-in `worker` inside this repository on purpose.
