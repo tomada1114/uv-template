@@ -117,7 +117,8 @@ the same kind rather than a direct call.
 - Every implementation of a port runs the one shared contract suite. A new repository
   joins `tests/adapters/test_repository_contract.py` by adding a `pytest.param` to
   `REPOSITORY_FACTORIES`; behavior only it has (the SQLite file outliving the object,
-  the in-memory lock) goes in `tests/adapters/test_<adapter>.py`.
+  persistence details) goes in `tests/adapters/test_<adapter>.py`. Concurrent adds
+  must assign unique ids in every repository.
 - The in-memory adapter doubles as the core's fake: `tests/core/test_services.py`
   builds a service over `InMemoryTodoRepository()` and `fixed_clock` instead of mocking
   the port.

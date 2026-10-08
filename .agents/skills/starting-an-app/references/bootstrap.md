@@ -137,12 +137,11 @@ request.
 
 ## A placeholder survived
 
-Search for every spelling at once:
-
-```bash
-git grep -n -I -i -E 'my-app|my_app|uv-template|your-username|you@example' -- . ':!.template-origin'
-git grep -n -I -w -E 'My App|Your Name' -- . ':!.template-origin'
-```
+The placeholder vocabulary lives in `scripts/bootstrap.py`'s `FORBIDDEN_TOKENS`,
+`FORBIDDEN_PHRASES`, and `PLACEHOLDER_DESCRIPTIONS`. Search for those spellings with
+case-insensitive matching, excluding `.template-origin`. The bootstrap tests derive
+their scans from those constants and check CI's smoke patterns and deletion list
+against them, so a vocabulary change cannot silently leave CI behind.
 
 A hit is a spelling the placeholder list does not cover (a different case, a joined
 form) or text that should have been template-only. Fix it by hand in the app, and fix

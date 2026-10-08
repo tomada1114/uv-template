@@ -52,7 +52,6 @@ just setup           # Alias for just install (first-time setup)
 just fmt             # Format code (ruff check --fix + ruff format)
 just lint            # Lint (ruff check) + type check (mypy)
 just test            # Run tests in parallel with coverage
-just test-durations  # Regenerate the pytest-split duration file used by CI shards
 just check           # Mutating dev check: fmt → lint → test
 just lock            # Update uv.lock after dependency changes
 just lock-check      # Fail when uv.lock is out of date, without changing it
@@ -161,7 +160,7 @@ Skills are authored under `.agents/skills/` (Codex CLI) and mirrored into
 | `running-the-app` | running the CLI or a server of your own to observe a change, and stopping that server afterwards |
 | `shipping-issues` | Claude Code only: shipping the next issue or the whole backlog: rank, implement, PR, the PR's own review and its findings, CI, merge |
 | `smart-commit` | grouping working-tree changes into commits, or a pre-commit hook refuses a commit |
-| `starting-an-app` | setting up an app cut from this template: the Product section, the bootstrap pull request, labels, ruleset, security settings, dropping an entry point or the sample domain, the first ADRs; in the template, the bootstrap itself |
+| `starting-an-app` | setting up an app cut from this template: the Product section, the bootstrap pull request, labels, ruleset, security settings, dropping an entry point or the sample domain, the first ADRs; the template rename step |
 | `steering-the-roadmap` | asked what to work on next, or the Now / Next / Later roadmap moves |
 | `tdd` | changing behavior under `src/` or `scripts/`, or fixing a bug: the failing test comes first |
 | `triaging-issues` | filing, labelling, or prioritizing an issue, or recording a problem found outside the task |

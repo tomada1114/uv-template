@@ -19,10 +19,7 @@ marks which steps are a human's. Its `references/bootstrap.md` documents
   hook blocks it, and `--no-verify` would also switch off the secret gate
   (`scripts/check_staged.py`), so the way through is a feature branch and a
   PR — not a bypass flag.
-- The toolchain baseline is Python 3.14 (`requires-python`, ruff
-  `target-version`, mypy `python_version`, `.python-version`, the
-  devcontainer image, and every CI workflow). Lower it everywhere at once if
-  the new project needs to support older interpreters.
+- The toolchain baseline checklist lives in `changing-gates` so every app keeps it.
 - Python dependencies arrive as monthly Dependabot `uv` PRs under a 14-day
   cooldown equal to `[tool.uv] exclude-newer = "14 days"`; a human merges
   them with the `merging-dependency-prs` skill, and `managing-dependencies`
