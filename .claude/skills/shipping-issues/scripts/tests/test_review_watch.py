@@ -17,6 +17,7 @@ import subprocess
 import sys
 import time
 import unittest
+from unittest import mock
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -36,7 +37,7 @@ MARKER = "<!-- codex-pull-request-review-summary -->"
 
 
 def PR_VIEW(pr):
-    return ("pr", "view", pr, "--json", "headRefOid,createdAt,isDraft,state")
+    return ("api", "repos/{owner}/{repo}/pulls/%s" % pr)
 
 
 def ISSUE_COMMENTS(pr):
@@ -59,7 +60,7 @@ def COMMITS(pr):
     return ("api", "repos/{owner}/{repo}/pulls/%s/commits" % pr)
 
 
-REPO_VIEW = ("repo", "view")
+REPO_VIEW = ("api", "repos/{owner}/{repo}")
 
 # --- payloads -----------------------------------------------------------------
 
@@ -69,9 +70,13 @@ def opened(seconds_ago):
     return stamp.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def pr_json(seconds_ago=60, *, draft=False, head=HEAD):
-    return json.dumps({"headRefOid": head, "createdAt": opened(seconds_ago),
-                       "isDraft": draft, "state": "OPEN"})
+def pr_json(seconds_ago=60, *, draft=False, head=HEAD, state="open", merged_at=None):
+    """The REST "get a pull request" shape (only the fields the script reads)."""
+    body = {"created_at": opened(seconds_ago), "draft": draft, "state": state,
+            "merged_at": merged_at}
+    if head is not None:
+        body["head"] = {"sha": head}
+    return json.dumps(body)
 
 
 def lines(*items):
@@ -480,14 +485,56 @@ class VerdictTest(unittest.TestCase):
         self.assertTrue(calls)
         for call in calls:
             with self.subTest(call=call):
-                if call[0] == "api":
-                    self.assertTrue(call[1].startswith("repos/{owner}/{repo}/"))
-                else:
-                    self.assertIn(call[:2], (["pr", "view"], ["repo", "view"]))
+                self.assertEqual(call[0], "api")
+                self.assertTrue(call[1].startswith("repos/{owner}/{repo}"))
                 self.assertNotIn("-X", call)
                 self.assertNotIn("--method", call)
                 self.assertNotIn("-f", call)
                 self.assertNotIn("--field", call)
+
+
+class ReadPrTest(unittest.TestCase):
+    """read_pr maps the REST pull request onto the keys poll reads."""
+
+    @staticmethod
+    def read(out, pr="7"):
+        sys.path.insert(0, str(SCRIPT.parent))
+        import review_watch
+        with mock.patch.object(review_watch, "gh", return_value=out) as gh:
+            result = review_watch.read_pr(pr)
+        gh.assert_called_once_with(["api", "repos/{owner}/{repo}/pulls/%s" % pr])
+        return result
+
+    def test_an_open_pr_maps_every_field(self):
+        got = self.read(pr_json(60))
+
+        self.assertEqual(got["headRefOid"], HEAD)
+        self.assertEqual(got["isDraft"], False)
+        self.assertEqual(got["state"], "OPEN")
+        self.assertRegex(got["createdAt"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
+
+    def test_a_closed_pr_with_merged_at_is_merged(self):
+        got = self.read(pr_json(state="closed", merged_at="2026-10-07T02:00:00Z"))
+
+        self.assertEqual(got["state"], "MERGED")
+
+    def test_a_closed_pr_without_merged_at_is_closed(self):
+        self.assertEqual(self.read(pr_json(state="closed"))["state"], "CLOSED")
+
+    def test_a_draft_pr_is_a_draft(self):
+        self.assertIs(self.read(pr_json(draft=True))["isDraft"], True)
+
+    def test_a_response_without_head_has_an_empty_head_sha(self):
+        self.assertEqual(self.read(pr_json(head=None))["headRefOid"], "")
+
+    def test_non_json_and_non_object_responses_are_unreadable(self):
+        sys.path.insert(0, str(SCRIPT.parent))
+        import review_watch
+        for out in ("not json", "[]", "null"):
+            with self.subTest(out=out), \
+                    mock.patch.object(review_watch, "gh", return_value=out):
+                with self.assertRaises(review_watch.PrUnreadableError):
+                    review_watch.read_pr("7")
 
 
 class LaterReviewTest(unittest.TestCase):
