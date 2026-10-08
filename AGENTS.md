@@ -234,10 +234,15 @@ sign-off for exactly those, for that invocation only:
   it once CI passes, filing and labelling follow-up issues and the comments it
   posts, and deleting the branches it created.
 - `cloud-claude-shipping-issues`: the writes its `SKILL.md` lists — pushing its own
-  branch, creating the pull request, merging it once CI passes, filing and labelling
-  follow-up issues, and removing `blocked: dependency` from the issues its merge
+  branch; creating the pull request; on that open PR alone, appending `Closes #<n>` to
+  its body when missing or retargeting its base to the default branch; merging it once
+  CI passes; closing by hand, with a back-reference comment naming the PR, the issue
+  that merged PR was meant to close when GitHub left it open; for the design-held issue
+  the run takes on, its design-decision comment and then clearing its design block
+  (the design-block label and the ship contract's `design=open`); filing and labelling
+  follow-up issues; and removing `blocked: dependency` from the issues its merge
   unblocked — never a force-push, a branch deletion, a reply to or resolution of a
-  review thread, or `just labels`.
+  review thread, `@codex review`, `just labels`, or Auto-fix.
 - `create-pr`: pushing the current branch, `gh pr create` for it, and
   `gh pr edit` on its own open pull request — never a force-push or a merge.
 - `smart-commit`: the commits it makes on the current branch, and pushing that

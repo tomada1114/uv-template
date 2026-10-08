@@ -1,17 +1,41 @@
 # Review, CI, merge, and the branch afterwards
 
 The detail behind [SKILL.md steps 5–8](../SKILL.md#5-wait-for-the-review): from an open
-PR to a merged one, a closed issue, and the session's branch ready for the next issue.
+PR to a merged one, a closed issue, and the session's branch ready for the next issue —
+and, first, [step 2](../SKILL.md#2-rank)'s design decision for a held issue.
 The REST spelling of each call is in [rest-calls.md](rest-calls.md).
 
 ## Table of Contents
 
+- [A held design](#a-held-design)
 - [The review](#the-review)
 - [A later review](#a-later-review)
 - [CI](#ci)
 - [The merge](#the-merge)
 - [Branch upkeep after the merge](#branch-upkeep-after-the-merge)
 - [What the report must not omit](#what-the-report-must-not-omit)
+
+## A held design
+
+A design-held issue (`blocked: design`, or `design=open` in its ship contract) is taken
+on only by number, and its design is settled inline, before step 3, by this session — the
+run stays serial. **BACKGROUND:** `shipping-issues`, whose design-decision brief is the
+long form of what the decision must settle.
+
+1. Settle the approach from the repository, its conventions, and the issue thread:
+   the approach and the alternatives rejected with why; the files and functions that
+   change; the data, config, and API surface with exact names and defaults; the edge
+   behavior; what the tests must pin; what is out of scope.
+2. Never decide a product or UX call the repository and the thread do not already
+   answer — what a user is promised, a policy, wording a user sees. That is `DEFERRED`:
+   write nothing, stop, and ask the one question.
+3. `DECIDED`: post the decision as a comment starting `## Design decision`, standing
+   alone; only after it posted, clear the design block — the label and a ship
+   contract's `design=open` ([the calls](rest-calls.md#settling-a-held-design)) — and
+   record it. Then implement the decided approach.
+
+A comment that failed to post leaves the block on; a block that failed to clear after
+the comment posted is cleared before step 3, never left for the next run to misread.
 
 ## The review
 
@@ -114,7 +138,7 @@ merge to that head ([rest-calls.md](rest-calls.md#the-merge)).
 
 | Reply | Next |
 | --- | --- |
-| 200, `merged: true` | Read the issue. `closed` → done; record it. Still `open` → read again after 10 s; still open → the run stops and asks the owner: this skill closes no issue by hand. |
+| 200, `merged: true` | Read the issue. `closed` → done; record it. Still `open` → read again after 10 s; still open → [close it with a back-reference comment](rest-calls.md#closing-an-issue-github-left-open) (`CLOSED_MANUALLY`); if that fails, the run stops with the issue named as left open. |
 | 409 | The head moved after the CI read. Re-run the review watch and CI for the new head; never retry with the old `sha`. |
 | 405 | Read the PR. `mergeable: false` is a conflict: `git fetch origin <default> && git merge origin/<default>` (a merge, never a rebase), resolve a mechanical conflict, `just verify`, push, then the review watch and CI again. A conflict that needs a product decision, or a 405 with `mergeable: true` (a required review or rule), holds the PR: stop and ask. `null` → read again. |
 | 403 | [A 403 from the proxy](cloud-host.md#a-403-from-the-proxy), or no merge permission: stop and report. |
@@ -165,11 +189,15 @@ the long form.
   covered by local verification and current-head CI. A held PR is named as held, open.
 - Acceptance criteria that shipped `not-met`, and why; or that all were met; or that the
   issue carried none.
+- Every write beyond push, PR, and merge: a design decided (its comment URL, and the
+  block cleared), a PR body or base repaired, and an issue closed by hand
+  (`CLOSED_MANUALLY`) — each with the PR or issue it touched.
 - Follow-ups filed with their URLs and labels, what was fixed inline instead, findings
   checked and deliberately not filed, and a label the reply did not echo back.
 - Issues that ranked on a suggested `~P<n>` tier (no label written), and stale
   dependency labels left for a human.
 - Everything held, stopped, or skipped, with the reason — and the state of the
   session's branch when the run stopped (`git log --oneline origin/<default>..HEAD`).
+- A `DEFERRED` design's open question, phrased as the question.
 - Operator actions the run surfaced, such as reconnecting GitHub, clearing Auto-fix, or
   running `just labels`.

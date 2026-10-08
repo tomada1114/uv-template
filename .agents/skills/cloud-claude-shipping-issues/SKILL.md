@@ -23,14 +23,20 @@ deleted or weakened.
 ## Authority
 
 **Invoking this skill is the sign-off for exactly these remote writes, for this
-invocation:** pushing its own branch (the session's designated branch), creating the
-pull request, merging it once CI passes, filing and labelling follow-up issues, and
-removing `blocked: dependency` from the issues its merge unblocked. Nothing else: no
-force-push, no branch deletion, no reply to or resolution of a review thread, no
-`@codex review`, no `just labels`, no label on any other issue, no comment, no PR edit,
-no issue closed by hand, and no Auto-fix. A step that would need one stops and asks.
-Commits go through `smart-commit`, under its own exception. A new dependency is
-proposed, and the run waits for sign-off.
+invocation:** pushing its own branch (the session's designated branch); creating the
+pull request; on that open PR alone, appending `Closes #<n>` to its body when the body
+lacks it, or retargeting its base to the default branch; merging it once CI passes;
+closing by hand, with a back-reference comment naming the PR, the issue that merged PR
+was meant to close when GitHub left it open; for the design-held issue the run takes on,
+posting its `## Design decision` comment and then clearing its design block (its
+design-block label, and `design=open` to `design=settled` in its ship contract); filing
+and labelling follow-up issues; and removing `blocked: dependency` from the issues its
+merge unblocked. Nothing else: no force-push, no branch deletion, no reply to or
+resolution of a review thread, no `@codex review`, no `just labels`, no other label
+change on any issue, no other comment, no other PR or issue edit, no other issue closed,
+and no Auto-fix. A step that would need one stops and asks. Commits go through
+`smart-commit`, under its own exception. A new dependency is proposed, and the run waits
+for sign-off.
 
 The go-ahead to merge is a settled [review](#5-wait-for-the-review) and a `PASS` for
 the current head: the merge happens in that same turn, with no "shall I merge?". The
@@ -89,8 +95,10 @@ Fetch the open issues and PRs and run the digest on them
 report why (the `held:` line) and stop. A `tracking` issue is never shipped; its
 sub-issues are. Unlabelled issues rank on their suggested `~P<n>` tier: list them in
 the report, never write the label. An issue whose design is not settled
-(`blocked: design` or `design=open`) is taken only by number, and only when its thread
-already answers the design; otherwise stop and ask the question. Record `selection`.
+(`blocked: design` or `design=open`) is taken only by number: decide its design inline,
+post the decision, and clear the block before step 3; a product call the thread does
+not answer stops the run with the question
+([how](references/review-ci-merge.md#a-held-design)). Record `selection`.
 
 ### 3. Implement
 
@@ -108,7 +116,9 @@ may remain. Keep the change within the issue; what falls outside it goes to step
 
 `git push -u origin <branch>`, then create a ready PR against the default branch with
 `Closes #<n>` in its body ([the call](references/rest-calls.md#opening-the-pr)). Check
-the reply's `base:` and `draft: false`; record `pr-created`. Never turn on Auto-fix for
+the reply's `base:` and `draft: false`, then read the PR: a missing `Closes #<n>` or a
+wrong base is [repaired](references/rest-calls.md#repairing-the-prs-closing-link)
+before the review watch starts. Record `pr-created`. Never turn on Auto-fix for
 it ([why](references/cloud-host.md#auto-fix-stays-off)).
 
 ### 5. Wait for the review
@@ -134,10 +144,12 @@ Right before the merge, read the review once more with `--timeout 0` and triage
 anything new; never merge past a posted, untriaged finding, and never wait on a later
 review that is not shown ([how](references/review-ci-merge.md#a-later-review)). Read
 the PR ([the call](references/rest-calls.md#reading-the-pr)): `closes: true` and the
-default branch as `base:`, or stop. Then squash-merge pinned to the head CI passed
+default branch as `base:`, else [repair it](references/rest-calls.md#repairing-the-prs-closing-link)
+and read CI again. Then squash-merge pinned to the head CI passed
 ([the call](references/rest-calls.md#the-merge)). 409 → steps 5 and 6 for the new head,
 never the old `sha` again; 405 → [the table](references/review-ci-merge.md#the-merge).
-Confirm the issue is `closed`; record `merged`.
+Confirm the issue is `closed`, else [close it](references/rest-calls.md#closing-an-issue-github-left-open)
+with a back-reference comment; record `merged`.
 
 ### 8. Bring the branch up to date and clear what the merge unblocked
 
@@ -184,9 +196,9 @@ Stop the run and report when:
 - a PR is held: `NO_REVIEW`, a review `ERROR`, a finding that needs the owner, CI
   pending past 1800 s, no checks at all (`NO_CHECKS`), a fourth CI `FAIL`, or a merge
   refused for a reason other than a moved head;
-- the merged issue is still open, or the PR's base or `Closes #<n>` is wrong — this
-  skill edits no PR and closes no issue;
-- a conflict needs a product decision, or a design question has no answer in the thread;
+- the merged issue is still open after the close by hand, or a PR repair left its body
+  or base wrong;
+- a conflict needs a product decision, or a held design needs one (`DEFERRED`);
 - the checkout, the branch, or the default branch changed in a way this run did not
   make: leave it exactly as found and ask.
 

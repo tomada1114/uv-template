@@ -18,10 +18,13 @@ never inside the checkout.
 - [One issue](#one-issue)
 - [Opening the PR](#opening-the-pr)
 - [Reading the PR](#reading-the-pr)
+- [Repairing the PR's closing link](#repairing-the-prs-closing-link)
 - [The CI verdict](#the-ci-verdict)
 - [A failing check](#a-failing-check)
 - [The merge](#the-merge)
+- [Closing an issue GitHub left open](#closing-an-issue-github-left-open)
 - [Issues the merge unblocked](#issues-the-merge-unblocked)
+- [Settling a held design](#settling-a-held-design)
 - [A follow-up issue](#a-follow-up-issue)
 
 ## The repository
@@ -100,8 +103,37 @@ gh api repos/{owner}/{repo}/pulls/<pr> \
 still computing; read again after a few seconds
 ([get a pull request](https://docs.github.com/en/rest/pulls/pulls#get-a-pull-request),
 checked 2026-10-07). `closes: false` or a `base:` other than the default branch means
-the merge would leave the issue open: this run does not edit a PR, so that is a stop
-for this issue (ask the owner).
+the merge would leave the issue open: [repair it](#repairing-the-prs-closing-link).
+
+## Repairing the PR's closing link
+
+The only edits this skill makes to a PR, and only to the open PR it created for `#<n>`,
+mirroring `link_check.sh --fix`. **`closes: false`** — the body has no closing keyword
+for `#<n>`: append one, never a second.
+
+```bash
+mkdir -p <runstate>/pr
+gh api repos/{owner}/{repo}/pulls/<pr> --jq '.body // ""' > <runstate>/pr/<pr>-body-now.md
+printf '\n\nCloses #%s\n' <n> >> <runstate>/pr/<pr>-body-now.md
+gh api -X PATCH repos/{owner}/{repo}/pulls/<pr> -F body=@<runstate>/pr/<pr>-body-now.md \
+  --jq '"closes: \((.body // "") | test("(?i)(close[sd]?|fix(e[sd])?|resolve[sd]?):? +#<n>\\b"))"'
+```
+
+**A `base:` other than the default branch** — retarget it:
+
+```bash
+gh api -X PATCH repos/{owner}/{repo}/pulls/<pr> -f base=<default> --jq '"base: \(.base.ref)"'
+```
+
+`body` and `base` are fields of the update call
+([update a pull request](https://docs.github.com/en/rest/pulls/pulls#update-a-pull-request),
+checked 2026-10-07). Each edit fires the PR's `edited` workflows and a retarget re-runs
+its checks, so make them before the CI read, and read CI again after one. One attempt
+each: a reply that still reads `closes: false` or the wrong `base:` is a stop. Whether
+GitHub has *linked* the keyword is a GraphQL-only fact (`closingIssuesReferences`), so
+`link_check.sh`'s re-save of an unlinked keyword has no REST counterpart here; the issue
+state is checked after the merge instead
+([closing an issue GitHub left open](#closing-an-issue-github-left-open)).
 
 ## The CI verdict
 
@@ -190,6 +222,24 @@ Then the issue:
 gh api repos/{owner}/{repo}/issues/<n> --jq '"issue: \(.state) \(.state_reason // "")"'
 ```
 
+## Closing an issue GitHub left open
+
+Only for `#<n>`, the issue the run's own merged PR closes (`closes: true` at the merge),
+when the read above still says `open` 10 s after the merge reported `merged: true`.
+Mirroring `land_pr.sh`, the back-reference comment goes first, then the close:
+
+```bash
+gh api -X POST repos/{owner}/{repo}/issues/<n>/comments \
+  -f body='Closed by #<pr> (merged). Auto-close did not fire, so closing explicitly.' --jq .html_url
+gh api -X PATCH repos/{owner}/{repo}/issues/<n> -f state=closed -f state_reason=completed \
+  --jq '"issue: \(.state) \(.state_reason // "")"'
+```
+
+([create an issue comment](https://docs.github.com/en/rest/issues/comments#create-an-issue-comment),
+[update an issue](https://docs.github.com/en/rest/issues/issues#update-an-issue),
+both checked 2026-10-07). `issue: closed completed` is `CLOSED_MANUALLY` for the
+report; anything else is a stop, with the issue named as left open behind a merged PR.
+
 ## Issues the merge unblocked
 
 After the merge, fetch the backlog again ([above](#the-backlog-and-the-pick)), then:
@@ -211,6 +261,40 @@ gh api -X DELETE "repos/{owner}/{repo}/issues/<m>/labels/blocked%3A%20dependency
 checked 2026-10-07). A stale label on an issue that does not depend on `#<n>`, or a
 recognized equivalent spelled differently, is not this merge's to clear: list it in the
 report.
+
+## Settling a held design
+
+Only for the design-held issue the run takes on (`blocked: design` or a recognized
+equivalent, or `design=open` in its ship contract), once the approach is decided
+([review-ci-merge.md](review-ci-merge.md#a-held-design)). The writes mirror
+`shipping-issues`' design decision: one comment, then the block cleared, never in the
+other order. The comment, written to `<runstate>/design/<n>-decision.md`, starts with
+`## Design decision` and stands alone:
+
+```bash
+gh api -X POST repos/{owner}/{repo}/issues/<n>/comments \
+  -F body=@<runstate>/design/<n>-decision.md --jq .html_url
+```
+
+Only once that comment posted, clear both forms of the block. Each design-block label
+the issue carries (the `labels:` line of [one issue](#one-issue)) is removed, URL-encoded:
+
+```bash
+gh api -X DELETE "repos/{owner}/{repo}/issues/<n>/labels/blocked%3A%20design" --jq '[.[].name] | join(", ")'
+```
+
+A ship contract's `design=open` becomes `design=settled`, the rest of the body byte for
+byte, with `apply_priority_labels.py`'s own rewrite (imported, so no `gh` runs):
+
+```bash
+gh api repos/{owner}/{repo}/issues/<n> > <runstate>/design/<n>-issue.json
+python3 -B -c 'import json, sys; sys.path.insert(0, ".agents/skills/shipping-issues/scripts"); from apply_priority_labels import settle_contract_design; body = json.load(open(sys.argv[1], encoding="utf-8")).get("body") or ""; new = settle_contract_design(body); print("contract: nothing to settle" if new is None else "contract: settled"); new is None or open(sys.argv[2], "w", encoding="utf-8", newline="").write(new)' \
+  <runstate>/design/<n>-issue.json <runstate>/design/<n>-body.md
+gh api -X PATCH repos/{owner}/{repo}/issues/<n> -F body=@<runstate>/design/<n>-body.md --jq .number   # only after "contract: settled"
+```
+
+The tier label and the rest of the issue are left as they are. Record it with
+`run_record.py --event design --field issue=<n> --field step=2b --field mode=inline --field verdict=DECIDED`.
 
 ## A follow-up issue
 
