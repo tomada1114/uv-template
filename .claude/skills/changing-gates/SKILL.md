@@ -61,6 +61,19 @@ says which gate looks wrong and why, and a human decides.
 A change that tightens a gate is welcome, but still owes the pull request body three
 things: which rule or option moved, why, and what now fails that did not before.
 
+## Python baseline
+
+When changing the supported Python floor, update `pyproject.toml`'s `requires-python`
+and minor-version classifier, mypy's `python_version`, `.python-version`, and the
+Python tag in `.devcontainer/devcontainer.json` together. Any explicit Ruff target
+or project CI Python pin must agree too. `tests/harness/test_python_baseline.py`
+rejects mismatches; run `just check-harness` after changing the baseline.
+
+Ruff infers its target from `requires-python` in this repository's discovered
+configuration. CI leaves `setup-uv`'s `python-version` unset so `uv sync` follows
+`.python-version`, rather than overriding it with `UV_PYTHON`. The separate stdlib
+skill compatibility job still explicitly runs Python 3.9 with `--no-project`.
+
 ## The layers and what each sees
 
 AGENTS.md's "Enforcement layers" names the layers. Keeping them in step is this skill's:
@@ -72,16 +85,17 @@ AGENTS.md's "Enforcement layers" names the layers. Keeping them in step is this 
 | Skills mirror | `agents-check` (working tree) | `agents-check` (working tree) | `Lint & Type Check` (the commit) |
 | Skill script tests | — | `test-skills` | `Lint & Type Check` |
 | `uv lock --check` | — | `lock-check` | `--locked` on every `uv sync` |
-| Tests and the 80% floor | — | `test` | `Test` shards, then `Coverage` |
-| Harness drift (`tests/harness`) and the Product section | — | `check-harness` | `Test` shards, then `Coverage` |
+| Tests and the 80% floor | — | `test` | `Coverage` |
+| Harness drift (`tests/harness`) and the Product section | — | `check-harness` | `Coverage` |
 | typos | `typos` | — | `Spell Check` |
 | zizmor | `zizmor` | — | `Workflow Security Lint` |
 | shellcheck (skill `.sh` scripts) | `shellcheck` | — | `Lint & Type Check` |
 | Skill scripts under Python 3.9 | — | — | `Skill Scripts (Python 3.9)` (not required) |
 | Staged secrets | `check-staged` | — | the weekly gitleaks history scan |
 
-- A check added to `just verify` gets the matching CI step, and the reverse. Nothing
-  tests that the two lists agree; the reviewer reads both.
+- A check added to `just verify` gets the matching CI step, and the reverse.
+  `tests/harness/test_just_recipes.py` enforces parity for `agents-check`, `lint`,
+  `test-skills`, and `test`; the reviewer checks any additional gate.
 - Ruff's local system hooks run `uv run --locked ruff`, sharing `uv.lock` with
   `lint` and CI. A Ruff update moves the existing dependency range and lock; there
   is no separate hook revision to align. **BACKGROUND:** `merging-dependency-prs`.
@@ -115,9 +129,9 @@ AGENTS.md's "Enforcement layers" names the layers. Keeping them in step is this 
   never a job in a workflow whose `pull_request` trigger has `paths` or `paths-ignore`,
   and never a job whose `if:` could skip it — a skipped required check counts as
   passing. A job with `needs:` is guarded with `!cancelled()` or `always()` and fails on
-  its own when a needed job did not succeed, as `Coverage` does; it is required instead
-  of the test shards. Only a few step shapes count, read as text: Coverage's
-  `if [ "$R" != "success" ]; then … exit 1; fi` as the step's first command,
+  its own when a needed job did not succeed. Only a few step shapes count, read as
+  text: an initial `if [ "$R" != "success" ]; then … exit 1; fi` as the step's first
+  command,
   `[ "$R" = success ] || exit 1`, or a step `if: needs.X.result != 'success'` whose
   `run:` is `exit 1` (the full list is `tests/harness/_needs.py`'s docstring).
   `skipped` is not `success`, so a required job cannot need a job that is skipped on

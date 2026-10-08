@@ -27,38 +27,29 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
-          python-version: "3.14"
 
       - name: Install dependencies
         run: uv sync --group dev --locked
 
-      - name: Skills mirror
-        run: uv run --locked python scripts/sync_agents.py --check
-
-      - name: Ruff check
-        run: uv run --locked ruff check .
-
-      - name: Ruff format check
-        run: uv run --locked ruff format --check .
-
-      - name: mypy
-        run: uv run --locked mypy src scripts tests
-
-      # Runs the pinned pre-commit hook, sharing its shellcheck version and
-      # file selection with local commits.
-      - name: shellcheck
-        run: uv run --locked pre-commit run shellcheck --all-files
-
-      # Mirrors `just test-skills`; the .claude/skills mirror is not run twice.
-      - name: Skill script tests
-        env:
-          PYTHONDONTWRITEBYTECODE: "1"
+      # Both groups must finish successfully; recipe commands remain verbatim.
+      - name: Run independent checks
         run: |
+          set -euo pipefail
+          (
+            PYTHONDONTWRITEBYTECODE=1 uv run --locked pytest -n auto -p no:cacheprovider .agents/skills/*/scripts/tests
+          ) &
+          skills_pid=$!
+          (
+            uv run --locked python scripts/sync_agents.py --check
+            uv run --locked ruff check .
+            uv run --locked ruff format --check .
+            uv run --locked mypy src scripts tests
+            uv run --locked pre-commit run shellcheck --all-files
+          ) &
+          lint_pid=$!
           status=0
-          for dir in .agents/skills/*/scripts/tests; do
-            echo "== $dir"
-            uv run --locked python -m unittest discover -s "$dir" -t "$dir" -p 'test_*.py' || status=1
-          done
+          wait "$skills_pid" || status=$?
+          wait "$lint_pid" || status=$?
           exit "$status"
 
   # Skill scripts promise to run on the system python3; 3.9 is macOS's
@@ -88,68 +79,11 @@ jobs:
           done
           exit "$status"
 
-  test:
-    name: Test (shard ${{ matrix.shard }}/4)
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        with:
-          enable-cache: true
-          python-version: "3.14"
-
-      - name: Install dependencies
-        run: uv sync --group dev --locked
-
-      # `just test` isn't used directly, so `-n auto` is specified here as well
-      # as in the justfile; it tracks the runner's actual core count. Coverage
-      # thresholds are only checked once all shards' data has been combined.
-      - name: Run tests
-        env:
-          COVERAGE_FILE: .coverage.${{ matrix.shard }}
-        run: >-
-          uv run --locked pytest
-          --splits 4
-          --group ${{ matrix.shard }}
-          --durations-path .test_durations
-          -n auto
-          --cov
-          --cov-report=
-
-      - name: Upload shard coverage
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: coverage-${{ matrix.shard }}
-          path: .coverage*
-          include-hidden-files: true
-          if-no-files-found: error
-
   coverage:
     name: Coverage
-    # Always runs (unless cancelled) so a failed shard fails this required
-    # check instead of skipping it, which a ruleset would count as passing.
-    if: ${{ !cancelled() }}
-    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Fail when a test shard did not succeed
-        env:
-          TEST_RESULT: ${{ needs.test.result }}
-        run: |
-          if [ "$TEST_RESULT" != "success" ]; then
-            echo "::error::test shards finished with result: $TEST_RESULT"
-            exit 1
-          fi
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -157,21 +91,12 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
-          python-version: "3.14"
 
       - name: Install dependencies
         run: uv sync --group dev --locked
 
-      - name: Download shard coverage
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: coverage-*
-          merge-multiple: true
-
-      - name: Combine and validate coverage
-        run: |
-          uv run --locked coverage combine
-          uv run --locked coverage report --fail-under=80
+      - name: Run tests and enforce coverage
+        run: uv run --locked pytest -n auto --cov --cov-report=term-missing:skip-covered --cov-fail-under=80
 
   spell-check:
     name: Spell Check
@@ -185,7 +110,6 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
-          python-version: "3.14"
 
       - name: Install dependencies
         run: uv sync --group dev --locked
@@ -205,7 +129,6 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
-          python-version: "3.14"
 
       - name: Install dependencies
         run: uv sync --group dev --locked
@@ -235,7 +158,6 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
-          python-version: "3.14"
 
       # The bootstrap needs a git work tree (its clean-tree check, `git ls-files`).
       - name: Bootstrap a scratch clone with sample values
@@ -256,14 +178,15 @@ jobs:
           # the display placeholders are matched as whole words, as the
           # template's sites spell them.
           status=0
-          if git grep --cached -n -I -i -E 'my-app|my_app|uv-template|your-username|you@example' -- . ':!.template-origin'; then
+          if git grep --cached -n -I -i -E 'my\-app|my_app|uv\-template|your\-username|you@example\.com' -- . ':!.template-origin'; then
             echo "::error::the bootstrap left a placeholder token on the lines above"; status=1
           fi
-          if git grep --cached -n -I -w -E 'My App|Your Name' -- . ':!.template-origin'; then
+          if git grep --cached -n -I -i -w -E 'My\ App|Your\ Name|A\ short\ description\ of\ the\ project\.|A\ short\ description\ of\ what\ this\ application\ does\.' -- . ':!.template-origin'; then
             echo "::error::the bootstrap left a display placeholder on the lines above"; status=1
           fi
           for path in TEMPLATE.md scripts/bootstrap.py tests/test_bootstrap.py src/my_app \
-            .agents/skills/starting-an-app/references/bootstrap.md; do
+            .agents/skills/starting-an-app/references/bootstrap.md \
+            .claude/skills/starting-an-app/references/bootstrap.md; do
             if [ -e "$path" ]; then echo "::error::$path survived the bootstrap"; status=1; fi
           done
           grep -qx 'ENV_PREFIX = "TODO_API_"' src/todo_api/settings.py || { echo "::error::env prefix not renamed"; status=1; }

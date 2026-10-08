@@ -43,14 +43,18 @@ cannot read, so that form is reported rather than skipped.
 from __future__ import annotations
 
 import io
+import os
 import re
+import subprocess
+import textwrap
 import tokenize
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
-from tests.harness._yaml import split_comment
+from tests.harness._workflows import jobs, read_workflow, steps
+from tests.harness._yaml import block_text, scalar, split_comment
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -580,3 +584,139 @@ def test_recipe_findings_undecodable_document_fails_closed(
 
 def test_recipe_findings_without_justfile_fails(tmp_path: Path) -> None:
     assert recipe_findings(tmp_path) == [f"{JUSTFILE} is missing"]
+
+
+def ci_recipe_findings(root: Path) -> list[str]:
+    """Keep required CI jobs' commands identical to local check recipes."""
+    path = root / ".github/workflows/ci.yml"
+    workflow_jobs = jobs(read_workflow(path), path)
+    commands_by_job = {
+        scalar(job.get("name", (job_id, []))[0]): {
+            line.strip()
+            for step in steps(job, path)
+            if "run" in step
+            for line in block_text(step["run"]).splitlines()
+        }
+        for job_id, job in workflow_jobs.items()
+    }
+    text = (root / JUSTFILE).read_text(encoding="utf-8")
+    findings: list[str] = []
+    local_by_job: dict[str, set[str]] = {}
+    for recipe, job_name in {
+        "agents-check": "Lint & Type Check",
+        "lint": "Lint & Type Check",
+        "test-skills": "Lint & Type Check",
+        "test": "Coverage",
+    }.items():
+        match = re.search(rf"^{recipe}:.*\n((?:[ \t]+[^\n]*\n)+)", text, re.MULTILINE)
+        assert match is not None, f"recipe {recipe} is missing"
+        commands = [
+            line.strip()
+            for line in match[1].splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        assert commands, f"recipe {recipe} has no commands"
+        local_by_job.setdefault(job_name, set()).update(commands)
+        findings.extend(
+            f"{job_name}: missing {recipe} command: {command}"
+            for command in commands
+            if command not in commands_by_job.get(job_name, set())
+        )
+    ci_only_commands = {
+        "Lint & Type Check": {"uv run --locked pre-commit run shellcheck --all-files"},
+        "Coverage": set(),
+    }
+    for job_name, local_commands in local_by_job.items():
+        ci_commands = {
+            command
+            for command in commands_by_job.get(job_name, set())
+            if command.startswith(("uv run ", "PYTHONDONTWRITEBYTECODE=1 uv run "))
+        }
+        findings.extend(
+            f"{job_name}: extra CI command: {command}"
+            for command in sorted(
+                ci_commands - local_commands - ci_only_commands[job_name]
+            )
+        )
+    return findings
+
+
+def test_ci_recipe_findings_repository_commands_match() -> None:
+    assert ci_recipe_findings(REPO_ROOT) == []
+
+
+def test_ci_recipe_findings_drifted_command_is_rejected(tmp_path: Path) -> None:
+    workflow = REPO_ROOT / ".github/workflows/ci.yml"
+    destination = tmp_path / ".github/workflows/ci.yml"
+    destination.parent.mkdir(parents=True)
+    destination.write_text(
+        workflow.read_text(encoding="utf-8").replace(
+            "uv run --locked ruff check .", "uv run --locked ruff check src"
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / JUSTFILE).write_text(
+        (REPO_ROOT / JUSTFILE).read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    assert (
+        "Lint & Type Check: missing lint command: uv run --locked ruff check ."
+        in ci_recipe_findings(tmp_path)
+    )
+
+
+def test_ci_recipe_findings_removed_local_command_is_rejected(tmp_path: Path) -> None:
+    destination = tmp_path / ".github/workflows/ci.yml"
+    destination.parent.mkdir(parents=True)
+    destination.write_text(
+        (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (tmp_path / JUSTFILE).write_text(
+        (REPO_ROOT / JUSTFILE)
+        .read_text(encoding="utf-8")
+        .replace("    uv run --locked mypy src scripts tests\n", ""),
+        encoding="utf-8",
+    )
+    assert (
+        "Lint & Type Check: extra CI command: uv run --locked mypy src scripts tests"
+        in ci_recipe_findings(tmp_path)
+    )
+
+
+@pytest.mark.parametrize(
+    ("skill_rc", "lint_rc", "expected"), [(0, 0, 0), (1, 0, 1), (0, 1, 1)]
+)
+def test_ci_parallel_checks_propagate_each_failure(
+    tmp_path: Path, skill_rc: int, lint_rc: int, expected: int
+) -> None:
+    path = REPO_ROOT / ".github/workflows/ci.yml"
+    lint = jobs(read_workflow(path), path)["lint"]
+    run = next(
+        (
+            step["run"]
+            for step in steps(lint, path)
+            if scalar(step.get("name", ("", []))[0]) == "Run independent checks"
+        ),
+        None,
+    )
+    assert run is not None, "CI must run independent checks together and await both"
+    uv = tmp_path / "uv"
+    uv.write_text(
+        '#!/usr/bin/env bash\ncase "$*" in\n  *pytest*) exit "$SKILL_RC" ;;\n  *mypy*) exit "$LINT_RC" ;;\nesac\nexit 0\n',
+        encoding="utf-8",
+    )
+    uv.chmod(0o755)
+    proc = subprocess.run(  # noqa: S603 -- repository CI script with fixture-only uv
+        ["/bin/bash", "-euo", "pipefail", "-c", textwrap.dedent(block_text(run))],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
+            "SKILL_RC": str(skill_rc),
+            "LINT_RC": str(lint_rc),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == expected, proc.stderr
