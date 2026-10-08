@@ -60,7 +60,7 @@ def COMMITS(pr):
     return ("api", "repos/{owner}/{repo}/pulls/%s/commits" % pr)
 
 
-REPO_VIEW = ("repo", "view")
+REPO_VIEW = ("api", "repos/{owner}/{repo}")
 
 # --- payloads -----------------------------------------------------------------
 
@@ -485,10 +485,8 @@ class VerdictTest(unittest.TestCase):
         self.assertTrue(calls)
         for call in calls:
             with self.subTest(call=call):
-                if call[0] == "api":
-                    self.assertTrue(call[1].startswith("repos/{owner}/{repo}/"))
-                else:
-                    self.assertEqual(call[:2], ["repo", "view"])
+                self.assertEqual(call[0], "api")
+                self.assertTrue(call[1].startswith("repos/{owner}/{repo}"))
                 self.assertNotIn("-X", call)
                 self.assertNotIn("--method", call)
                 self.assertNotIn("-f", call)

@@ -305,8 +305,8 @@ def review_dir() -> Path | None:
     """<runstate>/review for the current repo, resolved once; None if unknown."""
     if not _RUNSTATE:
         try:
-            repo = gh(["repo", "view", "--json", "nameWithOwner",
-                       "-q", ".nameWithOwner"]).strip()
+            repo = gh(["api", "repos/{owner}/{repo}",
+                       "-q", ".full_name"]).strip()
         except ReadError:
             repo = ""
         _RUNSTATE.append(
