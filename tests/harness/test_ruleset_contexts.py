@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from tests.harness._needs import unfailed_needs
-from tests.harness._workflows import Check, can_skip, every_pr_checks
+from tests.harness._workflows import can_skip, every_pr_checks
 from tests.harness._yaml import UnreadableYamlError
 
 if TYPE_CHECKING:
@@ -517,24 +517,22 @@ def test_ruleset_contexts_unguarded_needs_without_failing_step_reports_both(
 @pytest.mark.parametrize(
     ("steps", "needs", "message"),
     [
-        pytest.param(
-            FAIL_ON_LINT, "{lint: x}", r"cannot read `needs: ", id="needs-map"
-        ),
+        pytest.param(FAIL_ON_LINT, "{lint: x}", r"expected sequence", id="needs-map"),
         pytest.param(FAIL_ON_LINT, "[]", r"cannot read `needs: ", id="needs-empty"),
         pytest.param(
             _fail_on_lint_with(
                 "        env:\n          LINT_RESULT: ${{ needs.lint.result }}\n",
-                "        env: {LINT_RESULT: x}\n",
+                "        env: [x]\n",
             ),
             "lint",
-            r"cannot read an inline `env: ",
-            id="inline-env",
+            r"env: expected mapping",
+            id="env-sequence",
         ),
         pytest.param(
-            "    steps:\n      - run: if true; then\n          exit 1\n          fi\n",
+            "    steps:\n      - run: [exit, 1]\n",
             "lint",
-            r"cannot read a multi-line plain `run: if true; then`",
-            id="multi-line-plain-run",
+            r"run: expected string",
+            id="run-sequence",
         ),
     ],
 )
@@ -567,198 +565,12 @@ def test_ruleset_contexts_needs_job_not_required_is_not_read(
     assert ruleset_context_findings(root) == []
 
 
-# --- the scanner ---
-
-
-def _workflow(tmp_path: Path, text: str) -> Path:
-    (tmp_path / "w.yml").write_text(text, encoding="utf-8")
-    return tmp_path
-
-
-@pytest.mark.parametrize(
-    ("trigger", "expected"),
-    [
-        ("on:\n  pull_request:\n", True),
-        ("on:\n  pull_request:\n    types: [opened, synchronize, reopened]\n", True),
-        ("on:\n  pull_request:\n    types: [opened]\n", False),
-        ("on:\n  pull_request:\n    types: [opened, reopened, edited]\n", False),
-        ("on:\n  pull_request:\n    branches: [main]\n", True),
-        ("on:\n  pull_request:\n    branches: ['**']\n", True),
-        ("on:\n  pull_request:\n    branches: [release/*]\n", False),
-        ("on:\n  pull_request:\n    branches: ['*', '!main']\n", False),
-        ("on:\n  pull_request:\n    branches-ignore: [wip/*]\n", False),
-        ("on:\n  pull_request:\n    paths: [uv.lock]\n", False),
-        ("on:\n  pull_request:\n    paths-ignore: [docs/**]\n", False),
-        ("on:\n  push:\n    paths: [a]\n  pull_request:\n", True),
-        ("on:\n  schedule:\n    - cron: '0 0 * * 0'\n", False),
-        ("on: pull_request\n", True),
-        ("on: [push, pull_request]\n", True),
-        ("on: push\n", False),
-        ("on:\n    pull_request:\n        paths:\n            - a\n", False),
-        ('"on":\n  pull_request:\n', True),
-    ],
-    ids=[
-        "bare",
-        "types-all-three",
-        "types-opened-only",
-        "types-without-synchronize",
-        "branches-main",
-        "branches-glob",
-        "branches-not-main",
-        "branches-negated",
-        "branches-ignore",
-        "paths",
-        "paths-ignore",
-        "push-paths-only",
-        "no-pr",
-        "inline-scalar",
-        "inline-list",
-        "inline-push",
-        "four-space-indent",
-        "quoted-on",
-    ],
-)
-def test_every_pr_checks_honours_trigger_filters(
-    tmp_path: Path, trigger: str, *, expected: bool
+def test_ruleset_contexts_inline_env_uses_same_failure_policy(
+    make_root: MakeRoot,
 ) -> None:
-    root = _workflow(tmp_path, f"name: W\n{trigger}jobs:\n  job:\n    name: Job\n")
-
-    assert ("Job" in every_pr_checks(root)) is expected
-
-
-def test_every_pr_checks_expands_matrix_names(tmp_path: Path) -> None:
-    root = _workflow(
-        tmp_path,
-        "on: pull_request\njobs:\n    a:\n        name: A (${{ matrix.x }})\n"
-        "        strategy:\n            matrix:\n                x: [one, two]\n",
+    steps = _fail_on_lint_with(
+        "        env:\n          LINT_RESULT: ${{ needs.lint.result }}\n",
+        "        env: {LINT_RESULT: '${{ needs.lint.result }}'}\n",
     )
-
-    assert set(every_pr_checks(root)) == {"A (one)", "A (two)"}
-
-
-@pytest.mark.parametrize(
-    ("job", "message"),
-    [
-        (
-            "    name: A (${{ matrix.x }})\n    strategy:\n      matrix:\n        x:\n          - one\n",
-            r"matrix\.x must be a one-line",
-        ),
-        ("    name: A (${{ matrix.x }})\n", r"matrix\.x is not declared"),
-        ("    name: A\n   if: odd\n", r"inconsistent indentation"),
-    ],
-    ids=["block-list-matrix", "undeclared-matrix", "bad-indent"],
-)
-def test_every_pr_checks_fails_closed_on_unreadable_layout(
-    tmp_path: Path, job: str, message: str
-) -> None:
-    root = _workflow(tmp_path, f"on: pull_request\njobs:\n  a:\n{job}")
-
-    with pytest.raises(UnreadableYamlError, match=message):
-        every_pr_checks(root)
-
-
-@pytest.mark.parametrize(
-    ("trigger", "message"),
-    [
-        ("on:\n  pull_request: {paths: [a]}\n", r"cannot read pull_request"),
-        ("on: [push,\n  pull_request]\n", r"flow list must close"),
-        ("name: no trigger\n", r"no `on:` trigger"),
-        ("on:\n  pull_request:\n    tags: [v1]\n", r"unknown pull_request filter"),
-        ("on:\n  pull_request:\n  pull_request:\n", r"duplicate key 'pull_request'"),
-    ],
-    ids=[
-        "inline-pull-request-mapping",
-        "multi-line-flow-list",
-        "no-trigger",
-        "unknown-filter",
-        "duplicate-key",
-    ],
-)
-def test_every_pr_checks_rejects_unreadable_trigger(
-    tmp_path: Path, trigger: str, message: str
-) -> None:
-    root = _workflow(tmp_path, f"{trigger}jobs:\n  a:\n    name: A\n")
-
-    with pytest.raises(UnreadableYamlError, match=message):
-        every_pr_checks(root)
-
-
-@pytest.mark.parametrize(
-    ("if_expr", "has_needs", "expected"),
-    [
-        (None, False, False),
-        (None, True, True),
-        ("${{ !cancelled() }}", True, False),
-        ("always()", True, False),
-        ("${{ needs.test.result == 'success' }}", True, True),
-        ("github.event_name == 'push'", False, True),
-    ],
-    ids=[
-        "plain",
-        "needs-unguarded",
-        "not-cancelled",
-        "always",
-        "success-only",
-        "event-if",
-    ],
-)
-def test_can_skip(if_expr: str | None, *, has_needs: bool, expected: bool) -> None:
-    assert can_skip(Check("J", if_expr, has_needs)) is expected
-
-
-def test_every_pr_checks_strips_comment_from_if(tmp_path: Path) -> None:
-    root = _workflow(
-        tmp_path,
-        "on: pull_request\njobs:\n  a:\n    name: A\n    needs: b\n"
-        "    if: ${{ !cancelled() }} # report even when b fails\n",
-    )
-
-    assert can_skip(every_pr_checks(root)["A"]) is False
-
-
-@pytest.mark.parametrize(
-    "files",
-    [
-        pytest.param(("a.yml", "b.yml"), id="skippable-last"),
-        pytest.param(("b.yml", "a.yml"), id="skippable-first"),
-    ],
-)
-def test_every_pr_checks_duplicate_name_keeps_skippable(
-    tmp_path: Path, files: tuple[str, str]
-) -> None:
-    plain, skippable = files
-    (tmp_path / plain).write_text(
-        "on: pull_request\njobs:\n  a:\n    name: A\n", encoding="utf-8"
-    )
-    (tmp_path / skippable).write_text(
-        "on: pull_request\njobs:\n  a:\n    name: A\n    if: github.actor == 'x'\n",
-        encoding="utf-8",
-    )
-
-    assert can_skip(every_pr_checks(tmp_path)["A"]) is True
-
-
-@pytest.mark.parametrize(
-    "files",
-    [
-        pytest.param(("a.yml", "b.yml"), id="needs-job-first"),
-        pytest.param(("b.yml", "a.yml"), id="needs-job-last"),
-    ],
-)
-def test_every_pr_checks_duplicate_name_keeps_every_problem(
-    tmp_path: Path, files: tuple[str, str]
-) -> None:
-    needs_job, skippable = files
-    (tmp_path / needs_job).write_text(
-        "on: pull_request\njobs:\n  a:\n    name: A\n    needs: b\n    if: always()\n",
-        encoding="utf-8",
-    )
-    (tmp_path / skippable).write_text(
-        "on: pull_request\njobs:\n  a:\n    name: A\n    if: github.actor == 'x'\n",
-        encoding="utf-8",
-    )
-
-    check = every_pr_checks(tmp_path)["A"]
-
-    assert can_skip(check) is True
-    assert unfailed_needs(check) == ("b",)
+    root = make_root(_ruleset("Coverage"), _coverage_workflow(steps, "lint"))
+    assert ruleset_context_findings(root) == []

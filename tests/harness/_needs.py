@@ -27,8 +27,8 @@ Anything else does not count: ``needs.*.result``, ``contains(...)``, a step
 ``if:`` with another condition, an inverted comparison, an ``exit`` inside a
 string, a subshell, or after other commands, and a folded ``>`` block. That makes
 the check fail rather than pass on a step it cannot read. An unreadable
-``needs:``, an inline ``env: {...}``, or a multi-line plain ``run:`` scalar
-raises `UnreadableYamlError`.
+``needs:`` or an incorrectly shaped ``env:``/``run:`` raises
+`UnreadableYamlError`; valid inline mappings follow the same policy.
 """
 
 from __future__ import annotations
@@ -36,15 +36,16 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from tests.harness._shell import split_comment
 from tests.harness._workflows import Check, entry_value, steps
 from tests.harness._yaml import (
-    Entry,
     Mapping,
     UnreadableYamlError,
-    mapping,
+    as_mapping,
+    as_str,
     scalar,
     scalar_list,
-    split_comment,
+    scalar_style,
 )
 
 if TYPE_CHECKING:
@@ -58,8 +59,6 @@ _NOT_SUCCESS = re.compile(
     rf"^\(?\s*needs\.(?P<job>{_ID})\.result\s*!=\s*'success'\s*\)?$"
 )
 _STEP_RUNS = frozenset({"success()", "always()", "!cancelled()"})
-_LITERAL_BLOCK = re.compile(r"^\|[+-]?[1-9]?$")
-_FOLDED_BLOCK = re.compile(r"^>[+-]?[1-9]?$")
 
 _OPERAND = r"(?P<operand>\"[^\"]*\"|\$\{?[A-Za-z_]\w*\}?)"
 _SUCCESS = r"(?:success|\"success\"|'success')"
@@ -78,36 +77,29 @@ def _needs(job: Mapping, path: Path) -> list[str]:
     """Return the job ids a job's ``needs:`` names."""
     if "needs" not in job:
         return []
-    names = scalar_list(job["needs"], path)
+    names = scalar_list(job["needs"], path, where="needs")
     if not names or not all(_JOB_ID.match(name) for name in names):
-        msg = f"{path.name}: cannot read `needs: {job['needs'][0]}`"
+        msg = f"{path.name}: cannot read `needs: {job['needs']}`"
         raise UnreadableYamlError(msg)
     return names
 
 
-def _env(entry: Entry | None, path: Path) -> dict[str, str]:
-    """Return an ``env:`` block's ``name -> value``."""
+def _env(entry: object, path: Path) -> dict[str, str]:
+    """Read both inline and block environment mappings."""
     if entry is None:
         return {}
-    value, block = entry
-    if value:
-        msg = f"{path.name}: cannot read an inline `env: {value}`"
-        raise UnreadableYamlError(msg)
-    return {name: scalar(text) for name, (text, _) in mapping(block, path).items()}
+    return {
+        name: scalar(value, f"{path}: env.{name}")
+        for name, value in as_mapping(entry, f"{path}: env").items()
+    }
 
 
-def _run_lines(entry: Entry, path: Path) -> list[str] | None:
-    """Return a ``run:``'s commands, or None for a folded block this cannot trust."""
-    value, block = entry
-    text = split_comment(value)[0]
-    if not block:
-        return [scalar(value)] if text else []
-    if _FOLDED_BLOCK.match(text):
+def _run_lines(entry: object, path: Path) -> list[str] | None:
+    """Keep folded blocks untrusted; literal blocks retain shell line boundaries."""
+    value = as_str(entry, f"{path}: run")
+    if scalar_style(entry) == ">":
         return None
-    if not _LITERAL_BLOCK.match(text):
-        msg = f"{path.name}: cannot read a multi-line plain `run: {value}`"
-        raise UnreadableYamlError(msg)
-    return [split_comment(line)[0] for line in block]
+    return [split_comment(line)[0] for line in value.splitlines()]
 
 
 def _after_echoes(lines: list[str]) -> list[str]:

@@ -48,6 +48,7 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=7.1.0",
     "pytest-xdist>=3.6",
+    "pyyaml>=6.0",
     "ruff>=0.16.8",
 ]
 
@@ -279,6 +280,12 @@ warn_redundant_casts = true
 warn_unreachable = true
 show_error_codes = true
 enable_error_code = ["ignore-without-code", "redundant-cast", "truthy-bool"]
+
+[[tool.mypy.overrides]]
+# PyYAML ships no stubs; tests/harness/_yaml.py is the only importer and
+# narrows all consumed values through explicit shape checks.
+module = ["yaml", "yaml.*"]
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "tests.*"
