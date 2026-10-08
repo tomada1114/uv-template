@@ -83,7 +83,11 @@ class RunstateParityTest(unittest.TestCase):
         self.home = self.tmp / "home"
         self.home.mkdir()
         git(self.repo, "init", "-q")
-        self.env = {"HOME": str(self.home)}
+        # Only the fixture repository's config: a caller's url.<base>.insteadOf
+        # (a cloud session exports one through GIT_CONFIG_*) would rewrite the
+        # origin URLs under test before the scripts read them.
+        self.env = {"HOME": str(self.home), "GIT_CONFIG_COUNT": "0",
+                    "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
 
     def _set_origin(self, url):
         subprocess.run(["git", "remote", "remove", "origin"], cwd=self.repo,
