@@ -347,6 +347,12 @@ def resolve_names(identity: Identity) -> Names:
         if hit := next((t for t in FORBIDDEN_TOKENS if t in lowered), None):
             msg = f"invalid {field} {value!r}: it contains the placeholder {hit!r}"
             raise BootstrapError(msg)
+        if any(
+            re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", value, re.IGNORECASE)
+            for phrase in PLACEHOLDER_DESCRIPTIONS
+        ):
+            msg = f"invalid {field} {value!r}: it contains a placeholder description"
+            raise BootstrapError(msg)
         if lowered in (phrase.lower() for phrase in FORBIDDEN_PHRASES):
             msg = f"invalid {field} {value!r}: it is a placeholder"
             raise BootstrapError(msg)

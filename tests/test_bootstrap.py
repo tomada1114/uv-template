@@ -829,3 +829,23 @@ def test_bootstrap_leftover_scan_detects_description_placeholders(description):
     assert any(
         pattern.search(description) for pattern in (LEFTOVER_TOKENS, LEFTOVER_PHRASES)
     )
+
+
+@pytest.mark.parametrize("description", bootstrap.PLACEHOLDER_DESCRIPTIONS)
+@pytest.mark.parametrize("variant", ["exact", "case", "embedded"])
+def test_bootstrap_placeholder_description_is_rejected_before_writing(
+    clone, description, variant
+):
+    value = (
+        description
+        if variant == "exact"
+        else description.upper()
+        if variant == "case"
+        else f"About: {description} More."
+    )
+    before = _snapshot(clone)
+    with pytest.raises(
+        bootstrap.BootstrapError, match=r"invalid description .*placeholder"
+    ):
+        _run(clone, description=value)
+    assert _snapshot(clone) == before
