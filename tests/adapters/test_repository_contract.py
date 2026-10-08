@@ -6,6 +6,7 @@ the core relies on nothing beyond what these tests pin down.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
@@ -28,6 +29,9 @@ def _in_memory(_: Path) -> TodoRepository:
 def _sqlite(tmp_path: Path) -> TodoRepository:
     return SqliteTodoRepository(tmp_path / "todos.db")
 
+
+CONCURRENT_ADDS = 200
+WORKERS = 8
 
 REPOSITORY_FACTORIES = [
     pytest.param(_in_memory, id="in-memory"),
@@ -151,3 +155,14 @@ def test_delete_same_id_twice_raises_on_the_second_call(repository, make_draft):
 
     with pytest.raises(TodoNotFoundError, match=r"not found"):
         repository.delete(todo.id)
+
+
+def test_repository_concurrent_adds_assign_unique_ids(repository, fixed_now):
+    drafts = [TodoDraft(f"todo {n}", fixed_now) for n in range(CONCURRENT_ADDS)]
+
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        added = list(pool.map(repository.add, drafts))
+
+    ids = sorted(todo.id for todo in added)
+    assert ids == list(range(1, CONCURRENT_ADDS + 1))
+    assert len(repository.list_all()) == CONCURRENT_ADDS
