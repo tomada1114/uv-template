@@ -9,10 +9,11 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+# tier -> (Claude Code model alias, effort, Codex model or None to inherit the session's)
 TIERS = {
-    "executor": ("opus", "low"),
-    "architect": ("opus", "high"),
-    "worker": ("sonnet", "medium"),
+    "executor": ("opus", "low", None),
+    "architect": ("opus", "high", None),
+    "worker": ("haiku", "max", "gpt-6-luna"),
 }
 
 
@@ -38,7 +39,7 @@ def test_tier_directories_hold_exactly_the_three_tiers() -> None:
 
 @pytest.mark.parametrize("tier", sorted(TIERS))
 def test_tier_definitions_agree_across_hosts(tier: str) -> None:
-    model, effort = TIERS[tier]
+    model, effort, codex_model = TIERS[tier]
     front, body = _claude_definition(tier)
     codex = tomllib.loads(
         (REPO_ROOT / ".codex" / "agents" / f"{tier}.toml").read_text("utf-8")
@@ -47,5 +48,5 @@ def test_tier_definitions_agree_across_hosts(tier: str) -> None:
     assert front == {"name": tier, "model": model, "effort": effort}
     assert codex["name"] == tier
     assert codex["model_reasoning_effort"] == effort
-    assert "model" not in codex
+    assert codex.get("model") == codex_model
     assert codex["developer_instructions"].strip() == body

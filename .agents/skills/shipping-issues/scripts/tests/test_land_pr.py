@@ -538,7 +538,8 @@ class LandPrTest(unittest.TestCase):
 
 class ReviewLogGuardTest(unittest.TestCase):
     """--review-log: an open PR merges only on review_watch.py's CLEAN or
-    FINDINGS verdict for this same PR."""
+    FINDINGS verdict for this same PR, or its NO_NEW_REVIEW for the head being
+    merged."""
 
     def _land(self, pr, log_text):
         merge = ("pr", "merge", pr, "--squash", "--delete-branch")
@@ -572,6 +573,27 @@ class ReviewLogGuardTest(unittest.TestCase):
 
         self.assertIn("result: MERGED\n", proc.stdout)
         self.assertEqual(len(merges), 1)
+
+    def test_no_new_review_after_the_merged_head_lets_the_merge_through(self):
+        proc, merges = self._land(
+            "67", f"verdict: NO_NEW_REVIEW\npr: 67\nafter_push: {SHA[:12]}\n")
+
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("review: NO_NEW_REVIEW\n", proc.stdout)
+        self.assertIn("result: MERGED\n", proc.stdout)
+        self.assertEqual(len(merges), 1)
+
+    def test_no_new_review_after_another_push_refuses_the_merge(self):
+        # The grace ran out for an earlier push; the head now is a later one.
+        for line in ("after_push: 89abcdef0123\n", "after_push: none\n", ""):
+            with self.subTest(line=line):
+                proc, merges = self._land(
+                    "68", f"verdict: NO_NEW_REVIEW\npr: 68\n{line}")
+
+                self.assertEqual(proc.returncode, 1)
+                self.assertIn("result: REVIEW_UNSETTLED\n", proc.stdout)
+                self.assertIn(f"not the head {SHA}", proc.stdout)
+                self.assertEqual(merges, [])
 
     def test_an_unsettled_review_refuses_the_merge(self):
         for verdict in ("PENDING_TIMEOUT", "NO_REVIEW", "ERROR"):

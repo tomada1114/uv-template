@@ -2,8 +2,8 @@
 name: codex-shipping-issues
 description: >
   Use when shipping a GitHub issue from a Codex Cloud or Codex-managed checkout through
-  a regular pull request, one opening-triggered Codex review, current-head CI and an
-  authorized merge;
+  a regular pull request, up to three Codex review rounds with their findings
+  addressed, current-head CI and an authorized merge;
   preparing or cleaning a linked worktree; or checking the evidence for a PR-only run.
   Uses repository-local skills and helpers without requiring personal global skills.
 ---
@@ -103,21 +103,23 @@ for this branch instead of creating another. Attach the PR to this chat when the
 host supports PR attachments.
 
 Read [review, CI and landing](references/review-and-ci.md) before publication.
-Wait for the first automatic Codex review triggered on opening. Read all its findings,
-fix accepted in-scope ones and inspect the correction diff locally. Observe CI while
-that review runs and diagnose failures within scope. Record the reviewed commit and
+Wait for the automatic Codex review triggered on opening. Read all its findings, fix
+every accepted one and inspect the correction diff locally. Observe CI while a review
+runs and diagnose failures within scope. Record each round's reviewed commit and
 findings separately from the current head.
 
-After the initial review completes, do not request or wait for a second review, even
-when corrections or base integration change the diff. Repeat affected checks and
-`just verify`, push normally and wait for current-head CI. This is the owner's
-single-review policy; it does not claim the final head received cloud review.
-Repository-required approvals remain separate and cannot be bypassed.
+After each correction push, wait briefly for a review of the new head. A review that
+starts is the next round: fix its accepted `P0`–`P2` findings and report accepted
+`P3` ones as follow-up candidates. Handle at most three rounds, never request a
+review, repeat affected checks and `just verify`, push normally and wait for
+current-head CI. This is the owner's review-round policy; it does not claim the final
+head received cloud review. Repository-required approvals remain separate and cannot
+be bypassed.
 
 ## 5. Finish at the authorized boundary
 
-At `stop_at=pr`, finish after acceptance, completed initial review with accepted
-findings addressed, and current-head CI; preserve the open PR and branch.
+At `stop_at=pr`, finish after acceptance, the settled review rounds with their
+required findings addressed, and current-head CI; preserve the open PR and branch.
 At `stop_at=merge`, proceed to landing as soon as all current gates and required approvals pass, without asking again for
 already authorized merge. Verify remote merged state, merge commit and issue closure.
 Do not switch, pull or clean the user's busy primary checkout.

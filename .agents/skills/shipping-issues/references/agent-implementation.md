@@ -1,7 +1,9 @@
 # Implementation (brief)
 
 Used at [SKILL.md step 3](../SKILL.md#3-implement), one issue per brief. Handed to
-**`executor`** by default and to **`architect`** when the issue is foundational —
+**`executor`** by default, down to **`worker`** when the issue is small and settled
+([the small-change step-down](cost-discipline.md#the-small-change-step-down-worker)),
+and to **`architect`** when the issue is foundational —
 architecture or a skeleton, an interface/port/schema, or a skill, instruction file, or
 gate whose shape the rest of the backlog copies. The test is blast radius, not
 difficulty:
