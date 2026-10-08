@@ -7,7 +7,8 @@ that lists ``just verify``'s steps; every other document points at it. So:
   ``just <name>`` in command position in the section (fenced or inline, as
   check (c) reads code), and
 - the comment on its ``just verify`` line lists ``verify``'s dependencies in
-  the justfile's order, as ``<label>: a → b → c``.
+  the justfile's order, as ``<label>: a → b → c``: prior and subsequent
+  (``&&``) ones alike, a ``(name arg ...)`` dependency by its name.
 
 The section runs from ``## Quick Reference`` to the next ``## `` heading. A
 missing AGENTS.md, section, or ``just verify`` line fails closed; a justfile
@@ -41,14 +42,18 @@ _NAME = r"[A-Za-z_][A-Za-z0-9_-]*"
 _CALL = re.compile(rf"^just\s+(?P<name>{_NAME})")
 _VERIFY_HEADER = re.compile(r"^@?verify(?:[ \t]+[^:]*?)?[ \t]*:(?!=)(?P<deps>.*)$")
 _VERIFY_LINE = re.compile(r"^\s*just\s+verify\b[^#]*#(?P<comment>.*)$")
+_QUOTED = re.compile(r"\"(?:[^\"\\]|\\.)*\"|'[^']*'")
+# A dependency is a bare name or `(name arg ...)`; `&&` only marks the ones
+# after it as running after the body, and verify's body is empty.
+_DEPENDENCY = re.compile(rf"\(\s*(?P<call>{_NAME})[^)]*\)|(?P<name>{_NAME})")
 
 
 def verify_dependencies(text: str) -> list[str] | None:
     """Return the ``verify`` recipe's dependencies in order, or None without it."""
     for line in text.splitlines():
         if match := _VERIFY_HEADER.match(line):
-            deps = match["deps"].split("#", 1)[0].split("&&", 1)[0]
-            return re.findall(_NAME, deps)
+            deps = _QUOTED.sub(" ", match["deps"]).split("#", 1)[0]
+            return [dep["call"] or dep["name"] for dep in _DEPENDENCY.finditer(deps)]
     return None
 
 
@@ -178,6 +183,29 @@ def make_root(tmp_path: Path) -> MakeRoot:
 
 def test_verify_dependencies_reads_order_and_drops_comment() -> None:
     assert verify_dependencies(JUSTFILE_TEXT) == ["lock-check", "lint", "test"]
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [
+        pytest.param(
+            "verify: lint && test", ["lint", "test"], id="subsequent-dependency"
+        ),
+        pytest.param(
+            'verify: (build "main") lint', ["build", "lint"], id="dependency-arguments"
+        ),
+        pytest.param(
+            "verify: (build 'a#b' main) && (deploy \"x\")",
+            ["build", "deploy"],
+            id="quoted-hash-in-argument",
+        ),
+        pytest.param("verify:", [], id="no-dependencies"),
+    ],
+)
+def test_verify_dependencies_reads_every_dependency_form(
+    header: str, expected: list[str]
+) -> None:
+    assert verify_dependencies(f"{header}\n    echo done\n") == expected
 
 
 def test_verify_dependencies_without_verify_is_none() -> None:
