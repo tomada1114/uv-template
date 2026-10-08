@@ -6,7 +6,7 @@ description: >
   pull request, the roadmap, just labels, GitHub security settings and secrets, just
   ruleset and a private repository, keeping the HTTP API, the CLI, or both, removing the
   sample to-do domain, and the first ADRs (app shape, persistence). In the template it
-  also covers scripts/bootstrap.py, .template-origin, and its CI smoke job. Use when
+  also covers the rename step, .template-origin, and the template smoke check. Use when
   starting an app, setting up the new repository, or a placeholder survived the rename.
 ---
 

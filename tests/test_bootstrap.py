@@ -21,12 +21,6 @@ if TYPE_CHECKING:
     from types import ModuleType
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-# The same scan as CI's smoke job: placeholder tokens in any case, and the
-# display placeholders as whole words.
-LEFTOVER_TOKENS = re.compile(
-    r"my-app|my_app|uv-template|your-username|you@example", re.IGNORECASE
-)
-LEFTOVER_PHRASES = re.compile(r"\b(?:My App|Your Name)\b")
 # A line the bootstrap treats as a template-only marker.
 MARKER_LINE = re.compile(r"^\s*(?:#\s*)?<!-- /?template-only -->\s*$", re.MULTILINE)
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
@@ -99,6 +93,19 @@ def _load_bootstrap_module() -> ModuleType:
 
 
 bootstrap = _load_bootstrap_module()
+# Both test and CI smoke scans are checked against the bootstrap vocabulary.
+LEFTOVER_TOKENS = re.compile(
+    "|".join(re.escape(value) for value in bootstrap.FORBIDDEN_TOKENS), re.IGNORECASE
+)
+LEFTOVER_PHRASES = re.compile(
+    r"(?<!\w)(?:"
+    + "|".join(
+        re.escape(value)
+        for value in (*bootstrap.FORBIDDEN_PHRASES, *bootstrap.PLACEHOLDER_DESCRIPTIONS)
+    )
+    + r")(?!\w)",
+    re.IGNORECASE,
+)
 
 
 @pytest.fixture(scope="session")
@@ -412,6 +419,13 @@ def test_main_invalid_input_leaves_the_tree_byte_identical(clone, capsys, argv_t
 @pytest.mark.parametrize(
     ("relative", "old", "new", "message"),
     [
+        pytest.param(
+            "README.md",
+            "A short description of what this application does.",
+            "An unrecognized application description.",
+            r"README\.md: expected exactly one",
+            id="readme-description-drifted",
+        ),
         pytest.param(
             "SECURITY.md",
             "If that form is unavailable",
@@ -759,3 +773,59 @@ def test_git_env_disables_background_maintenance(
     _git(tmp_path, "init", "--quiet")
 
     assert _git(tmp_path, "config", "--get", key).strip() == expected
+
+
+def test_bootstrap_readme_description_is_the_supplied_value(sample_app):
+    text = (sample_app / "README.md").read_text(encoding="utf-8")
+    assert "Todo API" in text
+    assert bootstrap.PLACEHOLDER_DESCRIPTIONS[1] not in text
+
+
+def assert_smoke_contract(workflow: str) -> None:
+    smoke = workflow.split("- name: Assert no placeholder survived", 1)[1].split(
+        "- name:", 1
+    )[0]
+    patterns = re.findall(r"git grep[^\n]+ -E '([^']+)'", smoke)
+    assert patterns == [
+        "|".join(re.escape(value) for value in bootstrap.FORBIDDEN_TOKENS),
+        "|".join(
+            re.escape(value)
+            for value in (
+                *bootstrap.FORBIDDEN_PHRASES,
+                *bootstrap.PLACEHOLDER_DESCRIPTIONS,
+            )
+        ),
+    ], "smoke placeholder patterns drifted"
+    deletion_loop = re.search(r"for path in (.*?); do", smoke, re.DOTALL)
+    assert deletion_loop is not None
+    paths = deletion_loop.group(1).replace("\\\n", " ").split()
+    assert set(paths) == {*bootstrap.KEEPABLE_FILES, "src/my_app"}, (
+        "smoke deletion list drifted"
+    )
+
+
+def test_bootstrap_smoke_contract_matches_script_constants():
+    assert_smoke_contract(
+        (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    )
+
+
+@pytest.mark.parametrize(
+    "old",
+    [
+        pytest.param("you@example", id="token"),
+        pytest.param("TEMPLATE.md scripts/bootstrap.py", id="deleted-file"),
+    ],
+)
+def test_bootstrap_smoke_contract_drift_is_rejected(old):
+    workflow = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    changed = workflow.replace(old, "unexpected|", 1)
+    with pytest.raises(AssertionError, match=r"smoke .* drifted"):
+        assert_smoke_contract(changed)
+
+
+@pytest.mark.parametrize("description", bootstrap.PLACEHOLDER_DESCRIPTIONS)
+def test_bootstrap_leftover_scan_detects_description_placeholders(description):
+    assert any(
+        pattern.search(description) for pattern in (LEFTOVER_TOKENS, LEFTOVER_PHRASES)
+    )

@@ -472,6 +472,13 @@ def _edit_pyproject(text: str, names: Names, _today: dt.date) -> str:
     )
 
 
+def _edit_readme(text: str, names: Names, _today: dt.date) -> str:
+    """Fail before writing if the README description slot has drifted."""
+    return _Site("README.md", PLACEHOLDER_DESCRIPTIONS[1]).replace(
+        text, names.description
+    )
+
+
 def _edit_license(text: str, names: Names, today: dt.date) -> str:
     """Write the run's year and the author into the copyright line."""
     if len(LICENSE_LINE_PATTERN.findall(text)) != 1:
@@ -500,6 +507,7 @@ def _edit_conduct(text: str, names: Names, _today: dt.date) -> str:
 
 FILE_EDITS: dict[str, Callable[[str, Names, dt.date], str]] = {
     "pyproject.toml": _edit_pyproject,
+    "README.md": _edit_readme,
     "LICENSE": _edit_license,
     "SECURITY.md": _edit_security,
     "CODE_OF_CONDUCT.md": _edit_conduct,
