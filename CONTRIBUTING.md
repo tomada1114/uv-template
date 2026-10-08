@@ -13,17 +13,16 @@ Install these tools:
 - [Just](https://just.systems/man/en/installation.html) (optional — you can run
   `uv run` commands directly)
 
-Then:
+Then install the dependencies and the git hooks (without Just, run the
+`install` recipe's commands from the `justfile`):
 
 ```bash
-uv sync --all-groups --locked
+just install
 ```
 
-If you're working in a Git checkout, also install the local hooks:
-
-```bash
-uv run --locked pre-commit install --install-hooks
-```
+The hooks are required: they carry the secret gate that refuses a commit
+staging a secret, and `just install` fails if one is missing (README's
+"Development" section has the details).
 
 ## Development Workflow
 
@@ -40,20 +39,12 @@ just test
 # Mutating development check (format → lint → test)
 just check
 
-# Non-mutating PR/completion gate (lock check + skills mirror + lint + skill tests + test)
+# Non-mutating PR/completion gate (its steps: AGENTS.md's Quick Reference)
 just verify
 ```
 
-**Without Just**, run the equivalent commands:
-
-```bash
-uv run --locked ruff check --fix .
-uv run --locked ruff format .
-uv run --locked ruff check .
-uv run --locked ruff format --check .
-uv run --locked mypy src scripts tests
-uv run --locked pytest -n auto --cov --cov-report=term-missing:skip-covered --cov-fail-under=80
-```
+**Without Just**, run the `uv run` commands the `justfile` gives each recipe
+(`just verify` runs the recipes its own line in the `justfile` names).
 
 ## Worktrees
 
