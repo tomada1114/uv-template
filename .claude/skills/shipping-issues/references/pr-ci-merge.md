@@ -64,12 +64,22 @@ decision, never this run's.
 ## Waiting for the PR review
 
 The PR's review is the Codex GitHub integration's, posted by
-`chatgpt-codex-connector[bot]`. It runs once, when the PR opens (or a draft is marked
-ready, or someone comments `@codex review`); **a push starts nothing**. So this run waits
-for exactly one review, the opening one, and never asks for another: no `@codex review`
-comment, no close/reopen, no change to review settings. Fixes pushed after it get no
-second cloud review — local verification and current-head CI cover them, and the step 10
-report says so.
+`chatgpt-codex-connector[bot]`. It runs when the PR opens (or a draft is marked ready, or
+someone comments `@codex review`), and **a push may start another**: PRs #184 and #190
+ended on a review of a fix-push head (observed 2026-10-08). This run never asks for one:
+no `@codex review` comment, no close/reopen, no change to review settings. Each review
+is a **round**, and at most 3 are handled per PR:
+
+| Round                     | Fixed in this PR                                                                                                                                        |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1, the opening review     | every accepted finding, whatever its badge                                                                                                              |
+| 2 and 3, after fix pushes | an accepted `P0`, `P1`, `P2` or unbadged `P?`; an accepted `P3` goes to [step 8](../SKILL.md#8-close-out-the-findings-the-run-turned-up) as a follow-up |
+| 4 or later, past the cap  | nothing: only `P0`, `P1` and `P?` are triaged, and an accepted one holds the PR for step 10; the rest are named at step 10, untriaged                   |
+
+[Triage](implement-and-review.md#triaging-the-reviews-findings) is the same in every
+round, judged against the code: the badge decides only whether an accepted finding is
+fixed now or followed up. Fixes after round 3 get no further review — local verification
+and current-head CI cover them, and the step 10 report says so.
 
 What it looked like on PRs #170 and #171, both opened by a run of this skill (observed
 2026-10-07): the summary comment appeared about 15 s after the PR opened with a
@@ -77,12 +87,15 @@ What it looked like on PRs #170 and #171, both opened by a run of this skill (ob
 and was edited in place to `✅ **Completed**` about 2.5 minutes later. CI took about 3
 minutes, so the two finish close together — and on #170 the merge on CI's `PASS` landed
 at 19:26:55Z, 24 s **before** the review completed at 19:27:19Z. That race is why the
-merge waits for both.
+merge waits for both. A fix push may or may not start one (trigger `New commits`,
+observed 2026-10-08): on #190 it started 12 s after the push and completed 4 minutes
+later; on #184 one push started none, and the next started one 2 min 13 s after the
+push — 9 s before the PR merged on CI alone, which is what the start grace prevents.
 
 ```bash
 mkdir -p <runstate>/review
-.agents/skills/shipping-issues/scripts/review_watch.py <pr> --timeout <seconds> > <runstate>/review/<pr>.log
-grep -E '^(verdict|trigger|review_status|reviewed_sha|head_sha|reviewed_is_head|completed_at|later_review|pr_age_seconds|findings|findings_file|detail):|^  - F' <runstate>/review/<pr>.log
+.agents/skills/shipping-issues/scripts/review_watch.py <pr> [--after-push <sha>] --timeout <seconds> > <runstate>/review/<pr>.log
+grep -E '^(verdict|round|rounds|cap_reached|trigger|review_status|reviewed_sha|head_sha|reviewed_is_head|completed_at|later_review|pr_age_seconds|push_age_seconds|findings|round_findings|findings_file|detail):|^  - F' <runstate>/review/<pr>.log
 ```
 
 Start it right after `link_check.sh`, alongside the CI watch: on a host that reports
@@ -91,32 +104,49 @@ background completion, both go in the background (`review_watch.py` with its def
 foreground slices, one after the other, under the host's command timeout
 ([waiting](#waiting-inside-the-command-timeout)); `NO_REVIEW` is measured from the PR's
 opening, so review slices need no running total. **Merge only when both are terminal.**
-Bodies of findings go to `findings_file:` and stay out of this context until triage.
+Bodies of findings go to `findings_file:` and stay out of this context until triage;
+each `F<n>` line carries its `round=`, and `round_findings:` counts the round just read.
+
+**After each fix push** (rounds 1 and 2), run `review_watch.py <pr> --after-push <sha>`,
+`<sha>` the commit just pushed, alongside the new CI watch. It waits a start grace
+(`--start-grace`, 180 s, counted from its first call for that `<sha>`) for a review that
+is not a settled round to start — when one comes it has started within about 2.5
+minutes of the push (above).
+One that starts is waited for by the same completion rules and reported as the next
+round. `NO_NEW_REVIEW` means none started (or the one that did failed): the latest
+settled round stands, and the PR lands on current-head CI `PASS`. CI takes about 3
+minutes, so the grace normally costs nothing. With `cap_reached: yes` it returns at once.
 
 What counts as done is the trusted bot's own record: a summary comment by exactly that
 login, `Completed`, naming a commit of this PR. `CLEAN` is that plus no review and no
-inline comment from the bot; its 👍 on the PR (`thumbs_up:`) corroborates, and neither
-its presence nor its absence decides anything. Silence, green CI, a display name, or a
-reaction alone is never completion. When `reviewed_is_head: no`, fixes were pushed after
-the review: the verdict is still that review's.
+inline comment from the bot for that round; its 👍 on the PR (`thumbs_up:`) corroborates,
+and neither its presence nor its absence decides anything. Silence, green CI, a display
+name, or a reaction alone is never completion. When `reviewed_is_head: no`, a push came
+after the latest settled round: that round stands until a review of the new head
+settles, and `--after-push` says whether one is coming.
 
-| `verdict:`        | Next                                                                                                                                                                                                                                                                                 |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `CLEAN`           | Nothing to fix. Merge once CI is `PASS` for the current head.                                                                                                                                                                                                                         |
-| `FINDINGS`        | [Triage every finding](implement-and-review.md#triaging-the-reviews-findings), [fix the accepted ones](implement-and-review.md#fixing-the-accepted-findings) in the branch's own checkout, verify, push, and watch CI again for the new head. Out of scope → step 8.                 |
-| `PENDING_TIMEOUT` | Not a verdict — run the watch again; past 1800 s of `pr_age_seconds` with the review still running, treat it as `ERROR`.                                                                                                                                                             |
-| `NO_REVIEW`       | [Hold the PR](recovery.md#the-pr-review-did-not-settle): open, unmerged, a step 10 blocker. Never a local review instead.                                                                                                                                                              |
-| `ERROR`           | [recovery.md#the-pr-review-did-not-settle](recovery.md#the-pr-review-did-not-settle).                                                                                                                                                                                                |
+| `verdict:`        | Next                                                                                                                                                                                                                                                                                                                           |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `CLEAN`           | Nothing to fix in this round. Merge once CI is `PASS` for the current head.                                                                                                                                                                                                                                                    |
+| `FINDINGS`        | [Triage every finding](implement-and-review.md#triaging-the-reviews-findings) of `round:`, [fix the accepted ones](implement-and-review.md#fixing-the-accepted-findings) the round table calls for in the branch's own checkout, verify, push, and watch CI again for the new head with `--after-push`. Out of scope → step 8. |
+| `NO_NEW_REVIEW`   | No review of the push started within the grace: the latest settled round stands. Merge once CI is `PASS` for that head; triage first any finding of that round not yet triaged.                                                                                                                                                |
+| `PENDING_TIMEOUT` | Not a verdict — run the watch again; past 1800 s of `pr_age_seconds` (the opening review) or `push_age_seconds` (a later one) with the review still running, treat it as `ERROR`.                                                                                                                                              |
+| `NO_REVIEW`       | [Hold the PR](recovery.md#the-pr-review-did-not-settle): open, unmerged, a step 10 blocker. Never a local review instead.                                                                                                                                                                                                      |
+| `ERROR`           | [recovery.md#the-pr-review-did-not-settle](recovery.md#the-pr-review-did-not-settle).                                                                                                                                                                                                                                          |
 
-Right before the merge, re-run `review_watch.py <pr> --timeout 0` into the same log: it is
-the file `land_pr.sh --review-log` reads, and it lists any finding posted since the last
-read (numbers stay stable: a new one is appended). An untriaged finding is triaged
-before the merge, even one from an unsolicited later review — do not wait for such a
-review to finish, but do not ignore a defect it already named. The summary keeps a single
-row, rewritten for the latest review (a `Manual request` row replaced the opening one on
-PRs #154 and #156, observed 2026-10-07), so the watch remembers the opening review it saw
-complete in `<runstate>/review/<pr>-opening.json` and keeps that verdict, reporting the
-later one on `later_review:`. Leave that file in place until the PR merges.
+Right before the merge, re-run `review_watch.py <pr> --after-push <head_sha> --timeout 0`
+into the same log, `<head_sha>` the CI `PASS`'s: it is the file `land_pr.sh --review-log`
+reads, and it lists any finding posted since the last read (numbers stay stable: a new
+one is appended). A head no settled round has read gets its start grace here too — a CI
+repair or a merge of the default branch is a push like any other — so a
+`PENDING_TIMEOUT` there means re-run it with a `--timeout`, never merge. An untriaged finding is triaged before the merge by
+its round's row above, even one from a review that settled after the grace — do not
+wait for a review that started late, but do not ignore a defect it already named. The
+summary keeps a single row, rewritten for the latest review (a `Manual request` row
+replaced the opening one on PRs #154 and #156, observed 2026-10-07), so the watch
+remembers every round it saw complete, and the current push's grace, in
+`<runstate>/review/<pr>-rounds.json`, reporting a review not yet settled on
+`later_review:`. Leave that file in place until the PR merges.
 
 ## Watching CI
 
@@ -161,7 +191,8 @@ before that. Pick the first of these the host supports:
    background queue. A `TIMEOUT` after the full 1800 s is `ERROR`.
 
 `review_watch.py` waits the same two ways, alongside `ci_watch.sh`: its default
-`--timeout 900` is the single background call, and in slices each one re-reads the PR.
+`--timeout 900` is the single background call, and in slices each one re-reads the PR
+(an `--after-push` grace counts from the first slice for that commit).
 Never stand in for either with `sleep` or a poll loop of your own: the scripts' own
 timeouts and verdicts are what make a stalled CI or a missing review a reported outcome
 rather than a hung run.
@@ -181,12 +212,14 @@ line, omit the flag: the script then pins to the head it reads just before it ch
 merge state.
 
 `--review-log` makes the script refuse the merge (`REVIEW_UNSETTLED`) unless the log is
-this PR's and says `CLEAN` or `FINDINGS`. It cannot tell whether findings were
-addressed — that is the triage above — only that the review exists.
+this PR's and says `CLEAN` or `FINDINGS`, or `NO_NEW_REVIEW` after a push of the commit
+being merged. It cannot tell whether findings were addressed — that is the triage above —
+only that the review exists.
 
 Merge as soon as CI reports `verdict: PASS` for the current head and the review has
-settled — `CLEAN`, or `FINDINGS` triaged with every accepted fix pushed and covered by
-that `PASS` — and call `land_pr.sh` in that same turn. Do not ask whether to merge, and
+settled — `CLEAN`, `FINDINGS` triaged with every fix its round calls for pushed and
+covered by that `PASS`, or `NO_NEW_REVIEW` for that head — and call `land_pr.sh` in that
+same turn. Do not ask whether to merge, and
 do not report the green CI and wait: green CI on a reviewed PR is the approval. Read
 `result:` and `issue:`. Every result, and the two that must never read as success:
 [landing-outcomes.md](landing-outcomes.md). Record (`--event merged ...`). A review whose

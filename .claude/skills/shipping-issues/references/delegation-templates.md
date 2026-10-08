@@ -101,7 +101,9 @@ Prompt body: [agent-priority-research.md](agent-priority-research.md). Fill its
 
 ## Implementation (step 3)
 
-One brief per issue. **`executor` is the default; `architect` when the issue is
+One brief per issue. **`executor` is the default; `worker` when the issue is small and
+settled** ([the small-change step-down](cost-discipline.md#the-small-change-step-down-worker)),
+moving to `executor` after a miss; **`architect` when the issue is
 foundational** — architecture or a skeleton, an interface/port/schema, or a skill,
 instruction file, or gate whose shape the rest of the backlog copies. The test is blast
 radius, not difficulty:
@@ -117,9 +119,10 @@ Prompt body: [agent-implementation.md](agent-implementation.md).
 
 There is no review brief: the review is the pull request's own, read by
 `review_watch.py` ([pr-ci-merge.md](pr-ci-merge.md#waiting-for-the-pr-review)). This
-brief is only for the findings of that review this session has already read and
-accepted. Zero accepted findings → nothing to run. One brief per PR that has any, handed
-to **`executor`** or followed inline, always inside that branch's own `{workdir}` — in
+brief is only for the findings of a review round this session has already read and
+accepted for this PR. Zero → nothing to run. One brief per round that has any, handed
+to **`executor`** (**`worker`** when every accepted finding names its `path:line` and its
+fix) or followed inline, always inside that branch's own `{workdir}` — in
 parallel mode never the main checkout, which sits on the default branch.
 
 Prompt body: [agent-review-fix.md](agent-review-fix.md).

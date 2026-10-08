@@ -46,7 +46,11 @@ Fill [agent-implementation.md](agent-implementation.md) per issue
 ([delegation-templates.md](delegation-templates.md) holds the rules every brief shares).
 Where the host has named sub-agents, hand it to **`executor`** by default and to
 **`architect`** when the issue is foundational — blast radius, not difficulty
-([the foundation exception](cost-discipline.md#the-foundation-exception-architect-for-what-the-backlog-builds-on)).
+([the foundation exception](cost-discipline.md#the-foundation-exception-architect-for-what-the-backlog-builds-on)) —
+and down to **`worker`** when it is small and settled: narrow scope, nothing to decide,
+and a Done-means that is a command or an existing test
+([the small-change step-down](cost-discipline.md#the-small-change-step-down-worker)); a
+`worker` miss goes to `executor` for the next round.
 A change small enough that the handoff costs more than the work is implemented here
 rather than handed off
 ([the floor](cost-discipline.md#the-floor-too-small-to-delegate)). With no tiers — a
@@ -82,13 +86,15 @@ re-spawn an agent that returned without its report.
 ## Triaging the review's findings
 
 `review_watch.py` ([step 5](../SKILL.md#5-wait-for-the-pr-review)) numbers the PR
-review's findings `F1`, `F2`, … oldest first, one line each with its priority badge and
-`path:line`, and writes their bodies to the file its `findings_file:` line names. Read
-every body there — never in the PR conversation, which pulls the whole thread into this
-context — and only then decide anything. The review read the diff in a context that did
-not write it; this session wrote or judged the diff, so it is the one that triages.
+review's findings `F1`, `F2`, … in review order — a later round's are appended — one line
+each with its priority badge, `path:line` and `round=`, and writes their bodies to the
+file its `findings_file:` line names. Read every body there — never in the PR
+conversation, which pulls the whole thread into this context — and only then decide
+anything. The review read the diff in a context that did not write it; this session
+wrote or judged the diff, so it is the one that triages.
 
-Classify **every** finding, each with a one-line reason:
+Classify **every** finding of the round being handled (`round:`; earlier rounds' are
+classified already), each with a one-line reason:
 
 - **accepted** — real, and it belongs in this diff: the same behavior change the issue
   is about, tests included. A sibling case of the bug just fixed belongs here; a schema
@@ -101,18 +107,27 @@ Classify **every** finding, each with a one-line reason:
 - **out of scope** — real but not this diff's:
   [step 8](../SKILL.md#8-close-out-the-findings-the-run-turned-up).
 
+The round decides what an **accepted** finding costs this PR, never how it is
+classified ([the rounds](pr-ci-merge.md#waiting-for-the-pr-review)): in round 1 every
+accepted finding is fixed here; in rounds 2 and 3 an accepted `P0`–`P2` (or unbadged
+`P?`) is fixed here and an accepted `P3` goes to step 8 as a follow-up, like an
+out-of-scope one. Past the cap, in round 4 or later, only `P0`, `P1` and `P?` are
+triaged, and an accepted one holds the PR (`--field reason=review-cap`) instead of
+starting a fourth fix round; the rest are named at step 10, untriaged.
+
 A finding that needs an owner's decision, or a correctness finding this session cannot
 settle either way, holds the PR: record `--event blocked --field reason=review-finding`
 and put it in the step 10 report. Green CI cannot dismiss it. Never reply to or resolve
 a review thread, and never ask the reviewer to look again (`@codex review`): neither is
-in the sign-off, and a push does not start a second review.
+in the sign-off. A fix push may start another review on its own; step 5 waits for it.
 
 ## Fixing the accepted findings
 
 Apply them **in the branch's own `<workdir>`** — never the main checkout in parallel
 mode, which sits on the default branch: inline, or by handing
-[agent-review-fix.md](agent-review-fix.md) to **`executor`** with the accepted findings
-as its list. A review with zero accepted findings gets no fix run. **Keep the
+[agent-review-fix.md](agent-review-fix.md) to **`executor`** — **`worker`** when every
+accepted finding names its `path:line` and its fix — with the accepted findings as its
+list. A review with zero accepted findings gets no fix run. **Keep the
 `review_watch.py` numbers** — the fix brief returns `APPLIED`/`REJECTED` against those
 same `F<n>`, and without them the returned lines cannot be matched back to what was
 sent.
@@ -122,10 +137,14 @@ changed is the safeguard**: `git -C <workdir> diff <pre-fix-head>..HEAD`, not th
 branch. Revert what it got wrong. Read every `REJECTED` line — a rejection that reads like
 a real defect goes back with the reason addressed; real-but-out-of-scope goes to step 8.
 Run the verification command **in `<workdir>`**, then push. The push is a new head: the
-earlier CI verdict says nothing about it, so step 6 watches again, and no second review
-is waited for — the corrections are covered by local verification and current-head CI.
+earlier CI verdict says nothing about it, so step 6 watches again, and alongside it
+`review_watch.py <pr> --after-push <sha>` waits the start grace for a review of it
+([how](pr-ci-merge.md#waiting-for-the-pr-review)): the next round, or `NO_NEW_REVIEW`.
+After round 3's fixes nothing more is waited for — local verification and current-head
+CI cover them.
 
-Record, per PR, once the triage is done:
-`--event review --field issue=<n> --field pr=<pr> --field verdict=<CLEAN|FINDINGS|NO_REVIEW|ERROR> --field reviewed=<sha> --field findings=<n> --field accepted=<n> --field rejected=<n> --field out-of-scope=<n> --field fixed-in=<sha>`
-— `fixed-in` names the commit that addresses the accepted findings, so the report can say
-which commit answered which review.
+Record each round once its triage is done, and a `NO_NEW_REVIEW` when it comes:
+`--event review --field issue=<n> --field pr=<pr> --field round=<k> --field verdict=<CLEAN|FINDINGS|NO_NEW_REVIEW|NO_REVIEW|ERROR> --field reviewed=<sha> --field findings=<n> --field accepted=<n> --field rejected=<n> --field out-of-scope=<n> --field followup=<n> --field fixed-in=<sha>`
+— `findings` counts that round's (`round_findings:`), `followup` the accepted ones sent to
+step 8 by their badge, and `fixed-in` names the commit that addresses the fixed ones, so
+the report can say which commit answered which round.
