@@ -185,15 +185,13 @@ def _checks(path: Path) -> list[Check] | None:
         if refs:
             names = []
             for row in _matrix_rows(job, path):
-                for key in refs:
-                    if key not in row:
-                        msg = f"{path.name}: matrix.{key} is not declared in the job's matrix"
-                        raise UnreadableYamlError(msg)
                 expanded = name
                 for match in _MATRIX_REF.finditer(name):
                     expanded = expanded.replace(
                         match[0],
-                        scalar(row[match["key"]], f"{path}: matrix.{match['key']}"),
+                        scalar(
+                            row.get(match["key"], ""), f"{path}: matrix.{match['key']}"
+                        ),
                     )
                 names.append(expanded)
             if not names:

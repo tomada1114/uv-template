@@ -274,3 +274,26 @@ jobs:
         "A (macos-1-green)",
         "A (windows-3-blue)",
     }
+
+
+def test_every_pr_checks_partial_include_missing_name_property_is_empty(
+    tmp_path: Path,
+) -> None:
+    root = _workflow(
+        tmp_path,
+        """on: pull_request
+jobs:
+  build:
+    name: Build (${{ matrix.os }}-${{ matrix.version }})
+    strategy:
+      matrix:
+        os: [linux]
+        version: [1, 2]
+        include: [{os: windows}]
+""",
+    )
+    assert set(every_pr_checks(root)) == {
+        "Build (linux-1)",
+        "Build (linux-2)",
+        "Build (windows-)",
+    }
