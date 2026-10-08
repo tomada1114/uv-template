@@ -102,7 +102,7 @@ being run at all.
 | `settings.py` or `composition.py` | `uv run --locked pytest tests/test_settings.py tests/test_composition.py` |
 | A repository adapter | `uv run --locked pytest tests/adapters/test_repository_contract.py` |
 | One test | `uv run --locked pytest tests/test_<module>.py::test_<name>` |
-| Any Python file's lint or types | `uv run --locked ruff check <file>`, then `uv run --locked mypy src scripts tests` |
+| Any Python file's lint or types | `uv run --locked ruff check <file>`, then `uv run --locked mypy` |
 | A script under `scripts/` | `uv run --locked pytest tests/test_<script>.py` |
 | A skill under `.agents/skills/` | `just agents-sync && just agents-check && just check-harness && just test-skills` |
 | Dependencies in `pyproject.toml` | `uv lock`, `uv sync --all-groups --locked`, then `just verify` |

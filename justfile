@@ -67,7 +67,7 @@ fmt:
 lint:
     uv run --locked ruff check .
     uv run --locked ruff format --check .
-    uv run --locked mypy src scripts tests
+    uv run --locked mypy
 
 # Run tests in parallel with coverage
 test:

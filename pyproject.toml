@@ -260,6 +260,9 @@ indent-style = "space"
 # --------------------------------------------------------------------------- #
 
 [tool.mypy]
+# One target list for local verification, CI and the non-shell pre-commit entry.
+# Authored production modules only; skill unittest fixtures keep their own runner.
+files = ["src", "scripts", "tests", ".agents/skills/*/scripts/*.py"]
 python_version = "3.14"
 strict = true
 warn_return_any = true

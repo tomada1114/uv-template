@@ -674,11 +674,11 @@ def test_ci_recipe_findings_removed_local_command_is_rejected(tmp_path: Path) ->
     (tmp_path / JUSTFILE).write_text(
         (REPO_ROOT / JUSTFILE)
         .read_text(encoding="utf-8")
-        .replace("    uv run --locked mypy src scripts tests\n", ""),
+        .replace("    uv run --locked mypy\n", ""),
         encoding="utf-8",
     )
     assert (
-        "Lint & Type Check: extra CI command: uv run --locked mypy src scripts tests"
+        "Lint & Type Check: extra CI command: uv run --locked mypy"
         in ci_recipe_findings(tmp_path)
     )
 
