@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from tests.harness._workflows import jobs, read_workflow, steps, workflow_files
-from tests.harness._yaml import block_text, mapping, scalar
+from tests.harness._yaml import as_mapping, block_text, scalar
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -67,11 +67,11 @@ def ci_python_versions(root: Path) -> dict[str, str]:
             for index, step in enumerate(steps(job, path)):
                 site = f"{path.name}/{job_id}/{index}"
                 scopes.append((f"{site}/env", step))
-                uses = scalar(step.get("uses", ("", []))[0])
+                uses = scalar(step.get("uses", ""))
                 if uses.startswith(("astral-sh/setup-uv@", "actions/setup-python@")):
-                    inputs = mapping(step.get("with", ("", []))[1], path)
+                    inputs = as_mapping(step.get("with", {}), f"{path}: steps.with")
                     if "python-version" in inputs:
-                        versions[site] = scalar(inputs["python-version"][0])
+                        versions[site] = scalar(inputs["python-version"])
                 if "run" in step:
                     for line_index, line in enumerate(
                         block_text(step["run"]).splitlines()
@@ -85,9 +85,9 @@ def ci_python_versions(root: Path) -> dict[str, str]:
                             if match:
                                 versions[f"{site}/run/{line_index}"] = match[2]
         for site, scope in scopes:
-            env = mapping(scope.get("env", ("", []))[1], path)
+            env = as_mapping(scope.get("env", {}), f"{path}: env")
             if "UV_PYTHON" in env:
-                versions[site] = scalar(env["UV_PYTHON"][0])
+                versions[site] = scalar(env["UV_PYTHON"])
     return versions
 
 

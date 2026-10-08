@@ -33,12 +33,12 @@ import pytest
 from tests.harness._workflows import jobs, read_workflow, steps
 from tests.harness._yaml import (
     UnreadableYamlError,
+    as_mapping,
+    as_sequence,
     block_text,
-    content_lines,
-    mapping,
+    load_yaml,
     scalar,
     scalar_list,
-    sequence,
 )
 
 if TYPE_CHECKING:
@@ -109,12 +109,8 @@ def _issue_form_labels(root: Path) -> list[tuple[str, str]]:
     applied: list[tuple[str, str]] = []
     templates = (root / ISSUE_FORMS).glob("*")
     for path in sorted(p for p in templates if p.suffix in {".yml", ".yaml", ".md"}):
-        text = (
-            _front_matter(path)
-            if path.suffix == ".md"
-            else path.read_text(encoding="utf-8")
-        )
-        top = mapping(content_lines(text), path)
+        text = _front_matter(path) if path.suffix == ".md" else None
+        top = as_mapping(load_yaml(path, text=text), str(path))
         if "labels" in top:
             relative = path.relative_to(root).as_posix()
             applied.extend(
@@ -127,10 +123,12 @@ def _dependabot_labels(root: Path) -> list[tuple[str, str]]:
     path = root / DEPENDABOT
     if not path.is_file():
         return []
-    top = mapping(content_lines(path.read_text(encoding="utf-8")), path)
+    top = as_mapping(load_yaml(path), str(path))
     applied: list[tuple[str, str]] = []
-    for item in sequence(top.get("updates", ("", []))[1], path):
-        update = mapping(item, path)
+    for index, item in enumerate(
+        as_sequence(top.get("updates", []), f"{path}: updates")
+    ):
+        update = as_mapping(item, f"{path}: updates[{index}]")
         labels = (
             scalar_list(update["labels"], path)
             if "labels" in update
@@ -144,14 +142,17 @@ def _dependabot_implicit_label_findings(root: Path) -> list[str]:
     path = root / DEPENDABOT
     if not path.is_file():
         return []
-    top = mapping(content_lines(path.read_text(encoding="utf-8")), path)
+    top = as_mapping(load_yaml(path), str(path))
     updates = [
-        mapping(item, path) for item in sequence(top.get("updates", ("", []))[1], path)
+        as_mapping(item, f"{path}: updates[{index}]")
+        for index, item in enumerate(
+            as_sequence(top.get("updates", []), f"{path}: updates")
+        )
     ]
     if len(updates) <= 1:  # one ecosystem gets no ecosystem label added
         return []
     return [
-        f"{DEPENDABOT}: the {scalar(update.get('package-ecosystem', ('?', []))[0])!r} "
+        f"{DEPENDABOT}: the {scalar(update.get('package-ecosystem', '?'))!r} "
         "update sets no `labels:`; with more than one ecosystem Dependabot adds an "
         "undeclared ecosystem label"
         for update in updates
@@ -245,7 +246,7 @@ def test_label_findings_declared_labels_pass(make_root: MakeRoot) -> None:
             PR_LABEL: PR_LABEL_TEXT.format(extra="deps) label=dependencies ;;"),
             f"{ISSUE_FORMS}/bug.yml": 'name: Bug\nlabels: ["bug", "priority: P2"]\n',
             f"{ISSUE_FORMS}/config.yml": "blank_issues_enabled: false\n",
-            f"{ISSUE_FORMS}/task.md": "---\nname: Task\nlabels: BUG, Priority: P2\n---\nBody\n",
+            f"{ISSUE_FORMS}/task.md": "---\nname: Task\nlabels: 'BUG, Priority: P2'\n---\nBody\n",
             f"{ISSUE_FORMS}/blank.md": "---\nname: Blank\nlabels: ''\n---\n",
             DEPENDABOT: "version: 2\nupdates:\n  - package-ecosystem: pip\n",
         }
@@ -387,18 +388,18 @@ def test_label_findings_without_labels_file_fails(tmp_path: Path) -> None:
     [
         pytest.param(
             {DEPENDABOT: "version: 2\nupdates:\n  package-ecosystem: pip\n"},
-            r"dependabot\.yml: expected a list item",
+            r"dependabot\.yml: updates: expected sequence",
             id="dependabot-updates-not-a-list",
         ),
         pytest.param(
-            {f"{ISSUE_FORMS}/f.yml": "labels:\n  - bug\n    triage\n"},
-            r"f\.yml: expected a list of one-line strings",
-            id="issue-form-multi-line-item",
+            {f"{ISSUE_FORMS}/f.yml": "labels:\n  - {bug: triage}\n"},
+            r"f\.yml: list\[0\]: expected string",
+            id="issue-form-mapping-item",
         ),
         pytest.param(
-            {f"{ISSUE_FORMS}/f.yml": "labels: [bug,\n  triage]\n"},
-            r"f\.yml: a value and a block under one key",
-            id="issue-form-multi-line-flow-list",
+            {f"{ISSUE_FORMS}/f.yml": "labels: [bug,\n  triage\n"},
+            r"f\.yml: while parsing",
+            id="issue-form-unclosed-flow-list",
         ),
         pytest.param(
             {f"{ISSUE_FORMS}/task.md": "name: Task\nlabels: triage\n"},
@@ -439,10 +440,10 @@ def pr_type_findings(root: Path) -> list[str]:
     accepted: set[str] = set()
     for job in jobs(read_workflow(title), title).values():
         for step in steps(job, title):
-            if scalar(step.get("uses", ("", []))[0]).startswith(
+            if scalar(step.get("uses", "")).startswith(
                 "amannn/action-semantic-pull-request@"
             ):
-                inputs = mapping(step.get("with", ("", []))[1], title)
+                inputs = as_mapping(step.get("with", {}), f"{title}: steps.with")
                 assert "types" in inputs, "PR title gate must declare types explicitly"
                 accepted.update(block_text(inputs["types"]).split())
     assert accepted, "PR title gate has no accepted types"
@@ -476,3 +477,13 @@ def test_pr_type_findings_extra_label_arm_is_rejected(make_root: MakeRoot) -> No
     assert pr_type_findings(root) == [
         f"{PR_LABEL}: type 'unknown' is rejected by the title gate"
     ]
+
+
+@pytest.mark.parametrize(
+    "labels", ["[bug,\n  dependencies]", "\n  - bug\n  - dependencies"]
+)
+def test_label_findings_multiline_sequences_apply_labels(
+    make_root: MakeRoot, labels: str
+) -> None:
+    root = make_root({f"{ISSUE_FORMS}/f.yml": f"labels: {labels}\n"})
+    assert label_findings(root) == []

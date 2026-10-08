@@ -20,7 +20,7 @@ Per workflow under ``.github/workflows/``:
   idiom ``${{ github.event_name == 'pull_request' && github.ref || github.sha }}``
   (``head_ref``/``run_id``/``run_number`` accepted in their places), or with no
   ``github.ref``/``head_ref``/``event_name`` and a ``github.sha``, ``run_id``, or
-  ``run_number``. An inline ``concurrency: {…}`` mapping is not read and fails.
+  ``run_number``. Inline mappings follow the same policy as block mappings.
 
 Per local action under ``.github/actions/`` (``**/action.yml`` or
 ``action.yaml``), when its ``runs.using`` is ``composite``, every step meets the
@@ -49,12 +49,12 @@ from tests.harness._workflows import (
     workflow_files,
 )
 from tests.harness._yaml import (
-    Entry,
     Mapping,
     UnreadableYamlError,
-    mapping,
+    as_mapping,
+    as_str,
     scalar,
-    split_comment,
+    source_comment,
 )
 
 if TYPE_CHECKING:
@@ -84,9 +84,9 @@ _PR_REF_OR_RUN = re.compile(
 _REF_OR_EVENT = re.compile(r"github\.(?:ref|head_ref|event_name)\b")
 
 
-def _pin_problems(entry: Entry, where: str) -> list[str]:
-    text, comment = split_comment(entry[0])
-    ref = scalar(text)
+def _pin_problems(entry: object, where: str) -> list[str]:
+    ref = as_str(entry, f"{where}.uses")
+    comment = source_comment(entry)
     if ref.startswith("./"):
         return []
     if not _PINNED.match(ref):
@@ -96,14 +96,14 @@ def _pin_problems(entry: Entry, where: str) -> list[str]:
     return []
 
 
-def _permissions(entry: Entry | None, path: Path) -> dict[str, str] | None:
+def _permissions(entry: object, path: Path) -> dict[str, str] | None:
     """Return the top-level permissions as a dict, or None for a shorthand."""
-    if entry is None:
+    if entry is None or isinstance(entry, str):
         return None
-    value, block = entry
-    if value:
-        return {} if scalar(value) == "{}" and not block else None
-    return {key: scalar(scope) for key, (scope, _) in mapping(block, path).items()}
+    return {
+        key: scalar(scope, f"{path}: permissions.{key}")
+        for key, scope in as_mapping(entry, f"{path}: permissions").items()
+    }
 
 
 def _is_per_push_run(group: str) -> bool:
@@ -114,15 +114,11 @@ def _is_per_push_run(group: str) -> bool:
     return rest != group or any(context in rest for context in PER_RUN_CONTEXTS)
 
 
-def _concurrency_problems(entry: Entry, where: str, path: Path) -> list[str]:
-    value, block = entry
-    if value.startswith(("{", "[")):
-        msg = f"{path.name}: cannot read an inline `concurrency: {value}`"
-        raise UnreadableYamlError(msg)
-    if value:
-        group, cancel = scalar(value), None
+def _concurrency_problems(entry: object, where: str, path: Path) -> list[str]:
+    if isinstance(entry, str):
+        group, cancel = entry, None
     else:
-        settings = mapping(block, path)
+        settings = as_mapping(entry, f"{path}: concurrency")
         group = entry_value(settings.get("group")) or ""
         cancel = entry_value(settings.get("cancel-in-progress"))
     problems: list[str] = []
@@ -138,7 +134,7 @@ def _concurrency_problems(entry: Entry, where: str, path: Path) -> list[str]:
     return problems
 
 
-def _continue_on_error(entry: Entry | None, where: str) -> list[str]:
+def _continue_on_error(entry: object, where: str) -> list[str]:
     value = entry_value(entry)
     if value is None or value == "false":
         return []
@@ -146,11 +142,8 @@ def _continue_on_error(entry: Entry | None, where: str) -> list[str]:
 
 
 def _keeps_credentials(step: Mapping, path: Path) -> bool:
-    value, block = step.get("with", ("", []))
-    if value:
-        msg = f"{path.name}: cannot read a checkout step's `with: {value}`"
-        raise UnreadableYamlError(msg)
-    persist = entry_value(mapping(block, path).get("persist-credentials"))
+    settings = as_mapping(step.get("with", {}), f"{path}: steps.with")
+    persist = entry_value(settings.get("persist-credentials"))
     return persist != "false"
 
 
@@ -159,7 +152,7 @@ def _step_problems(step: Mapping, where: str, path: Path) -> list[str]:
     if "uses" not in step:
         return problems
     problems.extend(_pin_problems(step["uses"], where))
-    is_checkout = scalar(step["uses"][0]).split("@")[0] == CHECKOUT
+    is_checkout = scalar(step["uses"]).split("@")[0] == CHECKOUT
     if is_checkout and _keeps_credentials(step, path):
         problems.append(f"{where}: actions/checkout without persist-credentials: false")
     return problems
@@ -233,7 +226,7 @@ def action_problems(path: Path, root: Path) -> list[str]:
     try:
         return _composite_problems(path, relative)
     except UnreadableYamlError as exc:
-        detail = str(exc).removeprefix(f"{path.name}: ")
+        detail = str(exc).removeprefix(f"{path}: ").removeprefix(f"{path.name}: ")
         msg = f"{relative}: {detail}"
         raise UnreadableYamlError(msg) from exc
 
@@ -243,11 +236,7 @@ def _composite_problems(path: Path, relative: str) -> list[str]:
     if runs is None:
         msg = f"{path.name}: no `runs:`"
         raise UnreadableYamlError(msg)
-    value, block = runs
-    if value:
-        msg = f"{path.name}: cannot read an inline `runs: {value}`"
-        raise UnreadableYamlError(msg)
-    settings = mapping(block, path)
+    settings = as_mapping(runs, f"{path}: runs")
     using = entry_value(settings.get("using"))
     if using is None:
         msg = f"{path.name}: no `runs.using`"
@@ -333,6 +322,24 @@ def make_workflow(tmp_path: Path) -> MakeWorkflow:
 
 def test_hygiene_findings_clean_workflow_passes(make_workflow: MakeWorkflow) -> None:
     assert hygiene_findings(make_workflow(CLEAN)) == []
+
+
+@pytest.mark.parametrize("local_comment", ["", " # v7.0.1"])
+def test_hygiene_findings_alias_requires_local_pin_comment(
+    make_workflow: MakeWorkflow, local_comment: str
+) -> None:
+    text = CLEAN.replace(
+        "name: W", f"name: &pin actions/checkout@{SHA} # v7.0.1"
+    ).replace(f"uses: actions/checkout@{SHA} # v7.0.1", f"uses: *pin{local_comment}")
+
+    expected = (
+        []
+        if local_comment
+        else [
+            f"{JOB} step 1: `uses: actions/checkout@{SHA}` has no `# v<version>` comment"
+        ]
+    )
+    assert hygiene_findings(make_workflow(text)) == expected
 
 
 def test_hygiene_findings_without_workflows_passes(tmp_path: Path) -> None:
@@ -492,13 +499,16 @@ def test_hygiene_findings_reusable_workflow_call_needs_pin_not_timeout(
     ]
 
 
-def test_hygiene_findings_unreadable_steps_fail_closed(
+def test_hygiene_findings_indentless_steps_pass(
     make_workflow: MakeWorkflow,
 ) -> None:
-    text = CLEAN.replace("    steps:\n      - uses", "    steps:\n    - uses")
+    text = (
+        CLEAN.replace("      -", "    -")
+        .replace("        ", "      ")
+        .replace("          ", "        ")
+    )
 
-    with pytest.raises(UnreadableYamlError, match=r"w\.yml: cannot read"):
-        hygiene_findings(make_workflow(text))
+    assert hygiene_findings(make_workflow(text)) == []
 
 
 @pytest.mark.parametrize(
@@ -525,19 +535,20 @@ def test_hygiene_findings_per_run_push_group_passes(
     assert hygiene_findings(make_workflow(text)) == []
 
 
-def test_hygiene_findings_inline_concurrency_mapping_fails_closed(
+def test_hygiene_findings_inline_concurrency_enforces_cancel_policy(
     make_workflow: MakeWorkflow,
 ) -> None:
     start = CLEAN.index("concurrency:\n")
     end = CLEAN.index("jobs:\n")
     text = (
         CLEAN[:start]
-        + "concurrency: {group: x-${{ github.sha }}, cancel-in-progress: true}\n\n"
+        + 'concurrency: {group: "x-${{ github.sha }}", cancel-in-progress: true}\n\n'
         + CLEAN[end:]
     )
 
-    with pytest.raises(UnreadableYamlError, match=r"inline `concurrency: \{group"):
-        hygiene_findings(make_workflow(text))
+    assert hygiene_findings(make_workflow(text)) == [
+        f"{W}: `cancel-in-progress: true` can cancel a push run on main"
+    ]
 
 
 # --- composite actions ---
@@ -655,25 +666,25 @@ def test_hygiene_findings_action_yaml_extension_is_read(tmp_path: Path) -> None:
     [
         pytest.param("name: N\ndescription: D\n", r"no `runs:`", id="no-runs"),
         pytest.param(
-            "name: N\nruns: {using: composite}\n",
-            r"cannot read an inline `runs: ",
-            id="inline-runs",
+            "name: N\nruns: [composite]\n",
+            r".*runs: expected mapping",
+            id="runs-sequence",
         ),
         pytest.param(
             "name: N\nruns:\n  steps: []\n", r"no `runs.using`", id="no-using"
         ),
         pytest.param(
             COMPOSITE.replace("    - uses: actions", "  - uses: actions"),
-            r"cannot read '  - uses: actions",
+            r".*while parsing",
             id="bad-step-indent",
         ),
         pytest.param(
             COMPOSITE.replace(
                 "      with:\n        persist-credentials: false\n",
-                "      with: {persist-credentials: false}\n",
+                "      with: [false]\n",
             ),
-            r"cannot read a checkout step's `with: ",
-            id="inline-with",
+            r".*steps.with: expected mapping",
+            id="with-sequence",
         ),
     ],
 )
@@ -683,3 +694,14 @@ def test_hygiene_findings_unreadable_action_fails_closed(
     # The repository-relative path, not a bare `action.yml`, names the file.
     with pytest.raises(UnreadableYamlError, match=rf"^{re.escape(A)}: {message}"):
         hygiene_findings(make_action(text))
+
+
+def test_hygiene_findings_inline_action_mappings_pass(
+    make_action: MakeWorkflow,
+) -> None:
+    text = COMPOSITE.replace(
+        "      with:\n        persist-credentials: false\n",
+        "      with: {persist-credentials: false}\n",
+    )
+    assert hygiene_findings(make_action(text)) == []
+    assert hygiene_findings(make_action("runs: {using: composite, steps: []}\n")) == []

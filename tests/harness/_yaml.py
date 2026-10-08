@@ -1,162 +1,213 @@
-"""A fail-closed block scanner for the YAML layouts this repository commits.
+"""One safe YAML loader with explicit, fail-closed shape narrowing.
 
-No YAML library is a declared dependency, so the harness reads workflows, issue
-forms, and dependabot.yml with this scanner. It reads block mappings, block
-sequences, one-line flow lists, and plain or quoted scalars; every line deeper
-than a key is that key's block, so a block scalar (``run: |``) is kept as raw
-lines and never parsed. Any layout it cannot read raises
-`UnreadableYamlError`, so a check never passes on a file it did not understand.
+Actions event words remain strings. Scalar source metadata is retained only
+for pin-version comments and shell block styles that the policy checks need.
 """
 
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
+
+# PyYAML publishes no stubs; only this file imports it and narrows its output.
+import yaml  # type: ignore[import-untyped]
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-# One entry of a block mapping: its inline value (comment included) and the
-# deeper lines below it.
-type Entry = tuple[str, list[str]]
-type Mapping = dict[str, Entry]
+    # Node annotations stay inside the same untyped-library boundary.
+    from yaml.nodes import MappingNode, Node, ScalarNode  # type: ignore[import-untyped]
 
-_KEY = re.compile(
-    r"^(?P<indent> *)(?P<key>[\"']?[A-Za-z0-9_-]+[\"']?):(?:\s+(?P<value>.*?))?\s*$"
-)
-_QUOTES = {'"', "'"}
+type Mapping = dict[str, object]
 
 
 class UnreadableYamlError(AssertionError):
-    """A file uses a YAML layout the scanner does not understand."""
+    """A YAML document or a required value has an unreadable shape."""
 
 
-def _indent(line: str) -> int:
-    return len(line) - len(line.lstrip())
+class _Scalar(str):
+    comment: str | None
+    style: str | None
 
 
-def content_lines(text: str) -> list[str]:
-    """Return the lines that carry content: no blank or comment-only line."""
-    return [
-        line.rstrip()
-        for line in text.splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
+# SafeLoader has no stubs; this boundary validates every consumed result.
+class _Loader(yaml.SafeLoader):  # type: ignore[misc]  # PyYAML is untyped
+    def __init__(self, text: str) -> None:
+        super().__init__(text)
+        self.source = text
+
+    def compose_node(self, parent: object, index: object) -> Node:
+        # SafeLoader normally reuses an anchor's node for every alias. Keep
+        # scalar values equal but attach metadata to this source occurrence.
+        alias = self.peek_event() if self.check_event(yaml.events.AliasEvent) else None
+        node: Node = super().compose_node(parent, index)
+        if alias is not None and isinstance(node, yaml.nodes.ScalarNode):
+            return yaml.nodes.ScalarNode(
+                node.tag, node.value, alias.start_mark, alias.end_mark, style=node.style
+            )
+        return node
+
+
+_Loader.yaml_implicit_resolvers = {
+    key: [
+        (tag, pattern)
+        for tag, pattern in resolvers
+        if tag
+        not in {
+            "tag:yaml.org,2002:bool",
+            "tag:yaml.org,2002:int",
+            "tag:yaml.org,2002:float",
+            "tag:yaml.org,2002:timestamp",
+        }
     ]
+    for key, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+_Loader.add_implicit_resolver(
+    "tag:yaml.org,2002:bool",
+    re.compile(r"^(?:true|false)$", re.IGNORECASE),
+    list("tTfF"),
+)
+# Actions' YamlObjectReader uses YAML 1.2 core scalar resolution. Dates and
+# sexagesimal values stay strings; a leading zero is decimal, not YAML 1.1 octal.
+# https://yaml.org/spec/1.2.2/#1032-tag-resolution
+_Loader.add_implicit_resolver(
+    "tag:yaml.org,2002:int",
+    re.compile(r"^(?:[-+]?[0-9]+|0o[0-7]+|0x[0-9a-fA-F]+)$"),
+    list("-+0123456789"),
+)
+_Loader.add_implicit_resolver(
+    "tag:yaml.org,2002:float",
+    re.compile(
+        r"^(?:[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)(?:[eE][-+]?[0-9]+)?"
+        r"|[-+]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN))$"
+    ),
+    list("-+0123456789."),
+)
 
 
-def children(lines: list[str], start: int, path: Path) -> list[str]:
-    """Return the block of lines deeper than ``lines[start]``."""
-    parent = _indent(lines[start])
-    block: list[str] = []
-    for line in lines[start + 1 :]:
-        if _indent(line) <= parent:
-            break
-        block.append(line)
-    if block and any(_indent(line) < _indent(block[0]) for line in block):
-        msg = f"{path.name}: inconsistent indentation under {lines[start]!r}"
-        raise UnreadableYamlError(msg)
-    return block
+def _integer(loader: _Loader, node: ScalarNode) -> int:
+    value: str = loader.construct_scalar(node)
+    # SafeLoader's constructor still assumes YAML 1.1 even with new resolvers.
+    base = 8 if value.startswith("0o") else 16 if value.startswith("0x") else 10
+    return int(value, base)
 
 
-def mapping(lines: list[str], path: Path) -> Mapping:
-    """Split a block into ``key -> (inline value, child lines)`` at its own indent."""
-    if not lines:
-        return {}
-    indent = _indent(lines[0])
-    result: Mapping = {}
-    for index, line in enumerate(lines):
-        if _indent(line) != indent:
-            continue
-        match = _KEY.match(line)
-        if match is None:
-            msg = f"{path.name}: cannot read {line!r}"
-            raise UnreadableYamlError(msg)
-        key = match["key"].strip("\"'")
-        if key in result:
-            msg = f"{path.name}: duplicate key {key!r} in {line!r}"
-            raise UnreadableYamlError(msg)
-        result[key] = (
-            match["value"] or "",
-            children(lines, index, path),
+def _string(loader: _Loader, node: ScalarNode) -> _Scalar:
+    value = _Scalar(loader.construct_scalar(node))
+    tail = loader.source[node.end_mark.index :].split("\n", 1)[0].strip()
+    value.comment = tail if tail.startswith("#") else None
+    value.style = node.style
+    return value
+
+
+def _mapping(loader: _Loader, node: MappingNode) -> dict[object, object]:
+    # Check explicit duplicates before SafeLoader expands merge keys. YAML merges
+    # intentionally let an explicit field override the inherited value.
+    seen: set[object] = set()
+    for key_node, _ in node.value:
+        key = (
+            "<<"
+            if key_node.tag == "tag:yaml.org,2002:merge"
+            else loader.construct_object(key_node, deep=True)
         )
+        try:
+            if key in seen:
+                raise yaml.constructor.ConstructorError(
+                    None,
+                    None,
+                    f"duplicate key {key!r}",
+                    key_node.start_mark,
+                )
+            seen.add(key)
+        except TypeError as exc:
+            raise yaml.constructor.ConstructorError(
+                None,
+                None,
+                "unhashable mapping key",
+                key_node.start_mark,
+            ) from exc
+    loader.flatten_mapping(node)
+    return {
+        loader.construct_object(key, deep=True): loader.construct_object(
+            value, deep=True
+        )
+        for key, value in node.value
+    }
+
+
+_Loader.add_constructor("tag:yaml.org,2002:str", _string)
+_Loader.add_constructor("tag:yaml.org,2002:map", _mapping)
+_Loader.add_constructor("tag:yaml.org,2002:int", _integer)
+
+
+def load_yaml(path: Path, *, text: str | None = None) -> object:
+    """Read safely; optional text is an issue template's YAML front matter."""
+    try:
+        loader = _Loader(path.read_text(encoding="utf-8") if text is None else text)
+        try:
+            result: object = loader.get_single_data()
+        finally:
+            loader.dispose()
+    except (yaml.YAMLError, OSError, UnicodeError) as exc:
+        msg = f"{path}: {exc}"
+        raise UnreadableYamlError(msg) from exc
     return result
 
 
-def sequence(lines: list[str], path: Path) -> list[list[str]]:
-    """Split a block sequence into each item's lines, re-indented as a block.
-
-    ``- uses: x`` followed by ``  with:`` becomes ``uses: x`` and ``with:`` at
-    one indent, so `mapping` reads the item.
-    """
-    if not lines:
-        return []
-    indent = _indent(lines[0])
-    items: list[list[str]] = []
-    for line in lines:
-        if _indent(line) > indent and items:
-            items[-1].append(line)
-            continue
-        body = line[indent:]
-        if body != "-" and not body.startswith("- "):
-            msg = f"{path.name}: expected a list item, got {line!r}"
-            raise UnreadableYamlError(msg)
-        rest = body[1:].lstrip()
-        items.append([" " * (len(line) - len(rest)) + rest] if rest else [])
-    return items
-
-
-def split_comment(value: str) -> tuple[str, str | None]:
-    """Split an inline value into its text and its trailing ``# comment``."""
-    quote: str | None = None
-    for index, char in enumerate(value):
-        if quote is not None:
-            quote = None if char == quote else quote
-        elif char in _QUOTES and (index == 0 or value[index - 1].isspace()):
-            quote = char
-        elif char == "#" and (index == 0 or value[index - 1].isspace()):
-            return value[:index].rstrip(), value[index:]
-    return value.strip(), None
-
-
-def scalar(value: str) -> str:
-    """Return an inline value without its comment or its surrounding quotes."""
-    text, _ = split_comment(value)
-    if len(text) >= 2 and text[0] == text[-1] and text[0] in _QUOTES:
-        return text[1:-1]
-    return text
-
-
-def flow_list(value: str, path: Path) -> list[str] | None:
-    """Return the items of a one-line ``[a, b]`` list, or None for any other value."""
-    text, _ = split_comment(value)
-    if not text.startswith("["):
-        return None
-    if not text.endswith("]"):
-        msg = f"{path.name}: a flow list must close on its own line: {value!r}"
+def as_mapping(value: object, where: str) -> Mapping:
+    """Require a string-keyed mapping before a check consumes its fields."""
+    if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
+        msg = f"{where}: expected mapping with string keys"
         raise UnreadableYamlError(msg)
-    inner = text[1:-1].strip()
-    return [scalar(item.strip()) for item in inner.split(",")] if inner else []
+    return cast("dict[str, object]", value)
 
 
-def scalar_list(entry: Entry, path: Path) -> list[str]:
-    """Return the strings of a flow list, a block list, or a comma-separated string."""
-    value, block = entry
-    if block:
-        if value:
-            msg = f"{path.name}: a value and a block under one key: {value!r}"
-            raise UnreadableYamlError(msg)
-        items = sequence(block, path)
-        if any(len(item) != 1 for item in items):
-            msg = f"{path.name}: expected a list of one-line strings"
-            raise UnreadableYamlError(msg)
-        return [scalar(item[0].strip()) for item in items]
-    listed = flow_list(value, path)
-    if listed is not None:
-        return listed
-    return [part.strip() for part in scalar(value).split(",") if part.strip()]
+def as_sequence(value: object, where: str) -> list[object]:
+    """Require a sequence without silently treating a string as its items."""
+    if not isinstance(value, list):
+        msg = f"{where}: expected sequence"
+        raise UnreadableYamlError(msg)
+    return cast("list[object]", value)
 
 
-def block_text(entry: Entry) -> str:
-    """Return an entry's text: its block scalar's lines, or its inline value."""
-    value, block = entry
-    return "\n".join(block) if block else value
+def as_str(value: object, where: str) -> str:
+    """Reject implicit conversions where the schema requires a string."""
+    if not isinstance(value, str):
+        msg = f"{where}: expected string"
+        raise UnreadableYamlError(msg)
+    return value
+
+
+def scalar(value: object, where: str = "scalar") -> str:
+    """Render schema scalars, including boolean policy flags and numeric versions."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (str, int, float)):
+        return str(value)
+    msg = f"{where}: expected scalar"
+    raise UnreadableYamlError(msg)
+
+
+def scalar_list(value: object, path: Path, *, where: str = "list") -> list[str]:
+    """Read string-list fields; issue labels also permit comma-separated text."""
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(",") if part.strip()]
+    return [
+        as_str(item, f"{path}: {where}[{index}]")
+        for index, item in enumerate(as_sequence(value, f"{path}: {where}"))
+    ]
+
+
+def block_text(value: object) -> str:
+    """Read a parsed run/input string rather than reconstructing YAML lines."""
+    return as_str(value, "text")
+
+
+def source_comment(value: object) -> str | None:
+    """Return the original scalar's trailing comment, if any."""
+    return value.comment if isinstance(value, _Scalar) else None
+
+
+def scalar_style(value: object) -> str | None:
+    """Keep literal versus folded shell blocks explicit in the needs policy."""
+    return value.style if isinstance(value, _Scalar) else None

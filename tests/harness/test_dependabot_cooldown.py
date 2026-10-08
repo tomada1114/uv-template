@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from tests.harness._yaml import content_lines, mapping, scalar, sequence
+from tests.harness._yaml import as_mapping, as_sequence, load_yaml, scalar
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -35,12 +35,16 @@ def _uv_cooldown_days(root: Path) -> str | None:
     path = root / DEPENDABOT
     if not path.is_file():
         return None
-    top = mapping(content_lines(path.read_text(encoding="utf-8")), path)
-    for item in sequence(top.get("updates", ("", []))[1], path):
-        update = mapping(item, path)
-        if scalar(update.get("package-ecosystem", ("", []))[0]) == "uv":
-            cooldown = mapping(update.get("cooldown", ("", []))[1], path)
-            return scalar(cooldown.get("default-days", ("", []))[0])
+    top = as_mapping(load_yaml(path), str(path))
+    for index, item in enumerate(
+        as_sequence(top.get("updates", []), f"{path}: updates")
+    ):
+        update = as_mapping(item, f"{path}: updates[{index}]")
+        if scalar(update.get("package-ecosystem", "")) == "uv":
+            cooldown = as_mapping(
+                update.get("cooldown", {}), f"{path}: updates[{index}].cooldown"
+            )
+            return scalar(cooldown.get("default-days", ""))
     return None
 
 
