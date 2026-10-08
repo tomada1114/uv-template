@@ -44,7 +44,7 @@ Usage:
              call reports the latest settled round, waiting only while none
              has settled yet (the opening review).
   --start-grace  how long after the first --after-push call for that SHA no
-             new review starting means none is coming (default 180).
+             new review starting means none is coming (default 300).
   --timeout  how long this call waits, in bounded polls (default 900). Run it
              in the background where the host reports completion, or in
              foreground slices under the host's command timeout; each slice
@@ -810,7 +810,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace | None:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("pr", nargs="?")
     parser.add_argument("--after-push", default="")
-    parser.add_argument("--start-grace", default="180")
+    parser.add_argument("--start-grace", default="300")
     parser.add_argument("--timeout", default="900")
     parser.add_argument("--grace", default="900")
     parser.add_argument("--interval", default="30")

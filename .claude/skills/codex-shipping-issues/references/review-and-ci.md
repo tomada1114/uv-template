@@ -60,12 +60,12 @@ them only within explicit issue-write scope.
 
 ## Wait briefly for the next round
 
-After each correction push in rounds 1 and 2, observe the PR for up to **180 seconds**
+After each correction push in rounds 1 and 2, observe the PR for up to **300 seconds**
 for a trusted review that starts on the new head (observed: 12 seconds to about 2.5
 minutes after the push, and some pushes start none). If one starts, wait for it to complete and handle it as the
 next round. If none starts within that grace, the latest completed review stands:
-land on local verification and current-head CI. Observe this alongside CI; CI takes
-longer, so the grace normally adds no wait.
+land on local verification and current-head CI. Observe this alongside CI; CI takes about
+3 minutes, so the grace adds at most about 2 minutes.
 
 If a review appears after round 3's corrections, do not wait for its completion and
 do not start a fourth correction round. Triage any `P0` or `P1` finding it has
