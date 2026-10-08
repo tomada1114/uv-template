@@ -4,14 +4,14 @@ description: >
   Decides where a new test file goes under tests/ (tests/<layer>/test_<module>.py for
   src/my_app/<layer>/, tests/test_<module>.py for settings, composition, and scripts),
   where a fixture goes (tests/conftest.py, a layer conftest.py, or the test file), which
-  command runs it, how pytest-split's .test_durations shards it in CI, and the 80%
+  command runs it, how the suite runs in parallel in CI, and the 80%
   branch-coverage floor over src/. Use when adding a test file or a fixture, running one
-  test, a coverage run drops below the floor, or CI shards grow unbalanced.
+  test, a coverage run drops below the floor, or CI test jobs slow down.
 ---
 
 # Placing Tests
 
-**Owns:** where a test file and a fixture go, which command runs them, how CI shards
+**Owns:** where a test file and a fixture go, which command runs them, how CI runs
 them, and which coverage floor governs them. **Does not own:** how a test is written
 (`writing-tests`); the tests bundled inside a skill's `scripts/tests/`
 (`authoring-skills`); changing the floor, the pytest options, or the coverage config
@@ -69,21 +69,17 @@ warning. `filterwarnings = ["error"]` makes any warning, a `DeprecationWarning` 
 all, fail the test that raised it. `just test` adds `-n auto`, so the suite runs across processes. The map from a
 changed path to its narrowest check is AGENTS.md's "Validating a change".
 
-## CI shards
+## CI test runner
 
-CI's `test` job splits the suite into four shards with `pytest-split`, balanced by the
-recorded run times in `.test_durations`. A test missing from that file is still run: it
-is given the average recorded duration (observed in pytest-split 0.11.0's
-`algorithms.py`, 2026-10-06). So a new test file needs no entry; regenerate the file with
-`just test-durations` when the shards' run times drift apart, and commit it on its own.
+CI's `Coverage` job runs the same parallel suite and coverage command as `just test`.
+The recipe parity check in `tests/harness/test_just_recipes.py` rejects command drift.
 
 ## The coverage floor
 
 - **80%, with branch coverage, over `src/` only.** `[tool.coverage.run]` sets
   `branch = true` and `source = ["src"]`; `just test` enforces the floor with
-  `--cov-fail-under=80`, and CI's `Coverage` job with `coverage report --fail-under=80`
-  after combining the shards. Neither `scripts/` nor `tests/` is measured, so a script's
-  tests guard behavior but move no number.
+  `--cov-fail-under=80`, and CI's `Coverage` job with the same command. Neither `scripts/` nor
+  `tests/` is measured, so a script's tests guard behavior but move no number.
 - **A floor, not a ceiling.** It is never lowered (AGENTS.md's "Security and human
   approval"), and no line leaves the measurement to move the number — a
   `# pragma: no cover`, an `omit`, or an `exclude_lines` entry is a weakened gate, as

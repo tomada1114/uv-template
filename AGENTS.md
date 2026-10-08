@@ -52,7 +52,6 @@ just setup           # Alias for just install (first-time setup)
 just fmt             # Format code (ruff check --fix + ruff format)
 just lint            # Lint (ruff check) + type check (mypy)
 just test            # Run tests in parallel with coverage
-just test-durations  # Regenerate the pytest-split duration file used by CI shards
 just check           # Mutating dev check: fmt → lint → test
 just lock            # Update uv.lock after dependency changes
 just lock-check      # Fail when uv.lock is out of date, without changing it

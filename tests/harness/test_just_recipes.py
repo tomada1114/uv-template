@@ -50,7 +50,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from tests.harness._yaml import split_comment
+from tests.harness._workflows import jobs, read_workflow, steps
+from tests.harness._yaml import block_text, scalar, split_comment
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -580,3 +581,63 @@ def test_recipe_findings_undecodable_document_fails_closed(
 
 def test_recipe_findings_without_justfile_fails(tmp_path: Path) -> None:
     assert recipe_findings(tmp_path) == [f"{JUSTFILE} is missing"]
+
+
+def ci_recipe_findings(root: Path) -> list[str]:
+    """Keep required CI jobs' commands identical to local check recipes."""
+    path = root / ".github/workflows/ci.yml"
+    workflow_jobs = jobs(read_workflow(path), path)
+    commands_by_job = {
+        scalar(job.get("name", (job_id, []))[0]): {
+            line.strip()
+            for step in steps(job, path)
+            if "run" in step
+            for line in block_text(step["run"]).splitlines()
+        }
+        for job_id, job in workflow_jobs.items()
+    }
+    text = (root / JUSTFILE).read_text(encoding="utf-8")
+    findings: list[str] = []
+    for recipe, job_name in {
+        "agents-check": "Lint & Type Check",
+        "lint": "Lint & Type Check",
+        "test-skills": "Lint & Type Check",
+        "test": "Coverage",
+    }.items():
+        match = re.search(rf"^{recipe}:.*\n((?:[ \t]+[^\n]*\n)+)", text, re.MULTILINE)
+        assert match is not None, f"recipe {recipe} is missing"
+        commands = [
+            line.strip()
+            for line in match[1].splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        assert commands, f"recipe {recipe} has no commands"
+        findings.extend(
+            f"{job_name}: missing {recipe} command: {command}"
+            for command in commands
+            if command not in commands_by_job.get(job_name, set())
+        )
+    return findings
+
+
+def test_ci_recipe_findings_repository_commands_match() -> None:
+    assert ci_recipe_findings(REPO_ROOT) == []
+
+
+def test_ci_recipe_findings_drifted_command_is_rejected(tmp_path: Path) -> None:
+    workflow = REPO_ROOT / ".github/workflows/ci.yml"
+    destination = tmp_path / ".github/workflows/ci.yml"
+    destination.parent.mkdir(parents=True)
+    destination.write_text(
+        workflow.read_text(encoding="utf-8").replace(
+            "uv run --locked ruff check .", "uv run --locked ruff check src"
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / JUSTFILE).write_text(
+        (REPO_ROOT / JUSTFILE).read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    assert (
+        "Lint & Type Check: missing lint command: uv run --locked ruff check ."
+        in ci_recipe_findings(tmp_path)
+    )

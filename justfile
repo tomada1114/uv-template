@@ -73,10 +73,6 @@ lint:
 test:
     uv run --locked pytest -n auto --cov --cov-report=term-missing:skip-covered --cov-fail-under=80
 
-# Regenerate the pytest-split duration file used to balance CI shards
-test-durations:
-    uv run --locked pytest --store-durations
-
 # Never ends on its own; an agent starts `my-app serve --port <free>` instead and stops it.
 # Human-run: serve the HTTP API on http://127.0.0.1:8000, reloading on source changes
 dev:
@@ -107,20 +103,11 @@ verify: lock-check agents-check check-harness lint test-skills test
 check-harness:
     uv run --locked pytest tests/harness tests/test_product_section.py
 
-# Each suite is stdlib unittest so it needs no project dependency; the
-# .claude/skills mirror is the same bytes, so only the authored tree runs.
+# Each suite stays stdlib unittest; pytest-xdist runs suites across processes.
+# The .claude/skills mirror is the same bytes, so only the authored tree runs.
 # Run the test suites bundled with skills (.agents/skills/*/scripts/tests)
 test-skills:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    shopt -s nullglob
-    export PYTHONDONTWRITEBYTECODE=1
-    status=0
-    for dir in .agents/skills/*/scripts/tests; do
-      echo "== $dir"
-      uv run --locked python -m unittest discover -s "$dir" -t "$dir" -p 'test_*.py' || status=1
-    done
-    exit "$status"
+    PYTHONDONTWRITEBYTECODE=1 uv run --locked pytest -n auto -p no:cacheprovider .agents/skills/*/scripts/tests
 
 # Confirm the lockfile is current without changing it.
 lock-check:
