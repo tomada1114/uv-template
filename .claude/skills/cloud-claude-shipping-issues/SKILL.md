@@ -132,8 +132,9 @@ repair, at most 3 times. `PENDING` past 1800 s, or `EMPTY` 600 s after the push
 
 Right before the merge, read the review once more with `--timeout 0` and triage
 anything new; never merge past a posted, untriaged finding, and never wait on a later
-review that is not shown ([how](references/review-ci-merge.md#a-later-review)). Then
-squash-merge pinned to the head CI passed
+review that is not shown ([how](references/review-ci-merge.md#a-later-review)). Read
+the PR ([the call](references/rest-calls.md#reading-the-pr)): `closes: true` and the
+default branch as `base:`, or stop. Then squash-merge pinned to the head CI passed
 ([the call](references/rest-calls.md#the-merge)). 409 → steps 5 and 6 for the new head,
 never the old `sha` again; 405 → [the table](references/review-ci-merge.md#the-merge).
 Confirm the issue is `closed`; record `merged`.

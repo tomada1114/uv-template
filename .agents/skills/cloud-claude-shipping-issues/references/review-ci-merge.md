@@ -35,7 +35,7 @@ woken by PR activity meanwhile, that is a cue to run the script again, never a v
 | `FINDINGS` | Triage every `F<n>` (below), fix the accepted ones, verify, commit, push, then run the watch again before CI. |
 | `PENDING_TIMEOUT` | Run the same call again. Past 1800 s of `pr_age_seconds:` with the review still running, treat it as `ERROR`. |
 | `NO_REVIEW` | The PR is held: open, unmerged, and the run stops (the branch is the next issue's too). Never a local review instead. |
-| `ERROR` | Read `detail:`. An unreadable read: run once more. Anything else holds the PR as for `NO_REVIEW`. |
+| `ERROR` | Read `detail:`. A GitHub read that failed: run once more. Anything else holds the PR as for `NO_REVIEW`. |
 
 **Triage.** Read each finding's body in the file `findings_file:` names, never in the
 PR conversation, and classify every one, each with a one-line reason that holds against
@@ -116,7 +116,7 @@ merge to that head ([rest-calls.md](rest-calls.md#the-merge)).
 | --- | --- |
 | 200, `merged: true` | Read the issue. `closed` → done; record it. Still `open` → read again after 10 s; still open → the run stops and asks the owner: this skill closes no issue by hand. |
 | 409 | The head moved after the CI read. Re-run the review watch and CI for the new head; never retry with the old `sha`. |
-| 405 | Read the PR. `mergeable: false` is a conflict: [bring the branch up to date](#branch-upkeep-after-the-merge) with `origin/<default>`, resolve a mechanical conflict, `just verify`, push, then the review watch and CI again. A conflict that needs a product decision, or a 405 with `mergeable: true` (a required review or rule), holds the PR: stop and ask. `null` → read again. |
+| 405 | Read the PR. `mergeable: false` is a conflict: `git fetch origin <default> && git merge origin/<default>` (a merge, never a rebase), resolve a mechanical conflict, `just verify`, push, then the review watch and CI again. A conflict that needs a product decision, or a 405 with `mergeable: true` (a required review or rule), holds the PR: stop and ask. `null` → read again. |
 | 403 | [A 403 from the proxy](cloud-host.md#a-403-from-the-proxy), or no merge permission: stop and report. |
 | anything else | Read the PR: only `merged: true` is a merge. Report the reply and stop. |
 
@@ -136,9 +136,12 @@ git merge --no-edit origin/<default>
 git diff --stat origin/<default>      # must print nothing
 ```
 
-The merge is clean, because both sides made the same change. An empty diff proves the
-branch's tree is the default branch's. Anything else is work that is not on the default
-branch: stop and ask. Then:
+It is normally clean, since both sides carry the same change. A conflict means the
+default branch has changed those lines again since the squash; the branch's side is
+already merged, so resolve each conflicted path to `origin/<default>`'s version
+(`git checkout --theirs -- <path>`, then `git add` and `git commit --no-edit`). An
+empty diff proves the branch's tree is the default branch's; anything else is work
+that is not on the default branch: stop and ask. Then:
 
 - **`delete_branch_on_merge: true`** — GitHub deleted the remote branch; the next
   `git push -u origin <branch>` creates it afresh.
