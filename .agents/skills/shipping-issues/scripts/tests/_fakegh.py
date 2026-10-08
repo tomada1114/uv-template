@@ -160,13 +160,18 @@ class FakeGh:
             self.env["FAKE_GH_JQ_NEWLINE"] = "1"
         else:
             self.env.pop("FAKE_GH_JQ_NEWLINE", None)
-        # Two isolations every test wants, and neither is safe to leave to the
+        # Three isolations every test wants, and none is safe to leave to the
         # individual test to remember:
         #   * the run-state dir is redirected into this temp dir, so nothing a
         #     test does can write into the user's real ~/.local/state;
         #   * the digest cache is off, so a test's fake `gh` responses are never
         #     shadowed by data a previous test (or a real run) cached. A test
         #     that is specifically about the cache pops the key back out.
+        #   * CLAUDE_CODE_REMOTE is dropped, so a suite run inside a Claude Code
+        #     cloud session (where it is exported as "true") cannot make
+        #     preflight.sh stop at its host check. A test about the cloud host
+        #     sets it back explicitly.
+        self.env.pop("CLAUDE_CODE_REMOTE", None)
         self.env["AGENT_SKILL_STATE_DIR"] = str(Path(self._tmpdir.name) / "state")
         self.env["SHIPPING_ISSUES_NO_CACHE"] = "1"
         self.state_dir = Path(self.env["AGENT_SKILL_STATE_DIR"])

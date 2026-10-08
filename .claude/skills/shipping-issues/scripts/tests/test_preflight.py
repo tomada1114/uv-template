@@ -75,6 +75,31 @@ def run_script_gh(args, repo, *, responses=None, exits=None):
     return proc, calls
 
 
+CLOUD_NEXT = ("next: in a Claude Code cloud session use the "
+              "cloud-claude-shipping-issues skill\n")
+
+
+def run_script_host(args, repo, host):
+    """Run preflight.sh with CLAUDE_CODE_REMOTE set to `host` (a string), so
+    the result never depends on the runner's own environment."""
+    with FakeGh({}) as fake:
+        env = {**fake.env, "CLAUDE_CODE_REMOTE": host}
+        proc = subprocess.run(
+            ["bash", str(SCRIPT), *args],
+            cwd=repo,
+            env=env,
+            text=True,
+            capture_output=True,
+        )
+        calls = list(fake.calls)
+    return proc, calls
+
+
+def without_runstate(stdout):
+    """Drop the `runstate:` line: FakeGh gives every run its own temp dir."""
+    return [ln for ln in stdout.splitlines() if not ln.startswith("runstate:")]
+
+
 class PreflightTest(unittest.TestCase):
     def test_help_flag_prints_own_usage_and_never_calls_gh(self):
         with tempfile.TemporaryDirectory() as td:
@@ -441,6 +466,44 @@ class PreflightTest(unittest.TestCase):
         self.assertIn("verdict: READY_WITH_WARNINGS\n", proc.stdout)
         # gh_auth/gh_write are never a hard blocker
         self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def test_cloud_host_stops_with_the_cloud_skill_named_and_runs_nothing(self):
+        for args in ([], ["--with-github"]):
+            with self.subTest(args=args), tempfile.TemporaryDirectory() as td:
+                repo = Path(td)  # not even a git repo: nothing may run first
+                proc, calls = run_script_host(args, repo, "true")
+
+                self.assertEqual(proc.returncode, 1, proc.stderr)
+                self.assertEqual(
+                    proc.stdout,
+                    "host: cloud\n" + CLOUD_NEXT + "verdict: BLOCKED\n",
+                )
+                self.assertEqual(calls, [])
+
+    def test_a_host_value_other_than_true_behaves_as_local(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td)
+            make_repo(repo, origin=True)
+            baseline, _ = run_script_host([], repo, "")
+            for value in ("false", "TRUE", "1", "True", "yes"):
+                with self.subTest(value=value):
+                    proc, _ = run_script_host([], repo, value)
+
+                    self.assertEqual(proc.returncode, 0, proc.stderr)
+                    self.assertNotIn("host:", proc.stdout)
+                    self.assertEqual(
+                        without_runstate(proc.stdout),
+                        without_runstate(baseline.stdout),
+                    )
+
+    def test_an_unset_host_variable_behaves_as_local(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td)
+            make_repo(repo, origin=True)
+            proc, _ = run_script([], repo)
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertNotIn("host:", proc.stdout)
 
 
 if __name__ == "__main__":

@@ -12,7 +12,8 @@ that carry a duty for the calling session.
 
 ## Fields
 
-- `preflight:` — `BLOCKED` stops the run. `tree: DIRTY` is a question to ask **now**,
+- `preflight:` — `BLOCKED` stops the run. `host: cloud` with a `next:` line means a
+  Claude Code cloud session: stop and use the skill the `next:` line names. `tree: DIRTY` is a question to ask **now**,
   before any baseline. `existing-worktrees:` with a `BLOCKED` verdict means worktrees
   already sit under this run's own root: an earlier run that did not clean up, or one
   happening right now. That is a stop condition, not a leftover to reuse — the branches

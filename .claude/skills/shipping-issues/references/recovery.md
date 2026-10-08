@@ -176,6 +176,12 @@ and this is the whole list:
 | `FAIL` in the main checkout too             | The repository is broken, and it is not this issue's problem.            | A step 8 finding. The run may still be shippable on top of it — decide, and say which in the report.                                                                                                              |
 | `TIMEOUT`                                   | The verify command never finished, so **nothing was proved either way**. | Almost always the wrong command was confirmed at step 1 — a watcher, a dev server. Pick the right one and re-run the baseline. Never treat it as a red baseline.                                                  |
 
+When the default branch's CI is green but the local baseline is red, suspect the
+environment first: compare against that CI run, then re-run the failing suite with the
+suspect variables unset (for example `env -u GIT_CONFIG_COUNT ...`) to confirm. #178 is
+the example: the `GIT_CONFIG_*` url rewrites a Claude Code cloud session exports failed
+the baseline while the default branch stayed green.
+
 Before concluding the repository is broken, read the red baseline against what is
 actually in the tree: an untracked build or package-manager cache in the repo root can
 fail the baseline on its own — for example a cache directory holding a unix socket,

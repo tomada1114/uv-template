@@ -417,6 +417,22 @@ class MainTest(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("verdict: BLOCKED", out)
 
+    def test_cloud_host_names_the_cloud_skill_before_the_verdict(self):
+        # Unstubbed: plan.py runs the real preflight.sh, which must stop on the
+        # host variable before it touches git or gh.
+        out, err = io.StringIO(), io.StringIO()
+        with patch.dict("os.environ", {"CLAUDE_CODE_REMOTE": "true"}), \
+                patch.object(sys, "argv", ["plan.py", "--mode", "single"]), \
+                redirect_stdout(out), redirect_stderr(err):
+            rc = plan.main()
+        self.assertEqual(rc, 1)
+        lines = out.getvalue().splitlines()
+        self.assertEqual(lines[:2], [
+            "host: cloud",
+            ("next: in a Claude Code cloud session use the "
+             "cloud-claude-shipping-issues skill")])
+        self.assertEqual(lines[-1], "verdict: BLOCKED")
+
     def test_record_writes_run_start_selection_and_the_group(self):
         rows = [rank_row(1, touches=["a/"]), rank_row(2, touches=["b/"])]
         self._run(["--mode", "all", "--record"], rows)
