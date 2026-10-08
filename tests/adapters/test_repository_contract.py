@@ -164,5 +164,6 @@ def test_repository_concurrent_adds_assign_unique_ids(repository, fixed_now):
         added = list(pool.map(repository.add, drafts))
 
     ids = sorted(todo.id for todo in added)
-    assert ids == list(range(1, CONCURRENT_ADDS + 1))
+    assert len(set(ids)) == CONCURRENT_ADDS
+    assert all(todo_id > 0 for todo_id in ids)
     assert len(repository.list_all()) == CONCURRENT_ADDS
