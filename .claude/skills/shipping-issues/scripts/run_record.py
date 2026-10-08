@@ -50,9 +50,19 @@ SKILL_STATE_NAME = "shipping-issues"
 REPO_RE = re.compile(r"^[^/\s]+/[^/\s]+$")
 
 EVENTS = (
-    "run-start", "selection", "labels", "design", "parallel-group",
-    "pr-created", "review", "ci", "merged", "followup", "cleanup",
-    "blocked", "note",
+    "run-start",
+    "selection",
+    "labels",
+    "design",
+    "parallel-group",
+    "pr-created",
+    "review",
+    "ci",
+    "merged",
+    "followup",
+    "cleanup",
+    "blocked",
+    "note",
 )
 
 
@@ -77,7 +87,9 @@ def resolve_repo(explicit: str | None) -> str | None:
         return explicit
     proc = subprocess.run(
         ["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"],
-        capture_output=True, text=True, timeout=120,
+        capture_output=True,
+        text=True,
+        timeout=120,
     )
     repo = (proc.stdout or "").strip()
     return repo or None
@@ -99,15 +111,14 @@ def parse_fields(pairs: list[str]) -> list[tuple[str, str]]:
 
 
 def _fence_for(body: str) -> str:
-    """A backtick fence longer than any backtick run already in body, so a
-    selection block or FOLLOW-UPS text that itself quotes a ``` code block
-    cannot prematurely close ours (same rule CommonMark uses)."""
+    """A backtick fence longer than any backtick run already in body, so a selection block or FOLLOW-UPS text that itself quotes a ``` code block cannot prematurely close ours (same rule CommonMark uses)."""
     longest = max((len(run) for run in re.findall(r"`+", body)), default=0)
     return "`" * max(3, longest + 1)
 
 
-def format_entry(event: str, fields: list[tuple[str, str]], body: str | None,
-                  now: datetime) -> str:
+def format_entry(
+    event: str, fields: list[tuple[str, str]], body: str | None, now: datetime
+) -> str:
     stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     line = f"- {stamp} {event}"
     if fields:
@@ -123,15 +134,27 @@ def format_entry(event: str, fields: list[tuple[str, str]], body: str | None,
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("--event", required=True, choices=EVENTS)
-    p.add_argument("--repo", metavar="OWNER/NAME",
-                    help="target repo; defaults to the one cwd resolves to")
-    p.add_argument("--field", action="append", default=[], metavar="k=v",
-                    help="one k=v pair, repeatable, appended in order given")
-    p.add_argument("--body-file", type=Path,
-                    help="path to a text file appended as a fenced block "
-                         "(e.g. the rubric-shaped selection block)")
+    p.add_argument(
+        "--repo",
+        metavar="OWNER/NAME",
+        help="target repo; defaults to the one cwd resolves to",
+    )
+    p.add_argument(
+        "--field",
+        action="append",
+        default=[],
+        metavar="k=v",
+        help="one k=v pair, repeatable, appended in order given",
+    )
+    p.add_argument(
+        "--body-file",
+        type=Path,
+        help="path to a text file appended as a fenced block "
+        "(e.g. the rubric-shaped selection block)",
+    )
     p.add_argument("--json", action="store_true", help="machine-readable output")
     args = p.parse_args(argv)
 
@@ -147,11 +170,16 @@ def main(argv: list[str] | None = None) -> int:
     repo = resolve_repo(args.repo)
     if not repo:
         target = args.repo or "the current directory"
-        print(f"error: cannot resolve {target} — run inside the repo or pass "
-              "--repo OWNER/NAME", file=sys.stderr)
+        print(
+            f"error: cannot resolve {target} — run inside the repo or pass "
+            "--repo OWNER/NAME",
+            file=sys.stderr,
+        )
         return 1
     if not REPO_RE.match(repo):
-        print(f"error: --repo must look like OWNER/NAME, got: {repo!r}", file=sys.stderr)
+        print(
+            f"error: --repo must look like OWNER/NAME, got: {repo!r}", file=sys.stderr
+        )
         return 2
 
     path = record_path(repo)
@@ -166,8 +194,17 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     if args.json:
-        print(json.dumps({"path": str(path), "bytes_appended": len(entry),
-                          "event": args.event, "repo": repo}, ensure_ascii=False))
+        print(
+            json.dumps(
+                {
+                    "path": str(path),
+                    "bytes_appended": len(entry),
+                    "event": args.event,
+                    "repo": repo,
+                },
+                ensure_ascii=False,
+            )
+        )
     else:
         print(f"recorded: {args.event} -> {path}")
     return 0

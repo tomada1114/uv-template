@@ -264,7 +264,9 @@ def report(rows: list[Row]) -> None:
         emit(f"        files: {', '.join(row['files']) or '(none)'}")
     contested = sorted(contested_files(rows).items())
     one_at_a_time = [
-        (path, nums) for path, nums in contested if lands_one_at_a_time(path, nums, rows)
+        (path, nums)
+        for path, nums in contested
+        if lands_one_at_a_time(path, nums, rows)
     ]
     combined = [item for item in contested if item not in one_at_a_time]
     if one_at_a_time:

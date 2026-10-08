@@ -4,6 +4,7 @@
 Run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
      (from the shipping-issues skill directory)
 """
+
 from __future__ import annotations
 
 import io
@@ -11,32 +12,49 @@ import json
 import subprocess
 import sys
 import unittest
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from _fakegh import FakeGh, label_writes  # noqa: E402
-import apply_priority_labels as apl  # noqa: E402
+import apply_priority_labels as apl
+from _fakegh import FakeGh, label_writes
 
 
 def issue(number, labels, updated="2026-01-01T00:00:00Z", title=None, body=""):
     # `labels` mirrors issue_digest.py's *output* shape (plain name strings);
     # the raw `gh issue list --json labels` shape it consumes wraps each in
     # {"name": …}, so that wrapping happens here.
-    return {"number": number, "title": title or f"issue {number}",
-            "labels": [{"name": n} for n in labels],
-            "assignees": [], "milestone": None, "body": body, "createdAt": updated,
-            "updatedAt": updated, "url": f"https://x/{number}"}
+    return {
+        "number": number,
+        "title": title or f"issue {number}",
+        "labels": [{"name": n} for n in labels],
+        "assignees": [],
+        "milestone": None,
+        "body": body,
+        "createdAt": updated,
+        "updatedAt": updated,
+        "url": f"https://x/{number}",
+    }
 
 
 # The four tier labels and the blocked: labels, as a repo that ran `just labels`
 # defines them.
-ALL_LABELS = json.dumps([{"name": n} for n in (
-    "priority: P0", "priority: P1", "priority: P2", "priority: P3",
-    "blocked: design", "blocked: dependency")])
+ALL_LABELS = json.dumps(
+    [
+        {"name": n}
+        for n in (
+            "priority: P0",
+            "priority: P1",
+            "priority: P2",
+            "priority: P3",
+            "blocked: design",
+            "blocked: dependency",
+        )
+    ]
+)
 
 
 class ParseSetsTest(unittest.TestCase):
@@ -63,7 +81,8 @@ class ApplyTest(unittest.TestCase):
             changed = apl.apply(12, "P0", [], dry_run=False)
         self.assertTrue(changed)
         mock_gh.assert_called_once_with(
-            ["issue", "edit", "12", "--add-label", "priority: P0"])
+            ["issue", "edit", "12", "--add-label", "priority: P0"]
+        )
 
     def test_no_op_when_already_exact_label(self):
         with patch("apply_priority_labels.gh") as mock_gh:
@@ -98,13 +117,13 @@ class ApplyTest(unittest.TestCase):
         self.assertIn("--remove-label", args)
         self.assertIn("critical", args)
 
-
     def test_case_variant_of_the_target_is_not_removed(self):
         # GitHub matches label names without regard to case, so removing
         # "Priority: P2" while adding "priority: P2" would strip the tier.
         with patch("apply_priority_labels.gh") as mock_gh:
-            changed = apl.apply(12, "P2", ["Priority: P2"], dry_run=False,
-                                target="Priority: P2")
+            changed = apl.apply(
+                12, "P2", ["Priority: P2"], dry_run=False, target="Priority: P2"
+            )
         self.assertFalse(changed)
         mock_gh.assert_not_called()
 
@@ -112,7 +131,8 @@ class ApplyTest(unittest.TestCase):
         with patch("apply_priority_labels.gh") as mock_gh:
             apl.apply(12, "P2", ["P3"], dry_run=False, target="p2")
         mock_gh.assert_called_once_with(
-            ["issue", "edit", "12", "--add-label", "p2", "--remove-label", "P3"])
+            ["issue", "edit", "12", "--add-label", "p2", "--remove-label", "P3"]
+        )
 
 
 class MissingTierLabelsTest(unittest.TestCase):
@@ -130,7 +150,9 @@ class MissingTierLabelsTest(unittest.TestCase):
         self.assertEqual(writes, [])
 
     def test_only_the_tiers_asked_about_are_checked(self):
-        with FakeGh({("label", "list"): json.dumps([{"name": "priority: P2"}])}) as fake:
+        with FakeGh(
+            {("label", "list"): json.dumps([{"name": "priority: P2"}])}
+        ) as fake:
             with patch.dict("os.environ", fake.env, clear=False):
                 missing = apl.missing_tier_labels(["P2", "P2"])
         self.assertEqual(missing, [])
@@ -172,7 +194,9 @@ class SetClearDesignTest(unittest.TestCase):
                 name = apl.set_design(12, "blocked: design", dry_run=False)
             edits = [c for c in fake.calls if c[:2] == ["issue", "edit"]]
         self.assertEqual(name, "blocked: design")
-        self.assertEqual(edits, [["issue", "edit", "12", "--add-label", "blocked: design"]])
+        self.assertEqual(
+            edits, [["issue", "edit", "12", "--add-label", "blocked: design"]]
+        )
 
     def test_set_design_dry_run_makes_no_gh_mutations(self):
         with FakeGh({}) as fake:
@@ -183,14 +207,17 @@ class SetClearDesignTest(unittest.TestCase):
         self.assertEqual(calls, [])
 
     def test_clear_design_removes_carried_alias(self):
-        view = json.dumps({"labels": [{"name": "needs-design"}, {"name": "priority: P1"}]})
+        view = json.dumps(
+            {"labels": [{"name": "needs-design"}, {"name": "priority: P1"}]}
+        )
         with FakeGh({("issue", "view"): view, ("issue", "edit"): ""}) as fake:
             with patch.dict("os.environ", fake.env, clear=False):
                 removed = apl.clear_design(12, dry_run=False)
             edits = [c for c in fake.calls if c[:2] == ["issue", "edit"]]
         self.assertEqual(removed, ["needs-design"])
-        self.assertEqual(edits,
-                         [["issue", "edit", "12", "--remove-label", "needs-design"]])
+        self.assertEqual(
+            edits, [["issue", "edit", "12", "--remove-label", "needs-design"]]
+        )
 
     def test_clear_design_is_a_noop_when_not_present(self):
         view = json.dumps({"labels": [{"name": "priority: P1"}]})
@@ -211,12 +238,15 @@ class SetClearDesignTest(unittest.TestCase):
         self.assertFalse(edited)
 
 
-OPEN_BODY = ("Prose that mentions design=open outside the block stays as written.\n"
-             "<!-- ship: tier=P2 area=skills blocked-by=none\n"
-             "     touches=scripts/ design=open -->\n"
-             "Trailing prose.\n")
-SETTLED_BODY = OPEN_BODY.replace("touches=scripts/ design=open",
-                                 "touches=scripts/ design=settled")
+OPEN_BODY = (
+    "Prose that mentions design=open outside the block stays as written.\n"
+    "<!-- ship: tier=P2 area=skills blocked-by=none\n"
+    "     touches=scripts/ design=open -->\n"
+    "Trailing prose.\n"
+)
+SETTLED_BODY = OPEN_BODY.replace(
+    "touches=scripts/ design=open", "touches=scripts/ design=settled"
+)
 
 
 class SettleContractDesignTest(unittest.TestCase):
@@ -227,21 +257,26 @@ class SettleContractDesignTest(unittest.TestCase):
 
     def test_an_empty_field_beside_design_open_is_kept_byte_for_byte(self):
         body = "<!-- ship: tier=P2 blocked-by= blocks=#4 design=open -->"
-        self.assertEqual(apl.settle_contract_design(body),
-                         "<!-- ship: tier=P2 blocked-by= blocks=#4 design=settled -->")
+        self.assertEqual(
+            apl.settle_contract_design(body),
+            "<!-- ship: tier=P2 blocked-by= blocks=#4 design=settled -->",
+        )
 
     def test_an_empty_design_field_beside_an_open_one_does_not_crash(self):
         body = "<!-- ship: design= blocks=#3 design=open -->"
-        self.assertEqual(apl.settle_contract_design(body),
-                         "<!-- ship: design= blocks=#3 design=settled -->")
+        self.assertEqual(
+            apl.settle_contract_design(body),
+            "<!-- ship: design= blocks=#3 design=settled -->",
+        )
 
     def test_an_empty_design_field_is_not_settled(self):
         self.assertIsNone(apl.settle_contract_design("<!-- ship: tier=P2 design= -->"))
 
     def test_keeps_the_keys_spelling_and_spacing(self):
         body = "<!-- SHIP: Design = OPEN tier=P1 -->"
-        self.assertEqual(apl.settle_contract_design(body),
-                         "<!-- SHIP: Design = settled tier=P1 -->")
+        self.assertEqual(
+            apl.settle_contract_design(body), "<!-- SHIP: Design = settled tier=P1 -->"
+        )
 
     def test_the_rewritten_body_parses_as_settled(self):
         settled = apl.settle_contract_design(OPEN_BODY)
@@ -249,9 +284,10 @@ class SettleContractDesignTest(unittest.TestCase):
 
     def test_every_open_field_is_settled_when_the_last_one_is_open(self):
         body = "<!-- ship: design=open -->\nx\n<!-- ship: tier=P1 design=open -->"
-        self.assertEqual(apl.settle_contract_design(body),
-                         "<!-- ship: design=settled -->\nx\n"
-                         "<!-- ship: tier=P1 design=settled -->")
+        self.assertEqual(
+            apl.settle_contract_design(body),
+            "<!-- ship: design=settled -->\nx\n<!-- ship: tier=P1 design=settled -->",
+        )
 
     def test_design_open_inside_another_fields_value_is_not_a_design_field(self):
         # Values never contain spaces, so `touches=a,design=open` is one
@@ -262,32 +298,42 @@ class SettleContractDesignTest(unittest.TestCase):
         self.assertIsNone(apl.settle_contract_design(body))
 
     def test_examples_quoted_in_code_are_left_byte_identical(self):
-        body = ("Example:\n\n```\n<!-- ship: design=open -->\n```\n"
-                "~~~\n<!-- ship: design=open -->\n~~~\n"
-                "Inline `<!-- ship: design=open -->` too.\n\n"
-                "<!-- ship: tier=P1 design=open -->\n")
-        self.assertEqual(apl.settle_contract_design(body),
-                         body.replace("tier=P1 design=open", "tier=P1 design=settled"))
+        body = (
+            "Example:\n\n```\n<!-- ship: design=open -->\n```\n"
+            "~~~\n<!-- ship: design=open -->\n~~~\n"
+            "Inline `<!-- ship: design=open -->` too.\n\n"
+            "<!-- ship: tier=P1 design=open -->\n"
+        )
+        self.assertEqual(
+            apl.settle_contract_design(body),
+            body.replace("tier=P1 design=open", "tier=P1 design=settled"),
+        )
 
     def test_rewrites_the_block_the_digest_locates(self):
         # The invariant: the parser and the rewrite agree on the contract.
-        body = ("```\n<!-- ship: design=open -->\n```\n"
-                "<!-- ship: tier=P1 design=open -->")
+        body = (
+            "```\n<!-- ship: design=open -->\n```\n<!-- ship: tier=P1 design=open -->"
+        )
         (real,) = apl.find_ship_contracts(body)
         settled = apl.settle_contract_design(body)
-        self.assertEqual(settled[:real.start()], body[:real.start()])
-        self.assertEqual(settled[real.start():],
-                         "<!-- ship: tier=P1 design=settled -->")
+        self.assertEqual(settled[: real.start()], body[: real.start()])
+        self.assertEqual(
+            settled[real.start() :], "<!-- ship: tier=P1 design=settled -->"
+        )
 
     def test_none_when_only_a_quoted_example_is_open(self):
         body = "```\n<!-- ship: design=open -->\n```\n<!-- ship: tier=P1 -->"
         self.assertIsNone(apl.settle_contract_design(body))
 
     def test_none_when_there_is_nothing_to_settle(self):
-        for body in ("", "no contract, design=open in prose only",
-                     "<!-- ship: tier=P1 -->", SETTLED_BODY,
-                     # The parser reads the last block, so this is settled.
-                     "<!-- ship: design=open -->\n<!-- ship: design=settled -->"):
+        for body in (
+            "",
+            "no contract, design=open in prose only",
+            "<!-- ship: tier=P1 -->",
+            SETTLED_BODY,
+            # The parser reads the last block, so this is settled.
+            "<!-- ship: design=open -->\n<!-- ship: design=settled -->",
+        ):
             with self.subTest(body=body):
                 self.assertIsNone(apl.settle_contract_design(body))
 
@@ -308,8 +354,10 @@ class ClearDesignBothFormsTest(unittest.TestCase):
                 written["body"] = Path(path).read_bytes().decode("utf-8")
             return real_gh(args, check=check)
 
-        with FakeGh({("issue", "view"): view, ("issue", "edit"): ""}) as fake, \
-                patch("apply_priority_labels.gh", side_effect=capture):
+        with (
+            FakeGh({("issue", "view"): view, ("issue", "edit"): ""}) as fake,
+            patch("apply_priority_labels.gh", side_effect=capture),
+        ):
             with patch.dict("os.environ", fake.env, clear=False):
                 cleared = apl.clear_design(12, dry_run=dry_run)
             views = [c for c in fake.calls if c[:2] == ["issue", "view"]]
@@ -323,11 +371,13 @@ class ClearDesignBothFormsTest(unittest.TestCase):
         return cleared, edits, written.get("body")
 
     def test_label_only(self):
-        cleared, edits, body = self._clear(["blocked: design", "priority: P2"],
-                                           "no contract here")
+        cleared, edits, body = self._clear(
+            ["blocked: design", "priority: P2"], "no contract here"
+        )
         self.assertEqual(cleared, ["blocked: design"])
-        self.assertEqual(edits,
-                         [["issue", "edit", "12", "--remove-label", "blocked: design"]])
+        self.assertEqual(
+            edits, [["issue", "edit", "12", "--remove-label", "blocked: design"]]
+        )
         self.assertIsNone(body)
 
     def test_marker_only(self):
@@ -342,8 +392,9 @@ class ClearDesignBothFormsTest(unittest.TestCase):
         cleared, edits, body = self._clear(["needs-design"], OPEN_BODY)
         self.assertEqual(cleared, ["needs-design", apl.CONTRACT_DESIGN_MARKER])
         self.assertEqual(len(edits), 1)
-        self.assertEqual(edits[0][:5],
-                         ["issue", "edit", "12", "--remove-label", "needs-design"])
+        self.assertEqual(
+            edits[0][:5], ["issue", "edit", "12", "--remove-label", "needs-design"]
+        )
         self.assertIn("--body-file", edits[0])
         self.assertEqual(body, SETTLED_BODY)
 
@@ -353,11 +404,14 @@ class ClearDesignBothFormsTest(unittest.TestCase):
         self.assertEqual(body, SETTLED_BODY.replace("\n", "\r\n"))
 
     def test_fenced_example_survives_clear_design(self):
-        issue_body = ("```\n<!-- ship: design=open -->\n```\n\n"
-                      "<!-- ship: tier=P1 design=open -->\n")
+        issue_body = (
+            "```\n<!-- ship: design=open -->\n```\n\n"
+            "<!-- ship: tier=P1 design=open -->\n"
+        )
         _, _, body = self._clear([], issue_body)
-        self.assertEqual(body, issue_body.replace("tier=P1 design=open",
-                                                  "tier=P1 design=settled"))
+        self.assertEqual(
+            body, issue_body.replace("tier=P1 design=open", "tier=P1 design=settled")
+        )
 
     def test_neither(self):
         for issue_body in ("no contract here", SETTLED_BODY):
@@ -372,8 +426,9 @@ class ClearDesignBothFormsTest(unittest.TestCase):
         # --clear-design was run, and the already-settled body is not rewritten.
         cleared, edits, body = self._clear(["blocked: design"], SETTLED_BODY)
         self.assertEqual(cleared, ["blocked: design"])
-        self.assertEqual(edits,
-                         [["issue", "edit", "12", "--remove-label", "blocked: design"]])
+        self.assertEqual(
+            edits, [["issue", "edit", "12", "--remove-label", "blocked: design"]]
+        )
         self.assertIsNone(body)
 
     def test_dry_run_reports_both_and_writes_nothing(self):
@@ -393,13 +448,20 @@ class ClearDesignBothFormsTest(unittest.TestCase):
                 self.assertTrue(paths[-1].exists())
             return real_gh(args, check=check)
 
-        with FakeGh({("issue", "view"): view, ("issue", "edit"): ""},
-                    exits={("issue", "edit"): 1},
-                    stderrs={("issue", "edit"): "boom"}) as fake, \
-                patch("apply_priority_labels.gh", side_effect=capture):
+        with (
+            FakeGh(
+                {("issue", "view"): view, ("issue", "edit"): ""},
+                exits={("issue", "edit"): 1},
+                stderrs={("issue", "edit"): "boom"},
+            ) as fake,
+            patch("apply_priority_labels.gh", side_effect=capture),
+        ):
             err = io.StringIO()
-            with patch.dict("os.environ", fake.env, clear=False), \
-                    redirect_stderr(err), self.assertRaises(SystemExit) as cm:
+            with (
+                patch.dict("os.environ", fake.env, clear=False),
+                redirect_stderr(err),
+                self.assertRaises(SystemExit) as cm,
+            ):
                 apl.clear_design(12, dry_run=False)
         self.assertNotEqual(cm.exception.code, 0)
         self.assertIn("boom", err.getvalue())
@@ -408,16 +470,21 @@ class ClearDesignBothFormsTest(unittest.TestCase):
 
     def test_the_digest_no_longer_holds_the_issue_afterwards(self):
         import issue_digest as idg
+
         _, _, body = self._clear(["blocked: design"], OPEN_BODY)
 
         def select(labels, issue_body):
-            responses = {("issue", "list"): json.dumps([issue(12, labels, body=issue_body)]),
-                         ("pr", "list"): "[]"}
+            responses = {
+                ("issue", "list"): json.dumps([issue(12, labels, body=issue_body)]),
+                ("pr", "list"): "[]",
+            }
             with FakeGh(responses) as fake:
                 out = io.StringIO()
-                with patch.dict("os.environ", fake.env, clear=False), \
-                        patch.object(sys, "argv", ["issue_digest.py", "--select"]), \
-                        redirect_stdout(out):
+                with (
+                    patch.dict("os.environ", fake.env, clear=False),
+                    patch.object(sys, "argv", ["issue_digest.py", "--select"]),
+                    redirect_stdout(out),
+                ):
                     self.assertEqual(idg.main(), 0)
             return out.getvalue()
 
@@ -430,15 +497,17 @@ class ClearDependencyTest(unittest.TestCase):
     a fake one instead of mocking subprocess, same as SetClearDesignTest."""
 
     def test_removes_carried_label(self):
-        view = json.dumps({"labels": [{"name": "blocked: dependency"},
-                                      {"name": "priority: P1"}]})
+        view = json.dumps(
+            {"labels": [{"name": "blocked: dependency"}, {"name": "priority: P1"}]}
+        )
         with FakeGh({("issue", "view"): view, ("issue", "edit"): ""}) as fake:
             with patch.dict("os.environ", fake.env, clear=False):
                 removed = apl.clear_dependency(12, dry_run=False)
             edits = [c for c in fake.calls if c[:2] == ["issue", "edit"]]
         self.assertEqual(removed, ["blocked: dependency"])
         self.assertEqual(
-            edits, [["issue", "edit", "12", "--remove-label", "blocked: dependency"]])
+            edits, [["issue", "edit", "12", "--remove-label", "blocked: dependency"]]
+        )
 
     def test_noop_when_not_present(self):
         view = json.dumps({"labels": [{"name": "priority: P1"}]})
@@ -471,9 +540,12 @@ class MainEndToEndTest(unittest.TestCase):
             if path_override is not None:
                 env["PATH"] = path_override
             out, err = io.StringIO(), io.StringIO()
-            with patch.dict("os.environ", env, clear=False), \
-                    patch.object(sys, "argv", ["apply_priority_labels.py", *args]), \
-                    redirect_stdout(out), redirect_stderr(err):
+            with (
+                patch.dict("os.environ", env, clear=False),
+                patch.object(sys, "argv", ["apply_priority_labels.py", *args]),
+                redirect_stdout(out),
+                redirect_stderr(err),
+            ):
                 try:
                     rc = apl.main()
                 except SystemExit as exc:
@@ -581,7 +653,9 @@ class MainEndToEndTest(unittest.TestCase):
         )
         self.assertEqual(rc, 0, err)
         edits = [c for c in calls if c[:2] == ["issue", "edit"]]
-        self.assertEqual(edits, [["issue", "edit", "12", "--add-label", "Priority: P2"]])
+        self.assertEqual(
+            edits, [["issue", "edit", "12", "--add-label", "Priority: P2"]]
+        )
 
     def test_set_on_an_issue_carrying_a_case_variant_is_a_no_op(self):
         variant = json.dumps([{"name": "Priority: P2"}])
@@ -608,13 +682,16 @@ class MainEndToEndTest(unittest.TestCase):
         self.assertIn("standalone", err)
 
     def test_gh_not_found_reports_error(self):
-        rc, out, err, calls = self._run(["--backfill"], {}, path_override="/nonexistent-only")
+        rc, out, err, calls = self._run(
+            ["--backfill"], {}, path_override="/nonexistent-only"
+        )
         self.assertEqual(rc, 1)
         self.assertIn("gh CLI not found", err)
 
     def test_check_labels_only_skips_the_digest(self):
         rc, out, err, calls = self._run(
-            ["--check-labels"], {("label", "list"): ALL_LABELS})
+            ["--check-labels"], {("label", "list"): ALL_LABELS}
+        )
         self.assertEqual(rc, 0, err)
         self.assertIn("verdict: OK", out)
         # No issue/pr calls means load_digest() (and thus issue_digest.py)
@@ -623,7 +700,9 @@ class MainEndToEndTest(unittest.TestCase):
 
     def test_check_labels_reports_missing_with_repo_labels_as_next_step(self):
         rc, out, err, calls = self._run(
-            ["--check-labels"], {("label", "list"): json.dumps([{"name": "priority: P0"}])})
+            ["--check-labels"],
+            {("label", "list"): json.dumps([{"name": "priority: P0"}])},
+        )
         self.assertEqual(rc, apl.MISSING_LABEL_EXIT)
         self.assertIn("priority: P1", err)
         self.assertIn("just labels", err)
@@ -633,8 +712,12 @@ class MainEndToEndTest(unittest.TestCase):
         issues = json.dumps([issue(12, [])])
         rc, out, err, calls = self._run(
             ["--backfill"],
-            {("label", "list"): "[]", ("issue", "list"): issues, ("pr", "list"): "[]",
-             ("issue", "edit"): ""},
+            {
+                ("label", "list"): "[]",
+                ("issue", "list"): issues,
+                ("pr", "list"): "[]",
+                ("issue", "edit"): "",
+            },
         )
         self.assertEqual(rc, apl.MISSING_LABEL_EXIT, err)
         self.assertIn("just labels", err)
@@ -643,7 +726,8 @@ class MainEndToEndTest(unittest.TestCase):
 
     def test_set_design_with_no_design_label_writes_nothing(self):
         rc, out, err, calls = self._run(
-            ["--set-design", "12"], {("label", "list"): "[]", ("issue", "edit"): ""})
+            ["--set-design", "12"], {("label", "list"): "[]", ("issue", "edit"): ""}
+        )
         self.assertEqual(rc, apl.MISSING_LABEL_EXIT, err)
         self.assertFalse(any(c[:2] == ["issue", "edit"] for c in calls))
         self.assertEqual(label_writes(calls), [])
@@ -706,7 +790,8 @@ class MainEndToEndTest(unittest.TestCase):
         )
         self.assertEqual(rc, 0, err)
         self.assertIn(
-            "#12: needs-design would clear (blocked: design, ship:design=open)", out)
+            "#12: needs-design would clear (blocked: design, ship:design=open)", out
+        )
         self.assertNotIn("needs-design cleared", out)
         self.assertFalse(any(c[:2] == ["issue", "edit"] for c in calls))
 
@@ -718,9 +803,10 @@ class MainEndToEndTest(unittest.TestCase):
         )
         self.assertEqual(rc, 0, err)
         payload = json.loads(out)
-        self.assertEqual(payload["design_cleared"],
-                         [{"number": 12,
-                           "removed": ["blocked: design", "ship:design=open"]}])
+        self.assertEqual(
+            payload["design_cleared"],
+            [{"number": 12, "removed": ["blocked: design", "ship:design=open"]}],
+        )
         self.assertFalse(any(c[:2] == ["issue", "edit"] for c in calls))
 
     def test_clear_design_via_main_json_output(self):
@@ -774,18 +860,22 @@ class MainEndToEndTest(unittest.TestCase):
         self.assertEqual(payload["dependency_cleared"], [{"number": 12, "removed": []}])
 
     def test_clear_dependency_combines_with_clear_design_in_one_call(self):
-        view = json.dumps({"labels": [{"name": "blocked: dependency"},
-                                      {"name": "blocked: design"}]})
+        view = json.dumps(
+            {"labels": [{"name": "blocked: dependency"}, {"name": "blocked: design"}]}
+        )
         rc, out, err, calls = self._run(
             ["--clear-dependency", "12", "--clear-design", "12", "--json"],
             {("issue", "view"): view, ("issue", "edit"): ""},
         )
         self.assertEqual(rc, 0, err)
         payload = json.loads(out)
-        self.assertEqual(payload["dependency_cleared"],
-                         [{"number": 12, "removed": ["blocked: dependency"]}])
-        self.assertEqual(payload["design_cleared"],
-                         [{"number": 12, "removed": ["blocked: design"]}])
+        self.assertEqual(
+            payload["dependency_cleared"],
+            [{"number": 12, "removed": ["blocked: dependency"]}],
+        )
+        self.assertEqual(
+            payload["design_cleared"], [{"number": 12, "removed": ["blocked: design"]}]
+        )
 
     def test_clear_dependency_combined_with_backfill_is_a_usage_error(self):
         rc, out, err, calls = self._run(["--clear-dependency", "12", "--backfill"], {})
@@ -813,15 +903,18 @@ class GhErrorBranchesTest(unittest.TestCase):
     that unit-level mocks are clearer than routing another fake gh."""
 
     def test_gh_missing_binary_exits_1(self):
-        with patch("apply_priority_labels.subprocess.run",
-                   side_effect=FileNotFoundError()):
+        with patch(
+            "apply_priority_labels.subprocess.run", side_effect=FileNotFoundError()
+        ):
             with self.assertRaises(SystemExit) as cm:
                 apl.gh(["label", "list"])
         self.assertEqual(cm.exception.code, 1)
 
     def test_gh_timeout_exits_1(self):
-        with patch("apply_priority_labels.subprocess.run",
-                   side_effect=subprocess.TimeoutExpired(cmd="gh", timeout=120)):
+        with patch(
+            "apply_priority_labels.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="gh", timeout=120),
+        ):
             with self.assertRaises(SystemExit) as cm:
                 apl.gh(["label", "list"])
         self.assertEqual(cm.exception.code, 1)
@@ -829,7 +922,8 @@ class GhErrorBranchesTest(unittest.TestCase):
     def test_gh_generic_failure_exits_1(self):
         with patch("apply_priority_labels.subprocess.run") as mock_run:
             mock_run.side_effect = subprocess.CalledProcessError(
-                1, ["gh"], output="", stderr="some other gh error")
+                1, ["gh"], output="", stderr="some other gh error"
+            )
             with self.assertRaises(SystemExit) as cm:
                 apl.gh(["label", "list"])
         self.assertEqual(cm.exception.code, 1)
@@ -839,6 +933,7 @@ class GhErrorBranchesTest(unittest.TestCase):
             returncode = 1
             stderr = "boom"
             stdout = ""
+
         with patch("apply_priority_labels.subprocess.run", return_value=FakeProc()):
             with self.assertRaises(SystemExit) as cm:
                 apl.load_digest()
@@ -849,7 +944,8 @@ class GhErrorBranchesTest(unittest.TestCase):
         # rather than via a full subprocess round-trip.
         with patch("apply_priority_labels.subprocess.run") as mock_run:
             mock_run.side_effect = subprocess.CalledProcessError(
-                1, ["gh"], output="", stderr="HTTP 403: Resource not accessible")
+                1, ["gh"], output="", stderr="HTTP 403: Resource not accessible"
+            )
             with self.assertRaises(SystemExit) as cm:
                 apl.gh(["issue", "edit", "12", "--add-label", "x"])
             self.assertEqual(cm.exception.code, 2)
@@ -863,14 +959,25 @@ class BackfillHonoursTheContractTest(unittest.TestCase):
             ("issue", "list"): json.dumps(issues),
             ("pr", "list"): "[]",
             ("label", "list"): json.dumps(
-                [{"name": n} for n in ("priority: P0", "priority: P1",
-                                       "priority: P2", "priority: P3")]),
+                [
+                    {"name": n}
+                    for n in (
+                        "priority: P0",
+                        "priority: P1",
+                        "priority: P2",
+                        "priority: P3",
+                    )
+                ]
+            ),
         }
         with FakeGh(responses) as fake:
             out, err = io.StringIO(), io.StringIO()
-            with patch.dict("os.environ", fake.env, clear=False), \
-                    patch.object(sys, "argv", ["apply_priority_labels.py", *argv]), \
-                    redirect_stdout(out), redirect_stderr(err):
+            with (
+                patch.dict("os.environ", fake.env, clear=False),
+                patch.object(sys, "argv", ["apply_priority_labels.py", *argv]),
+                redirect_stdout(out),
+                redirect_stderr(err),
+            ):
                 try:
                     rc = apl.main()
                 except SystemExit as exc:
@@ -878,8 +985,9 @@ class BackfillHonoursTheContractTest(unittest.TestCase):
         return rc, out.getvalue(), err.getvalue()
 
     def test_declared_tier_is_written_not_the_score(self):
-        issues = [issue(1, [], title="a small doc tweak",
-                     body="<!-- ship: tier=P0 -->")]
+        issues = [
+            issue(1, [], title="a small doc tweak", body="<!-- ship: tier=P0 -->")
+        ]
         rc, out, err = self._run(issues, ["--backfill", "--dry-run", "--json"])
         self.assertEqual(rc, 0, err)
         rows = json.loads(out)["changed"]
@@ -887,15 +995,18 @@ class BackfillHonoursTheContractTest(unittest.TestCase):
         self.assertEqual(rows[0]["why"], "ship contract")
 
     def test_no_contract_still_falls_back_to_the_suggestion(self):
-        rc, out, err = self._run([issue(1, [], title="a small doc tweak")],
-                                 ["--backfill", "--dry-run", "--json"])
+        rc, out, err = self._run(
+            [issue(1, [], title="a small doc tweak")],
+            ["--backfill", "--dry-run", "--json"],
+        )
         rows = json.loads(out)["changed"]
         self.assertNotEqual(rows[0]["why"], "ship contract")
 
     def test_explicit_set_still_overrides_the_contract(self):
         issues = [issue(1, [], body="<!-- ship: tier=P0 -->")]
-        rc, out, err = self._run(issues,
-                                 ["--backfill", "--set", "1=P3", "--dry-run", "--json"])
+        rc, out, err = self._run(
+            issues, ["--backfill", "--set", "1=P3", "--dry-run", "--json"]
+        )
         rows = json.loads(out)["changed"]
         self.assertEqual(rows[0]["tier"], "P3")
         self.assertEqual(rows[0]["why"], "explicit")
@@ -910,15 +1021,19 @@ class NoBytecodeTest(unittest.TestCase):
         import os
         import shutil
         import tempfile
+
         scripts = Path(__file__).resolve().parent.parent
-        env = {k: v for k, v in os.environ.items()
-               if k != "PYTHONDONTWRITEBYTECODE"}
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONDONTWRITEBYTECODE"}
         for name in ("apply_priority_labels.py", "file_followup.py"):
             with self.subTest(script=name), tempfile.TemporaryDirectory() as td:
                 for f in scripts.glob("*.py"):
                     shutil.copy(f, td)
-                subprocess.run([sys.executable, str(Path(td) / name), "--help"],
-                               env=env, capture_output=True, check=True)
+                subprocess.run(
+                    [sys.executable, str(Path(td) / name), "--help"],
+                    env=env,
+                    capture_output=True,
+                    check=True,
+                )
                 self.assertEqual(list(Path(td).rglob("__pycache__")), [])
 
 

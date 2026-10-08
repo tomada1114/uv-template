@@ -4,6 +4,7 @@
 Run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
      (from the shipping-issues skill directory)
 """
+
 from __future__ import annotations
 
 import json
@@ -15,8 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _fakegh import FakeGh  # noqa: E402
-
+from _fakegh import FakeGh
 
 SCRIPT = Path(__file__).resolve().parent.parent / "preflight.sh"
 
@@ -75,8 +75,9 @@ def run_script_gh(args, repo, *, responses=None, exits=None):
     return proc, calls
 
 
-CLOUD_NEXT = ("next: in a Claude Code cloud session use the "
-              "cloud-claude-shipping-issues skill\n")
+CLOUD_NEXT = (
+    "next: in a Claude Code cloud session use the cloud-claude-shipping-issues skill\n"
+)
 
 
 def run_script_host(args, repo, host):
@@ -281,11 +282,53 @@ class PreflightTest(unittest.TestCase):
 
     # --- hooks detection -----------------------------------------------------
 
+    def test_unsupported_lockfiles_do_not_select_a_stack(self):
+        for lockfile in (
+            "poetry.lock",
+            "Pipfile.lock",
+            "Gemfile.lock",
+            "go.sum",
+            "Cargo.lock",
+            "requirements.txt",
+        ):
+            with self.subTest(lockfile=lockfile), tempfile.TemporaryDirectory() as td:
+                repo = Path(td)
+                make_repo(repo, origin=True)
+                (repo / lockfile).write_text("fixture\n", encoding="utf-8")
+                (repo / "Rakefile").write_text("fixture\n", encoding="utf-8")
+                proc, calls = run_script([], repo)
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+                self.assertIn("pkg_manager: none\n", proc.stdout)
+                self.assertIn("lockfile: none\n", proc.stdout)
+                self.assertIn("verify_command: NONE\n", proc.stdout)
+                self.assertEqual(calls, [])
+
+    def test_prior_profile_logic_recalculates_without_losing_viability(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td)
+            make_repo(repo, origin=True)
+            (repo / "uv.lock").write_text("fixture\n", encoding="utf-8")
+            cache = repo / "profile.json"
+            run_script(
+                ["--profile-cache", str(cache), "--set-worktree-viable", "yes"], repo
+            )
+            data = json.loads(cache.read_text(encoding="utf-8"))
+            data["profile_logic_version"] = "3"
+            data["verify_command"] = "cargo test"
+            cache.write_text(json.dumps(data), encoding="utf-8")
+            proc, calls = run_script(["--profile-cache", str(cache)], repo)
+            self.assertIn("profile_cache: WRITTEN\n", proc.stdout)
+            self.assertIn("verify_command: uv run --locked pytest\n", proc.stdout)
+            self.assertIn("worktree_viable: yes\n", proc.stdout)
+            self.assertEqual(calls, [])
+
     def test_hooks_pre_commit_config(self):
         with tempfile.TemporaryDirectory() as td:
             repo = Path(td)
             make_repo(repo, origin=True)
-            (repo / ".pre-commit-config.yaml").write_text("repos: []\n", encoding="utf-8")
+            (repo / ".pre-commit-config.yaml").write_text(
+                "repos: []\n", encoding="utf-8"
+            )
             proc, _ = run_script([], repo)
         self.assertIn("hooks: pre-commit\n", proc.stdout)
 
@@ -294,7 +337,9 @@ class PreflightTest(unittest.TestCase):
             repo = Path(td)
             make_repo(repo, origin=True)
             hooks_dir = repo / ".git" / "hooks"
-            (hooks_dir / "pre-commit").write_text("#!/bin/sh\necho hi\n", encoding="utf-8")
+            (hooks_dir / "pre-commit").write_text(
+                "#!/bin/sh\necho hi\n", encoding="utf-8"
+            )
             proc, _ = run_script([], repo)
         self.assertIn("hooks: native\n", proc.stdout)
 
@@ -357,8 +402,9 @@ class PreflightTest(unittest.TestCase):
             cache = repo / ".cache-outside-git" / "cache.json"
 
             run_script(["--profile-cache", str(cache)], repo)
-            run_script(["--profile-cache", str(cache),
-                        "--set-worktree-viable", "no"], repo)
+            run_script(
+                ["--profile-cache", str(cache), "--set-worktree-viable", "no"], repo
+            )
             (repo / "uv.lock").write_text("v2 — different lockfile", encoding="utf-8")
             after, _ = run_script(["--profile-cache", str(cache)], repo)
 
@@ -373,8 +419,9 @@ class PreflightTest(unittest.TestCase):
             cache = repo / ".cache-outside-git" / "cache.json"
 
             run_script(["--profile-cache", str(cache)], repo)
-            run_script(["--profile-cache", str(cache),
-                        "--set-worktree-viable", "yes"], repo)
+            run_script(
+                ["--profile-cache", str(cache), "--set-worktree-viable", "yes"], repo
+            )
             after, _ = run_script(["--profile-cache", str(cache)], repo)
 
         self.assertIn("profile_cache: HIT\n", after.stdout)
@@ -388,7 +435,9 @@ class PreflightTest(unittest.TestCase):
             cache = repo / ".cache-outside-git" / "cache.json"
 
             first, _ = run_script(["--profile-cache", str(cache)], repo)
-            (repo / "uv.lock").write_text("v2 - a completely different lockfile", encoding="utf-8")
+            (repo / "uv.lock").write_text(
+                "v2 - a completely different lockfile", encoding="utf-8"
+            )
             second, _ = run_script(["--profile-cache", str(cache)], repo)
 
         self.assertIn("profile_cache: WRITTEN\n", first.stdout)

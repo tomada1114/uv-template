@@ -4,6 +4,7 @@
 Run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
      (from the shipping-issues skill directory)
 """
+
 from __future__ import annotations
 
 import os
@@ -15,8 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _fakegh import FakeGh  # noqa: E402
-
+from _fakegh import FakeGh
 
 SCRIPT = Path(__file__).resolve().parent.parent / "land_pr.sh"
 
@@ -48,8 +48,10 @@ def run_script_with_sleep_stub(args, responses, *, sequences=None):
     """Like run_script, with `sleep` stubbed on PATH: it logs its argument and
     returns at once, so the merge-state retry is counted without being waited."""
     responses = with_head(args, responses)
-    with FakeGh(responses, sequences=sequences) as fake, \
-            tempfile.TemporaryDirectory() as td:
+    with (
+        FakeGh(responses, sequences=sequences) as fake,
+        tempfile.TemporaryDirectory() as td,
+    ):
         stub_dir = Path(td)
         log = stub_dir / "sleeps"
         stub = stub_dir / "sleep"
@@ -58,7 +60,10 @@ def run_script_with_sleep_stub(args, responses, *, sequences=None):
         env = dict(fake.env)
         env["PATH"] = f"{stub_dir}{os.pathsep}{env['PATH']}"
         proc = subprocess.run(
-            ["bash", str(SCRIPT), *args], env=env, text=True, capture_output=True,
+            ["bash", str(SCRIPT), *args],
+            env=env,
+            text=True,
+            capture_output=True,
         )
         calls = list(fake.calls)
         sleeps = log.read_text(encoding="utf-8").split() if log.exists() else []
@@ -130,7 +135,9 @@ class LandPrTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("result: ALREADY_MERGED\n", proc.stdout)
         self.assertIn(f"issue: CLOSED (#{issue})\n", proc.stdout)
-        self.assertEqual([call[:2] for call in calls if call[:2] == ["issue", "close"]], [])
+        self.assertEqual(
+            [call[:2] for call in calls if call[:2] == ["issue", "close"]], []
+        )
 
     def test_not_open_state_is_reported(self):
         pr = "52"
@@ -194,10 +201,13 @@ class LandPrTest(unittest.TestCase):
         # The result's detail is link_check's own, not a blanket "--fix".
         self.assertIn(
             "detail: merging now would leave issue #62 open — the PR body has a "
-            "closing keyword for #62, but GitHub has not linked it", proc.stdout)
+            "closing keyword for #62, but GitHub has not linked it",
+            proc.stdout,
+        )
         self.assertNotIn("--fix", [arg for call in calls for arg in call])
         self.assertEqual(
-            [call for call in calls if call[:2] in (["pr", "edit"], ["pr", "merge"])], []
+            [call for call in calls if call[:2] in (["pr", "edit"], ["pr", "merge"])],
+            [],
         )
 
     def test_not_linked_without_a_keyword_says_so(self):
@@ -219,8 +229,12 @@ class LandPrTest(unittest.TestCase):
         self.assertIn("result: NOT_LINKED\n", proc.stdout)
         self.assertIn(
             "detail: merging now would leave issue #64 open — the PR body has no "
-            "Closes/Fixes/Resolves keyword\n", proc.stdout)
-        self.assertEqual([c for c in calls if c[:2] in (["pr", "edit"], ["pr", "merge"])], [])
+            "Closes/Fixes/Resolves keyword\n",
+            proc.stdout,
+        )
+        self.assertEqual(
+            [c for c in calls if c[:2] in (["pr", "edit"], ["pr", "merge"])], []
+        )
 
     def test_link_check_error_is_reported_as_error_and_never_merges(self):
         pr = "58"
@@ -244,8 +258,11 @@ class LandPrTest(unittest.TestCase):
         )
         self.assertNotIn("result: NOT_LINKED", proc.stdout)
         self.assertEqual(
-            [call for call in calls
-             if call[:2] in (["pr", "edit"], ["pr", "merge"], ["pr", "ready"])],
+            [
+                call
+                for call in calls
+                if call[:2] in (["pr", "edit"], ["pr", "merge"], ["pr", "ready"])
+            ],
             [],
         )
 
@@ -370,8 +387,11 @@ class LandPrTest(unittest.TestCase):
         )
 
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        order = [c[4] for c in calls if c[:2] == ["pr", "view"] and
-                 c[4] in ("headRefOid", "mergeStateStatus")]
+        order = [
+            c[4]
+            for c in calls
+            if c[:2] == ["pr", "view"] and c[4] in ("headRefOid", "mergeStateStatus")
+        ]
         self.assertEqual(order, ["headRefOid", "mergeStateStatus"])
 
     def test_an_unreadable_head_is_an_error_and_never_merges(self):
@@ -415,8 +435,10 @@ class LandPrTest(unittest.TestCase):
     def test_a_lazily_computed_merge_state_is_read_once_more(self):
         pr = "32"
         merge = ("pr", "merge", pr, "--squash", "--delete-branch")
-        for first, second, merged in (("UNKNOWN", "CLEAN", True),
-                                      ("DRAFT", "BLOCKED", False)):
+        for first, second, merged in (
+            ("UNKNOWN", "CLEAN", True),
+            ("DRAFT", "BLOCKED", False),
+        ):
             with self.subTest(first=first, second=second):
                 proc, calls, sleeps = run_script_with_sleep_stub(
                     [pr, "--method", "squash", "--no-link-check"],
@@ -455,8 +477,9 @@ class LandPrTest(unittest.TestCase):
                         merge_state_prefix(pr): f"{merge_state}\n",
                         merge: "",
                         inspect_prefix(pr): (
-                            '{"mergeable":"MERGEABLE","mergeStateStatus":"%s",'
-                            '"reviewDecision":"REVIEW_REQUIRED"}\n' % merge_state),
+                            f'{{"mergeable":"MERGEABLE","mergeStateStatus":"{merge_state}",'
+                            '"reviewDecision":"REVIEW_REQUIRED"}\n'
+                        ),
                     },
                 )
 
@@ -495,7 +518,7 @@ class LandPrTest(unittest.TestCase):
                 merge_state_prefix(pr): "CLEAN\n",
                 merge: "",
                 inspect: '{"mergeable":"CONFLICTING","mergeStateStatus":"BLOCKED",'
-                        '"reviewDecision":"CHANGES_REQUESTED"}\n',
+                '"reviewDecision":"CHANGES_REQUESTED"}\n',
             },
             exits={merge: 1},
             stderrs={merge: "merge blocked\n"},
@@ -520,15 +543,18 @@ class LandPrTest(unittest.TestCase):
                 base: "main\n",
                 default_branch: "main\n",
                 closing: "42\n",
-                inspect_prefix(pr): '{"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN",'
-                                    '"reviewDecision":"APPROVED"}\n',
+                inspect_prefix(
+                    pr
+                ): '{"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN",'
+                '"reviewDecision":"APPROVED"}\n',
             },
         )
 
         mutating = [
-            call for call in calls
-            if call[:2] in (["pr", "merge"], ["pr", "ready"],
-                            ["pr", "edit"], ["issue", "close"])
+            call
+            for call in calls
+            if call[:2]
+            in (["pr", "merge"], ["pr", "ready"], ["pr", "edit"], ["issue", "close"])
         ]
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("result: DRY_RUN\n", proc.stdout)
@@ -576,7 +602,8 @@ class ReviewLogGuardTest(unittest.TestCase):
 
     def test_no_new_review_after_the_merged_head_lets_the_merge_through(self):
         proc, merges = self._land(
-            "67", f"verdict: NO_NEW_REVIEW\npr: 67\nafter_push: {SHA[:12]}\n")
+            "67", f"verdict: NO_NEW_REVIEW\npr: 67\nafter_push: {SHA[:12]}\n"
+        )
 
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("review: NO_NEW_REVIEW\n", proc.stdout)
@@ -588,7 +615,8 @@ class ReviewLogGuardTest(unittest.TestCase):
         for line in ("after_push: 89abcdef0123\n", "after_push: none\n", ""):
             with self.subTest(line=line):
                 proc, merges = self._land(
-                    "68", f"verdict: NO_NEW_REVIEW\npr: 68\n{line}")
+                    "68", f"verdict: NO_NEW_REVIEW\npr: 68\n{line}"
+                )
 
                 self.assertEqual(proc.returncode, 1)
                 self.assertIn("result: REVIEW_UNSETTLED\n", proc.stdout)

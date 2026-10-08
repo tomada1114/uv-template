@@ -5,6 +5,7 @@
 Run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
      (from the shipping-issues skill directory)
 """
+
 from __future__ import annotations
 
 import os
@@ -20,9 +21,9 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 
-from _fakegh import FakeGh  # noqa: E402
-import issue_digest as idg  # noqa: E402
-import run_record as rr  # noqa: E402
+import issue_digest as idg
+import run_record as rr
+from _fakegh import FakeGh
 
 PREFLIGHT = HERE.parent / "preflight.sh"
 
@@ -64,8 +65,9 @@ def preflight(repo: Path, env: dict[str, str]) -> dict[str, str]:
         full = {**fake.env, **env}
         if "AGENT_SKILL_STATE_DIR" not in env:
             full.pop("AGENT_SKILL_STATE_DIR", None)
-        proc = subprocess.run(["bash", str(PREFLIGHT)], cwd=repo, env=full,
-                              text=True, capture_output=True)
+        proc = subprocess.run(
+            ["bash", str(PREFLIGHT)], cwd=repo, env=full, text=True, capture_output=True
+        )
     out = {}
     for line in proc.stdout.splitlines():
         key, sep, value = line.partition(": ")
@@ -87,13 +89,18 @@ class RunstateParityTest(unittest.TestCase):
         # (a cloud session exports one through GIT_CONFIG_*, a parent `git -c`
         # through GIT_CONFIG_PARAMETERS) would rewrite the origin URLs under
         # test before the scripts read them.
-        self.env = {"HOME": str(self.home), "GIT_CONFIG_COUNT": "0",
-                    "GIT_CONFIG_PARAMETERS": "",
-                    "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+        self.env = {
+            "HOME": str(self.home),
+            "GIT_CONFIG_COUNT": "0",
+            "GIT_CONFIG_PARAMETERS": "",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_NOSYSTEM": "1",
+        }
 
     def _set_origin(self, url):
-        subprocess.run(["git", "remote", "remove", "origin"], cwd=self.repo,
-                       capture_output=True)
+        subprocess.run(
+            ["git", "remote", "remove", "origin"], cwd=self.repo, capture_output=True
+        )
         git(self.repo, "remote", "add", "origin", url)
 
     def _python(self, env):

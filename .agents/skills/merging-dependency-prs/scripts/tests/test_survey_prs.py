@@ -20,7 +20,7 @@ from unittest.mock import patch
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import survey_prs as sp  # noqa: E402
+import survey_prs as sp
 
 
 def pr(number, title, *, login="app/dependabot", branch=None, rollup=None, files=()):
@@ -32,8 +32,14 @@ def pr(number, title, *, login="app/dependabot", branch=None, rollup=None, files
         "baseRefName": "main",
         "mergeable": "MERGEABLE",
         "mergeStateStatus": "CLEAN",
-        "statusCheckRollup": rollup if rollup is not None else [
-            {"name": "Lint & Type Check", "status": "COMPLETED", "conclusion": "SUCCESS"},
+        "statusCheckRollup": rollup
+        if rollup is not None
+        else [
+            {
+                "name": "Lint & Type Check",
+                "status": "COMPLETED",
+                "conclusion": "SUCCESS",
+            },
         ],
         "labels": [{"name": "dependencies"}],
         "files": [{"path": p} for p in files],
@@ -181,11 +187,17 @@ class SelectRowsTest(unittest.TestCase):
         self.assertEqual(rows[1]["checks"], "PASSING")
 
     def test_contested_files(self):
-        rows = sp.select_bot_rows([
-            pr(1, "bump a from 1.0.0 to 1.0.1", files=[".github/workflows/ci.yml"]),
-            pr(2, "bump b from 1.0.0 to 1.0.1", files=[".github/workflows/ci.yml", "x"]),
-            pr(3, "bump c from 1.0.0 to 1.0.1", files=["y"]),
-        ])
+        rows = sp.select_bot_rows(
+            [
+                pr(1, "bump a from 1.0.0 to 1.0.1", files=[".github/workflows/ci.yml"]),
+                pr(
+                    2,
+                    "bump b from 1.0.0 to 1.0.1",
+                    files=[".github/workflows/ci.yml", "x"],
+                ),
+                pr(3, "bump c from 1.0.0 to 1.0.1", files=["y"]),
+            ]
+        )
         self.assertEqual(sp.contested_files(rows), {".github/workflows/ci.yml": [1, 2]})
 
 
@@ -195,8 +207,11 @@ class MainTest(unittest.TestCase):
             args=["gh"], returncode=0, stdout=json.dumps(payload), stderr=""
         )
         out, err = io.StringIO(), io.StringIO()
-        with patch.object(sp.subprocess, "run", return_value=completed) as run, \
-                redirect_stdout(out), redirect_stderr(err):
+        with (
+            patch.object(sp.subprocess, "run", return_value=completed) as run,
+            redirect_stdout(out),
+            redirect_stderr(err),
+        ):
             rc = sp.main(argv)
         return rc, out.getvalue(), err.getvalue(), run
 
@@ -208,32 +223,49 @@ class MainTest(unittest.TestCase):
         self.assertEqual(argv[:3], ["gh", "pr", "list"])
 
     def test_text_report_flags_pre_one_minor_and_unknown(self):
-        rc, out, _, _ = self._run([], [
-            pr(1, "bump a from 0.1.0 to 0.2.0"),
-            pr(2, "bump the actions group with 2 updates"),
-        ])
+        rc, out, _, _ = self._run(
+            [],
+            [
+                pr(1, "bump a from 0.1.0 to 0.2.0"),
+                pr(2, "bump the actions group with 2 updates"),
+            ],
+        )
         self.assertEqual(rc, 0)
         self.assertIn("2 open Dependabot PR(s)", out)
         self.assertIn("FLAG: 0.x minor change", out)
         self.assertIn("FLAG: versions not parsed", out)
 
     def test_text_report_lands_uv_lock_overlap_one_at_a_time(self):
-        rc, out, _, _ = self._run([], [
-            pr(1, "bump a from 1.0.0 to 1.0.1", branch="dependabot/uv/a-1.0.1",
-               files=["pyproject.toml", "uv.lock"]),
-            pr(2, "bump b from 1.0.0 to 2.0.0", branch="dependabot/uv/b-2.0.0",
-               files=["pyproject.toml", "uv.lock"]),
-        ])
+        rc, out, _, _ = self._run(
+            [],
+            [
+                pr(
+                    1,
+                    "bump a from 1.0.0 to 1.0.1",
+                    branch="dependabot/uv/a-1.0.1",
+                    files=["pyproject.toml", "uv.lock"],
+                ),
+                pr(
+                    2,
+                    "bump b from 1.0.0 to 2.0.0",
+                    branch="dependabot/uv/b-2.0.0",
+                    files=["pyproject.toml", "uv.lock"],
+                ),
+            ],
+        )
         self.assertEqual(rc, 0)
         self.assertNotIn("favor a combined branch", out)
         self.assertIn("land one at a time", out)
         self.assertIn("uv.lock: #1, #2", out)
 
     def test_text_report_favors_combined_branch_for_workflow_overlap(self):
-        rc, out, _, _ = self._run([], [
-            pr(1, "bump a from 1.0.0 to 1.0.1", files=[".github/workflows/ci.yml"]),
-            pr(2, "bump b from 1.0.0 to 1.0.1", files=[".github/workflows/ci.yml"]),
-        ])
+        rc, out, _, _ = self._run(
+            [],
+            [
+                pr(1, "bump a from 1.0.0 to 1.0.1", files=[".github/workflows/ci.yml"]),
+                pr(2, "bump b from 1.0.0 to 1.0.1", files=[".github/workflows/ci.yml"]),
+            ],
+        )
         self.assertEqual(rc, 0)
         self.assertIn("favor a combined branch", out)
         self.assertNotIn("land one at a time", out)
@@ -248,8 +280,11 @@ class MainTest(unittest.TestCase):
             args=["gh"], returncode=4, stdout="", stderr="auth required"
         )
         err = io.StringIO()
-        with patch.object(sp.subprocess, "run", return_value=failed), \
-                redirect_stdout(io.StringIO()), redirect_stderr(err):
+        with (
+            patch.object(sp.subprocess, "run", return_value=failed),
+            redirect_stdout(io.StringIO()),
+            redirect_stderr(err),
+        ):
             rc = sp.main([])
         self.assertEqual(rc, 1)
         self.assertIn("ERR_GH_FAILED", err.getvalue())
@@ -257,8 +292,11 @@ class MainTest(unittest.TestCase):
 
     def test_missing_gh_exits_1(self):
         err = io.StringIO()
-        with patch.object(sp.subprocess, "run", side_effect=FileNotFoundError("gh")), \
-                redirect_stdout(io.StringIO()), redirect_stderr(err):
+        with (
+            patch.object(sp.subprocess, "run", side_effect=FileNotFoundError("gh")),
+            redirect_stdout(io.StringIO()),
+            redirect_stderr(err),
+        ):
             rc = sp.main([])
         self.assertEqual(rc, 1)
         self.assertIn("ERR_GH_UNAVAILABLE", err.getvalue())
