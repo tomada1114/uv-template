@@ -134,7 +134,8 @@ the vendor's own `OPENROUTER_API_KEY`, read through a `validation_alias`
 - turned into the form the composition root needs by a property (`sqlite_path` turns
   `database_url` into a `Path`), so adapters never parse configuration strings;
 - deleted from the environment by `tests/conftest.py`'s autouse `_isolate_settings_env`
-  fixture, so a developer's shell cannot leak into a test — add the new variable there;
+  fixture, which derives the prefix and aliases from `Settings`, so a developer's
+  shell cannot leak into a test without a hand-kept variable list;
 - listed in the README's Configuration table.
 
 ## The composition root wires everything once
