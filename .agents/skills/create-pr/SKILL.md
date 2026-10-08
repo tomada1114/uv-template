@@ -111,7 +111,8 @@ Conventional Commit, and `.github/workflows/pr-label.yml` derives the PR's label
 its type, so the type is not decoration.
 
 - Choose a type from the explicit `types:` input in
-  `.github/workflows/check-pr-title.yml`, the canonical accepted-type list.
+  `.github/workflows/check-pr-title.yml`, the canonical accepted-type list, and
+  verify that `.github/workflows/pr-label.yml` maps it to a label.
 - The scope is the area the change lives in, matching recent history: `skills`,
   `hooks`, `github`, `deps`, `bootstrap`, or a layer (`core`, `api`, `cli`).
 - The summary is imperative and lower-case, with no trailing period, and says what the
