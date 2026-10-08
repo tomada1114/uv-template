@@ -86,7 +86,10 @@ read [cloud-host.md](references/cloud-host.md) once, and the repository
 instructions name (`git branch --show-current`), never the default branch. A dirty
 tree holds work this run did not make: stop and ask. Otherwise
 `git fetch origin <default> && git merge --no-edit origin/<default>`; a non-empty
-`git diff --stat origin/<default>` afterwards is the same stop. Record `run-start`.
+`git diff --stat origin/<default>` afterwards is the same stop — unless an open PR from
+this branch carries exactly that work: a run resumed on a fresh VM, which rebuilds its
+state from GitHub ([how](references/cloud-host.md#run-state-lives-on-the-vm)) and
+continues that PR from the step its state shows. Record `run-start`.
 
 ### 2. Rank
 

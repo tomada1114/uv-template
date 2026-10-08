@@ -54,9 +54,9 @@ equal substitute, never a different operation.
 
 `gh api` fills `{owner}` and `{repo}` from the current directory's repository or from
 `GH_REPO` (`gh api --help`, gh 2.92.0, observed 2026-10-07). Run every call from the
-checkout's root; if `gh` cannot tell the repository from the remote, set
-`GH_REPO=<owner>/<repo>` on the call, with the owner and name the session was started
-on.
+checkout's root; if `gh` cannot tell the repository from the remote, export
+`GH_REPO=<owner>/<repo>` (the owner and name the session was started on) for the rest
+of the run, so the `gh` calls `review_watch.py` makes itself see it too.
 
 ## A 403 from the proxy
 
@@ -136,6 +136,6 @@ checked 2026-10-07). Reopening a reclaimed session restores the conversation, no
 background work that was running — sub-agents and shell commands
 ([environment expired](https://code.claude.com/docs/en/claude-code-on-the-web#environment-expired),
 checked 2026-10-07). `<runstate>` is on that VM: a run that resumes on a fresh one
-starts with no `run.md`, no review logs, and no `<pr>-opening.json`. Rebuild what it
+starts with no `run.md`, no review logs, and no `<pr>-rounds.json`. Rebuild what it
 knows from GitHub — the open PR from the session's branch, its review summary, its
 check runs, and the issue's state — before writing anything.

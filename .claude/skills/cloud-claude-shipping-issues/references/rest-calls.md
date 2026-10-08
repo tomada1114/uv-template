@@ -47,14 +47,16 @@ mkdir -p <runstate>/rest
 gh api --paginate --slurp "repos/{owner}/{repo}/issues?state=open&per_page=100" > <runstate>/rest/issues.json
 gh api --paginate --slurp "repos/{owner}/{repo}/pulls?state=open&per_page=100" > <runstate>/rest/pulls.json
 python3 .agents/skills/shipping-issues/scripts/issue_digest.py --issues-file <runstate>/rest/issues.json \
-    --prs-file <runstate>/rest/pulls.json --select 3 --with-rank --detail-top 1 --body-chars 700
+    --prs-file <runstate>/rest/pulls.json --limit 100000 --select 3 --with-rank --detail-top 1 --body-chars 700
 ```
 
 The issues endpoint lists pull requests too, each marked by a `pull_request` key
 ([list repository issues](https://docs.github.com/en/rest/issues/issues#list-repository-issues),
 checked 2026-10-07); the digest drops them. Both files are required together, and file
-mode takes no `--label`, `--assignee`, or `--milestone` (exit 2); it ranks at most
-`--limit` issues (default 200), so pass `--limit 1000` on a larger backlog. A named
+mode takes no `--label`, `--assignee`, or `--milestone` (exit 2). It keeps only the
+first `--limit` issues in file order (default 200) and the REST list is newest first,
+so the limit is always passed above any backlog's size: a default would silently drop
+the oldest issues, a named one included. A named
 issue: add `--issue <n> --detail <n>` — naming it lifts only the design hold. Read
 `select:`, `next:`, `held:`, `needs-design:`, `tracking:` and the `labels:` line as the
 digest's own docstring describes them; `~P<n>` is a suggested tier.
@@ -157,9 +159,7 @@ for read in $(seq 1 16); do
     { runs++ }
     $1 != "completed" { pending++; next }
     $2 ~ /^(success|neutral|skipped)$/ { next }
-    $2 ~ /^(failure|cancelled|timed_out|action_required|startup_failure)$/ {
-      failed++; print "failed_check: " $3 > "/dev/stderr"; next }
-    { pending++ }
+    { failed++; print "failed_check: " $3 " (" $2 ")" > "/dev/stderr" }
     END {
       if (failed || state == "failure") print "FAIL"
       else if (runs + statuses == 0) print "EMPTY"
@@ -168,14 +168,16 @@ for read in $(seq 1 16); do
     }')
   echo "verdict: $verdict head_sha: $sha read: $read at: $(date -u +%FT%TZ)"
   case $verdict in PASS|FAIL) break ;; esac
-  sleep 30
+  [ "$read" -lt 16 ] && sleep 30
 done >> "$log" 2>&1; tail -n 3 "$log"
 ```
 
 The rule it applies: **PASS** when every check run is `completed` with `success`,
 `neutral`, or `skipped`, and the combined status is `success` or counts no status at
-all; **FAIL** on a check run concluding `failure`, `cancelled`, `timed_out`,
-`action_required`, or `startup_failure`, or a combined status of `failure`; **EMPTY**
+all; **FAIL** on a completed check run concluding anything else — `failure`,
+`cancelled`, `timed_out`, `action_required`, `startup_failure`, `stale`, or a value
+added later, so an unknown conclusion surfaces instead of waiting out the cap — or a
+combined status of `failure`; **EMPTY**
 when there is neither a check run nor a status; anything else is **PENDING**. Check-run
 statuses and conclusions are the enums of
 [list check runs for a Git reference](https://docs.github.com/en/rest/checks/runs#list-check-runs-for-a-git-reference),
@@ -246,7 +248,7 @@ After the merge, fetch the backlog again ([above](#the-backlog-and-the-pick)), t
 
 ```bash
 python3 .agents/skills/shipping-issues/scripts/issue_digest.py --issues-file <runstate>/rest/issues.json \
-    --prs-file <runstate>/rest/pulls.json --json --body-chars 0 \
+    --prs-file <runstate>/rest/pulls.json --limit 100000 --json --body-chars 0 \
   | python3 -c 'import json, sys; n = int(sys.argv[1]); print(" ".join(str(i["number"]) for i in json.load(sys.stdin)["issues"] if n in i["depends_on"] and "blocked: dependency" in i["stale_dependency_labels"]))' <n>
 ```
 

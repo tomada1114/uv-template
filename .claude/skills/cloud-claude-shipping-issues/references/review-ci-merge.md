@@ -105,14 +105,19 @@ log=<runstate>/review/<pr>.log; sha=<head_sha>
 v=$(sed -n 's/^verdict: //p' "$log"); p=$(sed -n 's/^after_push: //p' "$log"); n=$(sed -n 's/^pr: //p' "$log")
 gate=shut
 case $v in
-  CLEAN|FINDINGS) gate=open ;;
+  CLEAN) gate=open ;;
+  FINDINGS) gate=open
+    for id in $(sed -n 's/^  - F[0-9]* .* id=\([0-9]*\) .*/\1/p' "$log"); do
+      grep -q "id=$id " <runstate>/review/<pr>-triage.md 2>/dev/null || { gate=shut; echo "untriaged: id=$id"; }
+    done ;;
   NO_NEW_REVIEW) printf '%s\n' "$p" | grep -Eq '^[0-9a-f]{7,40}$' && case $sha in "$p"*) gate=open ;; esac ;;
 esac
 [ "$n" = <pr> ] || gate=shut; echo "review_gate: $gate (verdict $v, after_push $p, head $sha)"
 ```
 
 - `review_gate: open` with `CLEAN`, or `FINDINGS` whose every `F<n>` is in the ledger
-  with the fixes its round calls for pushed and covered by this `PASS`, or
+  (the snippet shuts the gate and prints `untriaged:` for each one that is not) with
+  the fixes its round calls for pushed and covered by this `PASS`, or
   `NO_NEW_REVIEW` whose `after_push:` is the head being merged: merge.
 - An `F<n>` not in the ledger — even one from a review that settled after the grace — is
   triaged first by its round's row; when the row calls for a fix, it is pushed and the
