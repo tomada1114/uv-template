@@ -3,8 +3,7 @@
 Used at [SKILL.md step 5](../SKILL.md#5-wait-for-the-pr-review) — only for the PR
 review's findings this session has already read and accepted
 ([triage](implement-and-review.md#triaging-the-reviews-findings)) for this PR, one brief
-per review round that has any, handed to **`executor`** (**`worker`** when every
-accepted finding names its `path:line` and its fix) or followed inline in that branch's
+per review round that has any, handed to **`executor`** or followed inline in that branch's
 own `{workdir}`.
 Zero accepted findings → nothing to run.
 

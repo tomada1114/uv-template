@@ -46,11 +46,7 @@ Fill [agent-implementation.md](agent-implementation.md) per issue
 ([delegation-templates.md](delegation-templates.md) holds the rules every brief shares).
 Where the host has named sub-agents, hand it to **`executor`** by default and to
 **`architect`** when the issue is foundational — blast radius, not difficulty
-([the foundation exception](cost-discipline.md#the-foundation-exception-architect-for-what-the-backlog-builds-on)) —
-and down to **`worker`** when it is small and settled: narrow scope, nothing to decide,
-and a Done-means that is a command or an existing test
-([the small-change step-down](cost-discipline.md#the-small-change-step-down-worker)); a
-`worker` miss goes to `executor` for the next round.
+([the foundation exception](cost-discipline.md#the-foundation-exception-architect-for-what-the-backlog-builds-on)).
 A change small enough that the handoff costs more than the work is implemented here
 rather than handed off
 ([the floor](cost-discipline.md#the-floor-too-small-to-delegate)). With no tiers — a
@@ -125,8 +121,7 @@ in the sign-off. A fix push may start another review on its own; step 5 waits fo
 
 Apply them **in the branch's own `<workdir>`** — never the main checkout in parallel
 mode, which sits on the default branch: inline, or by handing
-[agent-review-fix.md](agent-review-fix.md) to **`executor`** — **`worker`** when every
-accepted finding names its `path:line` and its fix — with the accepted findings as its
+[agent-review-fix.md](agent-review-fix.md) to **`executor`** with the accepted findings as its
 list. A review with zero accepted findings gets no fix run. **Keep the
 `review_watch.py` numbers** — the fix brief returns `APPLIED`/`REJECTED` against those
 same `F<n>`, and without them the returned lines cannot be matched back to what was
