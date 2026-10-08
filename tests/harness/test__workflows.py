@@ -313,3 +313,55 @@ jobs:
         "Build (linux-2)",
         "Build (windows-)",
     }
+
+
+@pytest.mark.parametrize(
+    ("matrix", "expected"),
+    [
+        ("OS: [linux, windows]", {"Build (linux-)", "Build (windows-)"}),
+        (
+            "OS: [linux, windows]\n        exclude: [{os: windows}]",
+            {"Build (linux-)"},
+        ),
+        (
+            (
+                "OS: [linux, windows]\n"
+                "        include: [{os: linux, Color: green}, {Os: macos, COLOR: blue}]"
+            ),
+            {"Build (linux-green)", "Build (windows-)", "Build (macos-blue)"},
+        ),
+    ],
+)
+def test_every_pr_checks_matrix_keys_ignore_case(
+    tmp_path: Path, matrix: str, expected: set[str]
+) -> None:
+    root = _workflow(
+        tmp_path,
+        "on: pull_request\njobs:\n  a:\n"
+        "    name: Build (${{ MaTrIx.os }}-${{ matrix.COLOR }})\n"
+        f"    strategy:\n      matrix:\n        {matrix}\n",
+    )
+
+    assert set(every_pr_checks(root)) == expected
+
+
+def test_every_pr_checks_workflow_merge_keys_fail_closed(tmp_path: Path) -> None:
+    root = _workflow(
+        tmp_path,
+        "on: pull_request\njobs:\n  a: &defaults {name: A}\n"
+        "  b: {<<: *defaults, name: B}\n",
+    )
+
+    with pytest.raises(UnreadableYamlError, match=r"merge keys.*GitHub Actions"):
+        every_pr_checks(root)
+
+
+def test_every_pr_checks_ambiguous_matrix_keys_fail_closed(tmp_path: Path) -> None:
+    root = _workflow(
+        tmp_path,
+        "on: pull_request\njobs:\n  a:\n    name: A (${{ matrix.os }})\n"
+        "    strategy:\n      matrix: {OS: [linux], os: [windows]}\n",
+    )
+
+    with pytest.raises(UnreadableYamlError, match="duplicate case-insensitive"):
+        every_pr_checks(root)

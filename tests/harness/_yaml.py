@@ -32,9 +32,10 @@ class _Scalar(str):
 
 # SafeLoader has no stubs; this boundary validates every consumed result.
 class _Loader(yaml.SafeLoader):  # type: ignore[misc]  # PyYAML is untyped
-    def __init__(self, text: str) -> None:
+    def __init__(self, text: str, *, allow_merges: bool = True) -> None:
         super().__init__(text)
         self.source = text
+        self.allow_merges = allow_merges
 
     def compose_node(self, parent: object, index: object) -> Node:
         # SafeLoader normally reuses an anchor's node for every alias. Keep
@@ -105,6 +106,13 @@ def _mapping(loader: _Loader, node: MappingNode) -> dict[object, object]:
     # intentionally let an explicit field override the inherited value.
     seen: set[object] = set()
     for key_node, _ in node.value:
+        if key_node.tag == "tag:yaml.org,2002:merge" and not loader.allow_merges:
+            raise yaml.constructor.ConstructorError(
+                None,
+                None,
+                "merge keys are not supported in GitHub Actions",
+                key_node.start_mark,
+            )
         key = (
             "<<"
             if key_node.tag == "tag:yaml.org,2002:merge"
@@ -140,10 +148,15 @@ _Loader.add_constructor("tag:yaml.org,2002:map", _mapping)
 _Loader.add_constructor("tag:yaml.org,2002:int", _integer)
 
 
-def load_yaml(path: Path, *, text: str | None = None) -> object:
+def load_yaml(
+    path: Path, *, text: str | None = None, allow_merges: bool = True
+) -> object:
     """Read safely; optional text is an issue template's YAML front matter."""
     try:
-        loader = _Loader(path.read_text(encoding="utf-8") if text is None else text)
+        loader = _Loader(
+            path.read_text(encoding="utf-8") if text is None else text,
+            allow_merges=allow_merges,
+        )
         try:
             result: object = loader.get_single_data()
         finally:
