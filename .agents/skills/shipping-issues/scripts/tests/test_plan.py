@@ -9,20 +9,21 @@ tests care about most is: does one invocation produce a usable plan, does the
 grouping degrade honestly when issues do not declare what they touch, and does
 it refuse to promise parallelism the repo cannot deliver.
 """
+
 from __future__ import annotations
 
 import io
 import json
 import sys
 import unittest
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import plan  # noqa: E402
+import plan
 
 PREFLIGHT = """git_repo: ok
 repo_root: /repo
@@ -48,48 +49,84 @@ verdict: READY
 """
 
 
-def rank_row(number, tier="P1", readiness="READY", touches=None, *, title=None,
-             depends=(), unblocks=()):
+def rank_row(
+    number,
+    tier="P1",
+    readiness="READY",
+    touches=None,
+    *,
+    title=None,
+    depends=(),
+    unblocks=(),
+):
     return {
-        "number": number, "title": title or f"fix(core): thing {number}",
-        "score": 5, "tier": tier, "contract_tier": None,
-        "confirmed_tier": tier, "suggested_tier": tier, "effective_tier": tier,
-        "readiness": readiness, "reasons": ["label:bug(+3)"],
-        "touches": list(touches or []), "area": None,
-        "depends_on_open": list(depends), "unblocks_open": list(unblocks),
+        "number": number,
+        "title": title or f"fix(core): thing {number}",
+        "score": 5,
+        "tier": tier,
+        "contract_tier": None,
+        "confirmed_tier": tier,
+        "suggested_tier": tier,
+        "effective_tier": tier,
+        "readiness": readiness,
+        "reasons": ["label:bug(+3)"],
+        "touches": list(touches or []),
+        "area": None,
+        "depends_on_open": list(depends),
+        "unblocks_open": list(unblocks),
     }
 
 
-def digest_payload(rows, needs_design=(), issues=None, stale_dependency=None,
-                   tracking=()):
+def digest_payload(
+    rows, needs_design=(), issues=None, stale_dependency=None, tracking=()
+):
     """`stale_dependency`, when given, maps issue number -> the stale label
     names it carries, and only affects the default `issues` records built
     here (an explicit `issues=` overrides it entirely, same as it does with
     `needs_design`'s design_labels)."""
     stale_dependency = stale_dependency or {}
     return {
-        "open_issue_count": len(rows), "open_pr_count": 0, "cache": "MISS",
-        "label_coverage": {"labeled": len(rows), "contract_ranked": 0,
-                           "total": len(rows), "complete": True,
-                           "unlabeled": [], "unranked": []},
-        "contract_coverage": {"full": 0, "partial": 0, "total": len(rows),
-                              "missing": [r["number"] for r in rows],
-                              "incomplete": {}},
+        "open_issue_count": len(rows),
+        "open_pr_count": 0,
+        "cache": "MISS",
+        "label_coverage": {
+            "labeled": len(rows),
+            "contract_ranked": 0,
+            "total": len(rows),
+            "complete": True,
+            "unlabeled": [],
+            "unranked": [],
+        },
+        "contract_coverage": {
+            "full": 0,
+            "partial": 0,
+            "total": len(rows),
+            "missing": [r["number"] for r in rows],
+            "incomplete": {},
+        },
         "needs_design": list(needs_design),
         "tracking_issues": sorted(tracking),
         "stale_dependency_labels": sorted(stale_dependency),
         "ranking": rows,
-        "issues": issues if issues is not None else [
-            {"number": n, "labels": ["bug"],
-             "stale_dependency_labels": stale_dependency.get(n, [])}
-            for n in sorted({r["number"] for r in rows} | set(stale_dependency))],
+        "issues": issues
+        if issues is not None
+        else [
+            {
+                "number": n,
+                "labels": ["bug"],
+                "stale_dependency_labels": stale_dependency.get(n, []),
+            }
+            for n in sorted({r["number"] for r in rows} | set(stale_dependency))
+        ],
     }
 
 
 class SlugTest(unittest.TestCase):
     def test_drops_the_conventional_commit_prefix(self):
-        self.assertEqual(plan.slugify("fix(test): the handler keys off env"),
-                         "the-handler-keys-off-env")
+        self.assertEqual(
+            plan.slugify("fix(test): the handler keys off env"),
+            "the-handler-keys-off-env",
+        )
 
     def test_truncates_on_a_word_boundary(self):
         slug = plan.slugify("a" * 10 + " " + "b" * 60)
@@ -105,7 +142,9 @@ class SlugTest(unittest.TestCase):
 
     def test_branch_name_falls_back_to_labels_then_chore(self):
         row = rank_row(85, title="Composed handler is wrong")
-        self.assertEqual(plan.branch_name(row, ["bug"]), "fix/85-composed-handler-is-wrong")
+        self.assertEqual(
+            plan.branch_name(row, ["bug"]), "fix/85-composed-handler-is-wrong"
+        )
         self.assertTrue(plan.branch_name(row, []).startswith("chore/85-"))
 
     def test_branch_name_survives_a_title_with_no_usable_slug(self):
@@ -127,8 +166,12 @@ class PathCollisionTest(unittest.TestCase):
     def test_the_same_directory_written_differently_still_collides(self):
         # The failure that matters: two issues editing one directory land in the
         # same batch and meet again as a merge conflict.
-        for a, b in ((["./src/"], ["src/"]), (["src"], ["src/"]),
-                     (["/src/api"], ["src/api/"]), (["src/api/"], ["src/"])):
+        for a, b in (
+            (["./src/"], ["src/"]),
+            (["src"], ["src/"]),
+            (["/src/api"], ["src/api/"]),
+            (["src/api/"], ["src/"]),
+        ):
             with self.subTest(a=a, b=b):
                 self.assertTrue(plan.paths_collide(a, b))
 
@@ -171,8 +214,10 @@ class GroupBatchesTest(unittest.TestCase):
         self.assertEqual(len(batches[0]), 10)
 
     def test_dependency_edges_split_a_batch_even_with_disjoint_paths(self):
-        rows = [rank_row(1, touches=["src/a/"], unblocks=[2]),
-                rank_row(2, touches=["src/b/"], depends=[1])]
+        rows = [
+            rank_row(1, touches=["src/a/"], unblocks=[2]),
+            rank_row(2, touches=["src/b/"], depends=[1]),
+        ]
         batches, _, _ = plan.group_batches(rows, 3)
         self.assertEqual([[r["number"] for r in b] for b in batches], [[1], [2]])
 
@@ -197,17 +242,27 @@ class MainTest(unittest.TestCase):
     boundary — the two are covered by their own test modules, and what matters
     here is how plan.py combines them."""
 
-    def _run(self, argv, rows, preflight=PREFLIGHT, preflight_rc=0, *,
-             needs_design=(), issues=None, worktrees=(), worktree_paths=(),
-             stale_dependency=None, tracking=()):
+    def _run(
+        self,
+        argv,
+        rows,
+        preflight=PREFLIGHT,
+        preflight_rc=0,
+        *,
+        needs_design=(),
+        issues=None,
+        worktrees=(),
+        worktree_paths=(),
+        stale_dependency=None,
+        tracking=(),
+    ):
         self.recorded: list[list[str]] = []
         paths = [f"/state/acme__widgets/worktrees/{n}" for n in worktrees]
         paths += list(worktree_paths)
-        self.worktree_list = "".join(
-            f"worktree {path}\nHEAD abc\n\n" for path in paths)
+        self.worktree_list = "".join(f"worktree {path}\nHEAD abc\n\n" for path in paths)
         payload = json.dumps(
-            digest_payload(rows, needs_design, issues, stale_dependency,
-                           tracking))
+            digest_payload(rows, needs_design, issues, stale_dependency, tracking)
+        )
 
         self.preflight_calls: list[list[str]] = []
 
@@ -228,9 +283,12 @@ class MainTest(unittest.TestCase):
             raise AssertionError(message)
 
         out, err = io.StringIO(), io.StringIO()
-        with patch.object(plan, "run", fake_run), \
-                patch.object(sys, "argv", ["plan.py", *argv]), \
-                redirect_stdout(out), redirect_stderr(err):
+        with (
+            patch.object(plan, "run", fake_run),
+            patch.object(sys, "argv", ["plan.py", *argv]),
+            redirect_stdout(out),
+            redirect_stderr(err),
+        ):
             try:
                 rc = plan.main()
             except SystemExit as exc:
@@ -269,16 +327,21 @@ class MainTest(unittest.TestCase):
         self.assertIn("confirm it is this repo's real gate", out)
 
     def test_no_verify_command_says_so_rather_than_going_quiet(self):
-        pre = PREFLIGHT.replace("verify_command: just verify",
-                                "verify_command: NONE")
+        pre = PREFLIGHT.replace("verify_command: just verify", "verify_command: NONE")
         rc, out, err = self._run([], [rank_row(1, touches=["a/"])], preflight=pre)
         self.assertIn("verify-check: NONE found", out)
 
     def test_a_missing_preflight_key_stops_the_run(self):
         # The silent version of this used to drop --verify from the batch
         # command, removing the baseline check with no message at all.
-        pre = "\n".join(line for line in PREFLIGHT.splitlines()
-                        if not line.startswith("verify_command:")) + "\n"
+        pre = (
+            "\n".join(
+                line
+                for line in PREFLIGHT.splitlines()
+                if not line.startswith("verify_command:")
+            )
+            + "\n"
+        )
         rc, out, err = self._run([], [rank_row(1, touches=["a/"])], preflight=pre)
         self.assertEqual(rc, 1)
         self.assertIn("preflight-keys-missing: verify_command", out)
@@ -317,18 +380,24 @@ class MainTest(unittest.TestCase):
         # readiness strings are the ones issue_digest.py prints for an open
         # blocker, an `on hold` label, a `blocked: external` label, and an
         # open PR.
-        for readiness in ("BLOCKED-BY:#2", "LABEL:on hold",
-                          "LABEL:blocked: external", "HAS-PR:#7"):
+        for readiness in (
+            "BLOCKED-BY:#2",
+            "LABEL:on hold",
+            "LABEL:blocked: external",
+            "HAS-PR:#7",
+        ):
             with self.subTest(readiness=readiness):
-                rows = [rank_row(2, touches=["b/"]),
-                        rank_row(1, readiness=readiness, touches=["a/"])]
+                rows = [
+                    rank_row(2, touches=["b/"]),
+                    rank_row(1, readiness=readiness, touches=["a/"]),
+                ]
                 rc, out, err = self._run(["--mode", "1"], rows)
                 self.assertEqual(rc, 0, err)
-                self.assertIn(f"select: none — #1 is not ready: {readiness}\n",
-                              out)
+                self.assertIn(f"select: none — #1 is not ready: {readiness}\n", out)
                 self.assertNotIn("git switch -c", out)
-                self.assertIn(f"next: nothing to ship — #1 is not ready: "
-                              f"{readiness}", out)
+                self.assertIn(
+                    f"next: nothing to ship — #1 is not ready: {readiness}", out
+                )
 
     def test_explicit_issue_not_ready_reaches_the_json_and_the_record(self):
         rows = [rank_row(1, readiness="LABEL:on hold")]
@@ -337,8 +406,7 @@ class MainTest(unittest.TestCase):
         payload = json.loads(out)
         self.assertIsNone(payload["select"])
         self.assertEqual(payload["batches"], [])
-        self.assertEqual(payload["select_hold"],
-                         "#1 is not ready: LABEL:on hold")
+        self.assertEqual(payload["select_hold"], "#1 is not ready: LABEL:on hold")
         events = [cmd[cmd.index("--event") + 1] for cmd in self.recorded]
         self.assertEqual(events, ["run-start"])
 
@@ -349,23 +417,23 @@ class MainTest(unittest.TestCase):
         self.assertNotIn("select: #1", out)
 
     def test_explicit_tracking_issue_is_not_selected_and_says_why(self):
-        rc, out, err = self._run(["--mode", "9", "--json"],
-                                 [rank_row(1, touches=["a/"])], tracking=[9])
+        rc, out, err = self._run(
+            ["--mode", "9", "--json"], [rank_row(1, touches=["a/"])], tracking=[9]
+        )
         self.assertEqual(rc, 0, err)
         payload = json.loads(out)
         self.assertIsNone(payload["select"])
         self.assertEqual(payload["tracking_issues"], [9])
-        self.assertEqual(payload["select_hold"],
-                         "#9 is a tracking issue — ship one of its sub-issues "
-                         "instead")
+        self.assertEqual(
+            payload["select_hold"],
+            "#9 is a tracking issue — ship one of its sub-issues instead",
+        )
 
     def test_tracking_issues_are_listed_beside_the_pick(self):
-        rc, out, err = self._run([], [rank_row(1, touches=["a/"])],
-                                 tracking=[9, 4])
+        rc, out, err = self._run([], [rank_row(1, touches=["a/"])], tracking=[9, 4])
         self.assertEqual(rc, 0, err)
         self.assertIn("select: #1", out)
-        self.assertIn("tracking: #4,#9 → never ranked; ship their sub-issues",
-                      out)
+        self.assertIn("tracking: #4,#9 → never ranked; ship their sub-issues", out)
 
     def test_no_tracking_issue_prints_no_tracking_line(self):
         rc, out, err = self._run([], [rank_row(1, touches=["a/"])])
@@ -396,8 +464,10 @@ class MainTest(unittest.TestCase):
     def test_stale_dependency_labels_print_the_clear_command(self):
         rows = [rank_row(1, touches=["a/"])]
         rc, out, err = self._run(
-            [], rows,
-            stale_dependency={12: ["blocked: dependency"], 15: ["blocked: dependency"]})
+            [],
+            rows,
+            stale_dependency={12: ["blocked: dependency"], 15: ["blocked: dependency"]},
+        )
         self.assertIn(
             "stale-labels: #12,#15 → blocked: dependency with every "
             "dependency closed; clear with apply_priority_labels.py "
@@ -411,9 +481,12 @@ class MainTest(unittest.TestCase):
         self.assertNotIn("stale-labels:", out)
 
     def test_blocked_preflight_stops_the_run(self):
-        rc, out, err = self._run([], [rank_row(1)],
-                                 preflight="git_repo: NOT_A_REPO\nverdict: BLOCKED\n",
-                                 preflight_rc=1)
+        rc, out, err = self._run(
+            [],
+            [rank_row(1)],
+            preflight="git_repo: NOT_A_REPO\nverdict: BLOCKED\n",
+            preflight_rc=1,
+        )
         self.assertEqual(rc, 1)
         self.assertIn("verdict: BLOCKED", out)
 
@@ -421,16 +494,25 @@ class MainTest(unittest.TestCase):
         # Unstubbed: plan.py runs the real preflight.sh, which must stop on the
         # host variable before it touches git or gh.
         out, err = io.StringIO(), io.StringIO()
-        with patch.dict("os.environ", {"CLAUDE_CODE_REMOTE": "true"}), \
-                patch.object(sys, "argv", ["plan.py", "--mode", "single"]), \
-                redirect_stdout(out), redirect_stderr(err):
+        with (
+            patch.dict("os.environ", {"CLAUDE_CODE_REMOTE": "true"}),
+            patch.object(sys, "argv", ["plan.py", "--mode", "single"]),
+            redirect_stdout(out),
+            redirect_stderr(err),
+        ):
             rc = plan.main()
         self.assertEqual(rc, 1)
         lines = out.getvalue().splitlines()
-        self.assertEqual(lines[:2], [
-            "host: cloud",
-            ("next: in a Claude Code cloud session use the "
-             "cloud-claude-shipping-issues skill")])
+        self.assertEqual(
+            lines[:2],
+            [
+                "host: cloud",
+                (
+                    "next: in a Claude Code cloud session use the "
+                    "cloud-claude-shipping-issues skill"
+                ),
+            ],
+        )
         self.assertEqual(lines[-1], "verdict: BLOCKED")
 
     def test_record_writes_run_start_selection_and_the_group(self):
@@ -462,7 +544,8 @@ class MainTest(unittest.TestCase):
     def test_json_output_carries_stale_dependency_labels(self):
         rows = [rank_row(1, touches=["a/"])]
         rc, out, err = self._run(
-            ["--json"], rows, stale_dependency={12: ["blocked: dependency"]})
+            ["--json"], rows, stale_dependency={12: ["blocked: dependency"]}
+        )
         payload = json.loads(out)
         self.assertEqual(payload["stale_dependency_labels"], [12])
 
@@ -473,29 +556,32 @@ class MainTest(unittest.TestCase):
         self.assertEqual(len(self.preflight_calls), 2)
         self.assertNotIn("--with-github", self.preflight_calls[0])
         self.assertIn("--with-github", self.preflight_calls[1])
-        self.assertIn("/state/acme__widgets/repo-profile.json",
-                      self.preflight_calls[1])
+        self.assertIn("/state/acme__widgets/repo-profile.json", self.preflight_calls[1])
 
     def test_leftover_worktrees_stop_the_opening_plan(self):
-        rc, out, err = self._run([], [rank_row(1, touches=["a/"])],
-                                 worktrees=[90, 94])
+        rc, out, err = self._run([], [rank_row(1, touches=["a/"])], worktrees=[90, 94])
         self.assertEqual(rc, 1)
         self.assertIn("existing-worktrees: 90, 94", out)
         self.assertIn("verdict: BLOCKED", out)
         self.assertNotIn("select:", out)
 
     def test_a_re_plan_may_carry_its_own_worktrees(self):
-        rc, out, err = self._run(["--allow-existing-worktrees"],
-                                 [rank_row(1, touches=["a/"])], worktrees=[90])
+        rc, out, err = self._run(
+            ["--allow-existing-worktrees"],
+            [rank_row(1, touches=["a/"])],
+            worktrees=[90],
+        )
         self.assertEqual(rc, 0, err)
         self.assertIn("select: #1", out)
 
     def test_worktrees_outside_this_runs_root_are_not_leftovers(self):
         # The developer's own worktree elsewhere on disk, plus the main
         # checkout git always lists first: neither is this run's business.
-        rc, out, err = self._run([], [rank_row(1, touches=["a/"])],
-                                 worktree_paths=["/repo",
-                                                 "/somewhere/else/feature-x"])
+        rc, out, err = self._run(
+            [],
+            [rank_row(1, touches=["a/"])],
+            worktree_paths=["/repo", "/somewhere/else/feature-x"],
+        )
         self.assertEqual(rc, 0, err)
         self.assertIn("select: #1", out)
 

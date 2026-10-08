@@ -147,7 +147,8 @@ Skills are authored under `.agents/skills/` (Codex CLI) and mirrored into
 | `authoring-skills` | adding, editing, or reviewing a skill under `.agents/skills/`, or a skill never fires |
 | `building-api-routes` | adding or changing an HTTP route, request or response model, or API dependency, and the TestClient tests for it |
 | `changing-gates` | editing a hook, a CI workflow, the ruleset, or a ruff, mypy, pytest, or coverage setting, or asking whether a change weakens a gate |
-| `codex-shipping-issues` | shipping one GitHub issue from a Codex-managed checkout through a regular PR, one initial Codex review with findings addressed, current-head CI, and an explicitly authorized merge |
+| `cloud-claude-shipping-issues` | Claude Code cloud sessions only (`CLAUDE_CODE_REMOTE=true`): shipping the next issue or the backlog over REST `gh api` calls, serially — rank, implement, PR, the PR's review, CI, merge, follow-ups |
+| `codex-shipping-issues` | shipping one GitHub issue from a Codex-managed checkout through a regular PR, up to three Codex review rounds with their findings addressed, current-head CI, and an explicitly authorized merge |
 | `create-pr` | opening or updating a pull request by hand |
 | `designing-clis` | adding or changing a `my-app` command, its arguments, or its output, and the CliRunner tests for it |
 | `designing-core-logic` | adding a use case, domain rule, port, adapter, or `MY_APP_*` setting, or wiring the composition root |
@@ -178,14 +179,20 @@ named sub-agent, a step marked for a tier may go to one of three:
 |---|---|---|
 | `executor` | low | a settled spec with a clear pass/fail: implementing it, adding tests, getting a check green, bulk edits, research that only collects |
 | `architect` | high | design judgment, review and bug finding, multi-file work, synthesis, a spec that still has holes |
-| `worker` | medium | single-shot, tool-free writing or checking from a complete brief |
+| `worker` | max | a small, settled change: narrow scope (one module and its test, or the files the brief names), done when a command or an existing test passes; or writing and checking to a complete brief |
 
 Both hosts define the same three: `.claude/agents/<tier>.md` pins a model alias
-(`opus`, or `sonnet` for `worker` — never a dated model ID) and an `effort`;
-`.codex/agents/<tier>.toml` sets only `model_reasoning_effort`, so the session's
-model is inherited. `tests/test_agent_tiers.py` holds their instructions equal.
+(`opus`, or `haiku` for `worker` — never a dated model ID) and an `effort`;
+`.codex/agents/<tier>.toml` sets `model_reasoning_effort`, and only `worker` also
+pins a `model` (`gpt-6-luna`) — the others inherit the session's.
+`worker` is the cost tier: a small model at its highest effort.
+`tests/test_agent_tiers.py` holds their instructions equal.
 
 - Neither file declares a permission — no `sandbox_mode`, no tool list.
+- A model alias resolves per provider: on Bedrock, Vertex, Foundry, or Claude
+  Platform on AWS, `haiku` can map to an older Haiku without `max` effort. Pin the
+  model the tier expects there with `ANTHROPIC_DEFAULT_HAIKU_MODEL` (and
+  `ANTHROPIC_DEFAULT_OPUS_MODEL`) in your own settings, not in this repository.
 - Codex CLI loads `.codex/` only for a trusted project (in an untrusted
   checkout a step marked for a tier runs inline), and `.codex/agents/worker.toml`
   replaces Codex's built-in `worker` inside this repository on purpose.
@@ -200,6 +207,9 @@ model is inherited. `tests/test_agent_tiers.py` holds their instructions equal.
 - In Codex, always load the repository-local `codex-shipping-issues` for issue
   shipping; it takes precedence over a global skill of the same name. The existing
   `shipping-issues` workflow is Claude Code only and is never executed by Codex.
+- In a Claude Code cloud session (`CLAUDE_CODE_REMOTE=true`), ship issues with
+  `cloud-claude-shipping-issues`, never `shipping-issues`, whose scripts' GraphQL
+  calls the session's GitHub proxy refuses.
 - In Codex, use GitHub MCP for all remote GitHub operations; never invoke `gh`
   directly or through live-GitHub helpers, and never use a direct HTTP fallback.
   Report missing MCP capabilities. Local checkout, commit and push use Git;
@@ -229,6 +239,16 @@ sign-off for exactly those, for that invocation only:
   `just labels`, pushing its own branches, creating the pull request, merging
   it once CI passes, filing and labelling follow-up issues and the comments it
   posts, and deleting the branches it created.
+- `cloud-claude-shipping-issues`: the writes its `SKILL.md` lists — pushing its own
+  branch; creating the pull request; on that open PR alone, appending `Closes #<n>` to
+  its body when missing or retargeting its base to the default branch; merging it once
+  CI passes; closing by hand, with a back-reference comment naming the PR, the issue
+  that merged PR was meant to close when GitHub left it open; for the design-held issue
+  the run takes on, its design-decision comment and then clearing its design block
+  (the design-block label and the ship contract's `design=open`); filing and labelling
+  follow-up issues; and removing `blocked: dependency` from the issues its merge
+  unblocked — never a force-push, a branch deletion, a reply to or resolution of a
+  review thread, `@codex review`, `just labels`, or Auto-fix.
 - `create-pr`: pushing the current branch, `gh pr create` for it, and
   `gh pr edit` on its own open pull request — never a force-push or a merge.
 - `smart-commit`: the commits it makes on the current branch, and pushing that

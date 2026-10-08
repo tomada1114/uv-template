@@ -52,11 +52,18 @@ DEFAULT_MAX_PARALLEL = 3
 # conventional-commit prefix first, then its labels, so a repo that writes
 # `fix(test): …` titles gets `fix/…` branches without being asked.
 TYPE_FROM_LABEL = {
-    "bug": "fix", "defect": "fix", "regression": "fix",
-    "enhancement": "feat", "feature": "feat",
-    "documentation": "docs", "docs": "docs",
-    "chore": "chore", "test": "test", "refactor": "refactor",
-    "performance": "perf", "security": "fix",
+    "bug": "fix",
+    "defect": "fix",
+    "regression": "fix",
+    "enhancement": "feat",
+    "feature": "feat",
+    "documentation": "docs",
+    "docs": "docs",
+    "chore": "chore",
+    "test": "test",
+    "refactor": "refactor",
+    "performance": "perf",
+    "security": "fix",
 }
 
 
@@ -77,7 +84,7 @@ def existing_worktrees(runstate: str) -> list[str]:
     found = []
     for line in out.splitlines():
         if line.startswith("worktree "):
-            path = line[len("worktree "):].strip()
+            path = line[len("worktree ") :].strip()
             if path.startswith(root + "/"):
                 found.append(Path(path).name)
     return found
@@ -89,8 +96,7 @@ def run(cmd: list[str]) -> tuple[int, str, str]:
 
 
 def parse_kv(text: str) -> dict[str, str]:
-    """`key: value` lines into a dict. Later keys win; indented continuation
-    lines (preflight prints the dirty files that way) are ignored."""
+    """`key: value` lines into a dict. Later keys win; indented continuation lines (preflight prints the dirty files that way) are ignored."""
     out: dict[str, str] = {}
     for line in text.splitlines():
         if not line or line[0].isspace():
@@ -102,8 +108,7 @@ def parse_kv(text: str) -> dict[str, str]:
 
 
 def slugify(title: str, limit: int = 40) -> str:
-    """A branch-safe slug. Non-ASCII titles collapse to nothing rather than to
-    mojibake, and the caller is expected to fill in a slug of its own then."""
+    """A branch-safe slug. Non-ASCII titles collapse to nothing rather than to mojibake, and the caller is expected to fill in a slug of its own then."""
     body = re.sub(r"^\s*\w+(\([^)]*\))?\s*:\s*", "", title)  # drop `fix(test): `
     slug = re.sub(r"[^a-z0-9]+", "-", body.lower()).strip("-")
     if len(slug) > limit:
@@ -112,8 +117,11 @@ def slugify(title: str, limit: int = 40) -> str:
 
 
 def branch_type(row: dict[str, Any], labels: list[str]) -> str:
-    m = re.match(r"^\s*(feat|fix|docs|chore|test|refactor|perf|build|ci|style)\b",
-                 row.get("title", ""), re.IGNORECASE)
+    m = re.match(
+        r"^\s*(feat|fix|docs|chore|test|refactor|perf|build|ci|style)\b",
+        row.get("title", ""),
+        re.IGNORECASE,
+    )
     if m:
         return m.group(1).lower()
     for label in labels:
@@ -195,47 +203,68 @@ def group_batches(
                 # reason dependency edges are read at all.
                 or depends & in_batch
                 or unblocks & in_batch
-                or any(paths_collide(row.get("touches") or [],
-                                     b.get("touches") or []) for b in batch)
+                or any(
+                    paths_collide(row.get("touches") or [], b.get("touches") or [])
+                    for b in batch
+                )
             )
             (rest if conflict else batch).append(row)
         batches.append(batch)
         remaining = rest
     lead = batches[0] if batches else []
     undeclared = [r["number"] for r in lead if not r.get("touches")]
-    confidence = ("SERIAL" if len(lead) < 2
-                  else "PARTIAL" if undeclared else "MECHANICAL")
+    confidence = (
+        "SERIAL" if len(lead) < 2 else "PARTIAL" if undeclared else "MECHANICAL"
+    )
     return batches, confidence, undeclared
 
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--mode", default="single",
-                   help="all | single | an issue number (the skill's argument)")
-    p.add_argument("--max-parallel", type=int, default=DEFAULT_MAX_PARALLEL,
-                   help=f"worktrees held open at once in all mode "
-                        f"(default {DEFAULT_MAX_PARALLEL}); the user asking for "
-                        f"more is the only reason to raise it")
+    p.add_argument(
+        "--mode",
+        default="single",
+        help="all | single | an issue number (the skill's argument)",
+    )
+    p.add_argument(
+        "--max-parallel",
+        type=int,
+        default=DEFAULT_MAX_PARALLEL,
+        help=f"worktrees held open at once in all mode "
+        f"(default {DEFAULT_MAX_PARALLEL}); the user asking for "
+        f"more is the only reason to raise it",
+    )
     p.add_argument("--label", action="append", default=[])
     p.add_argument("--assignee")
     p.add_argument("--milestone")
     p.add_argument("--include-design", action="store_true")
-    p.add_argument("--refresh", action="store_true",
-                   help="re-fetch instead of reading the digest cache")
-    p.add_argument("--record", action="store_true",
-                   help="write run-start and selection to the run record")
-    p.add_argument("--allow-existing-worktrees", action="store_true",
-                   help="do not stop on worktrees already under this run's own "
-                        "root. Required for the re-plans at steps 7 and 8c, "
-                        "where the run's own worktrees are supposed to be there")
+    p.add_argument(
+        "--refresh",
+        action="store_true",
+        help="re-fetch instead of reading the digest cache",
+    )
+    p.add_argument(
+        "--record",
+        action="store_true",
+        help="write run-start and selection to the run record",
+    )
+    p.add_argument(
+        "--allow-existing-worktrees",
+        action="store_true",
+        help="do not stop on worktrees already under this run's own "
+        "root. Required for the re-plans at steps 7 and 8c, "
+        "where the run's own worktrees are supposed to be there",
+    )
     p.add_argument("--json", action="store_true", dest="as_json")
     args = p.parse_args()
 
     explicit_issue = None
     if args.mode not in ("all", "single"):
         if not args.mode.lstrip("#").isdigit():
-            print("error: --mode takes 'all', 'single' or an issue number",
-                  file=sys.stderr)
+            print(
+                "error: --mode takes 'all', 'single' or an issue number",
+                file=sys.stderr,
+            )
             return 2
         explicit_issue = int(args.mode.lstrip("#"))
     if args.max_parallel < 1:
@@ -270,14 +299,25 @@ def main() -> int:
     # provisioned with no baseline at all and nothing said so, which quietly
     # removes the check that catches a broken repo before three implementation
     # runs are spent on it. Missing keys are now a stop.
-    missing_keys = [k for k in ("repo_slug", "default_branch", "runstate",
-                                "verify_command", "pkg_manager", "hooks")
-                    if k not in pre]
+    missing_keys = [
+        k
+        for k in (
+            "repo_slug",
+            "default_branch",
+            "runstate",
+            "verify_command",
+            "pkg_manager",
+            "hooks",
+        )
+        if k not in pre
+    ]
     if missing_keys:
         print("# shipping-issues plan")
         print("preflight-keys-missing: " + ",".join(missing_keys))
-        print("plan.py reads preflight.sh by key name and will not guess at a "
-              "missing one. Run preflight.sh directly to see what it printed.")
+        print(
+            "plan.py reads preflight.sh by key name and will not guess at a "
+            "missing one. Run preflight.sh directly to see what it printed."
+        )
         print("verdict: BLOCKED")
         return 1
 
@@ -294,11 +334,15 @@ def main() -> int:
         print("# shipping-issues plan")
         print(f"repo: {pre.get('repo_slug', '?')} · runstate: {runstate}")
         print("existing-worktrees: " + ", ".join(leftovers))
-        print("These are under this run's own root and this run did not create "
-              "them. Confirm nothing is running in them, then either remove "
-              "them or re-run with --allow-existing-worktrees:")
-        print(f"  {SKILL_DIR}/cleanup_run.sh --dry-run "
-              f"--worktree-root {runstate}/worktrees")
+        print(
+            "These are under this run's own root and this run did not create "
+            "them. Confirm nothing is running in them, then either remove "
+            "them or re-run with --allow-existing-worktrees:"
+        )
+        print(
+            f"  {SKILL_DIR}/cleanup_run.sh --dry-run "
+            f"--worktree-root {runstate}/worktrees"
+        )
         print("verdict: BLOCKED")
         return 1
 
@@ -306,8 +350,15 @@ def main() -> int:
     # --json returns the whole payload regardless of the text-output flags, and
     # --body-chars 0 is what keeps issue prose out of it: the plan is a decision
     # block, and reading bodies is the separate, deliberate --detail-top call.
-    digest_cmd = [sys.executable, str(SKILL_DIR / "issue_digest.py"),
-                  "--json", "--body-chars", "0", "--cache-ttl", "300"]
+    digest_cmd = [
+        sys.executable,
+        str(SKILL_DIR / "issue_digest.py"),
+        "--json",
+        "--body-chars",
+        "0",
+        "--cache-ttl",
+        "300",
+    ]
     for label in args.label:
         digest_cmd += ["--label", label]
     if args.assignee:
@@ -332,7 +383,8 @@ def main() -> int:
     labels_by_number = {i["number"]: i["labels"] for i in digest["issues"]}
     stale_dependency_by_number = {
         i["number"]: i["stale_dependency_labels"]
-        for i in digest["issues"] if i.get("stale_dependency_labels")
+        for i in digest["issues"]
+        if i.get("stale_dependency_labels")
     }
     ranking = digest["ranking"]
     tracking = digest["tracking_issues"]
@@ -344,14 +396,17 @@ def main() -> int:
     if explicit_issue is not None:
         named = [r for r in ranking if r["number"] == explicit_issue]
         if explicit_issue in tracking:
-            explicit_hold = (f"#{explicit_issue} is a tracking issue — ship one of "
-                             "its sub-issues instead")
+            explicit_hold = (
+                f"#{explicit_issue} is a tracking issue — ship one of "
+                "its sub-issues instead"
+            )
         elif not named:
-            explicit_hold = (f"#{explicit_issue} is not an open, shippable issue "
-                             "in the digest (closed, or outside the filter)")
+            explicit_hold = (
+                f"#{explicit_issue} is not an open, shippable issue "
+                "in the digest (closed, or outside the filter)"
+            )
         elif named[0]["readiness"] != "READY":
-            explicit_hold = (f"#{explicit_issue} is not ready: "
-                             f"{named[0]['readiness']}")
+            explicit_hold = f"#{explicit_issue} is not ready: {named[0]['readiness']}"
         ready = [r for r in named if r["readiness"] == "READY"]
 
     # --- 3. grouping -------------------------------------------------------
@@ -369,8 +424,9 @@ def main() -> int:
 
     lead = batches[0] if batches else []
     plan_mode = "parallel" if confidence in ("MECHANICAL", "PARTIAL") else "serial"
-    branches = {r["number"]: branch_name(r, labels_by_number.get(r["number"], []))
-                for r in lead}
+    branches = {
+        r["number"]: branch_name(r, labels_by_number.get(r["number"], [])) for r in lead
+    }
     if plan_mode == "parallel":
         specs = " ".join(f"--spec {n}:{b}" for n, b in branches.items())
         verify = pre["verify_command"]
@@ -382,8 +438,10 @@ def main() -> int:
         )
     elif lead:
         n = lead[0]["number"]
-        next_cmd = (f"git switch {pre.get('default_branch', 'main')} && "
-                    f"git pull --ff-only && git switch -c {branches[n]}")
+        next_cmd = (
+            f"git switch {pre.get('default_branch', 'main')} && "
+            f"git pull --ff-only && git switch -c {branches[n]}"
+        )
     elif explicit_hold:
         next_cmd = f"nothing to ship — {explicit_hold}"
     else:
@@ -413,28 +471,49 @@ def main() -> int:
     }
 
     if args.record:
-        record = [sys.executable, str(SKILL_DIR / "run_record.py"),
-                  "--event", "run-start", "--field", f"mode={args.mode}"]
+        record = [
+            sys.executable,
+            str(SKILL_DIR / "run_record.py"),
+            "--event",
+            "run-start",
+            "--field",
+            f"mode={args.mode}",
+        ]
         slug = pre.get("repo_slug")
         if slug and slug != "UNKNOWN":
             record += ["--repo", slug]
         run(record)
         if lead:
-            sel = [sys.executable, str(SKILL_DIR / "run_record.py"),
-                   "--event", "selection",
-                   "--field", f"issue={lead[0]['number']}",
-                   "--field", f"tier={lead[0]['effective_tier']}",
-                   "--field", f"plan={plan_mode}",
-                   "--field", f"batch={','.join(str(r['number']) for r in lead)}"]
+            sel = [
+                sys.executable,
+                str(SKILL_DIR / "run_record.py"),
+                "--event",
+                "selection",
+                "--field",
+                f"issue={lead[0]['number']}",
+                "--field",
+                f"tier={lead[0]['effective_tier']}",
+                "--field",
+                f"plan={plan_mode}",
+                "--field",
+                f"batch={','.join(str(r['number']) for r in lead)}",
+            ]
             if slug and slug != "UNKNOWN":
                 sel += ["--repo", slug]
             run(sel)
         if plan_mode == "parallel":
-            grp = [sys.executable, str(SKILL_DIR / "run_record.py"),
-                   "--event", "parallel-group",
-                   "--field", f"issues={','.join(str(r['number']) for r in lead)}",
-                   "--field", "mode=parallel",
-                   "--field", f"reason=grouping={confidence}"]
+            grp = [
+                sys.executable,
+                str(SKILL_DIR / "run_record.py"),
+                "--event",
+                "parallel-group",
+                "--field",
+                f"issues={','.join(str(r['number']) for r in lead)}",
+                "--field",
+                "mode=parallel",
+                "--field",
+                f"reason=grouping={confidence}",
+            ]
             if slug and slug != "UNKNOWN":
                 grp += ["--repo", slug]
             run(grp)
@@ -446,16 +525,22 @@ def main() -> int:
 
     ccov = digest["contract_coverage"]
     print("# shipping-issues plan")
-    print(f"repo: {pre.get('repo_slug', '?')} · default: "
-          f"{pre.get('default_branch', '?')} · runstate: {runstate or '?'}")
-    print(f"preflight: {pre.get('verdict', '?')} · tree: "
-          f"{pre.get('working_tree', '?')} · worktrees: "
-          f"{pre.get('existing_worktrees', 'none')}")
-    print(f"profile: pkg={pre.get('pkg_manager', '?')} "
-          f"verify={pre.get('verify_command', '?')!r} "
-          f"hooks={pre.get('hooks', '?')} "
-          f"worktree_viable={pre.get('worktree_viable', 'unknown')} "
-          f"(cache {pre.get('profile_cache', 'off')})")
+    print(
+        f"repo: {pre.get('repo_slug', '?')} · default: "
+        f"{pre.get('default_branch', '?')} · runstate: {runstate or '?'}"
+    )
+    print(
+        f"preflight: {pre.get('verdict', '?')} · tree: "
+        f"{pre.get('working_tree', '?')} · worktrees: "
+        f"{pre.get('existing_worktrees', 'none')}"
+    )
+    print(
+        f"profile: pkg={pre.get('pkg_manager', '?')} "
+        f"verify={pre.get('verify_command', '?')!r} "
+        f"hooks={pre.get('hooks', '?')} "
+        f"worktree_viable={pre.get('worktree_viable', 'unknown')} "
+        f"(cache {pre.get('profile_cache', 'off')})"
+    )
     print(f"github: auth={pre.get('gh_auth', '?')} write={pre.get('gh_write', '?')}")
     # The verify command is a guess from script names, and it gets executed as
     # the baseline. Saying where it came from is what lets the caller notice
@@ -463,33 +548,56 @@ def main() -> int:
     # test`, or that the chosen script starts a watcher and will never exit.
     verify = pre["verify_command"]
     if verify == "NONE":
-        print("verify-check: NONE found — decide the baseline command yourself, "
-              "or run without one and say so in the report")
+        print(
+            "verify-check: NONE found — decide the baseline command yourself, "
+            "or run without one and say so in the report"
+        )
     else:
-        print(f"verify-check: {verify!r} (from {pre.get('verify_source', '?')}) "
-              "— confirm it is this repo's real gate and that it terminates")
+        print(
+            f"verify-check: {verify!r} (from {pre.get('verify_source', '?')}) "
+            "— confirm it is this repo's real gate and that it terminates"
+        )
     print()
-    print(f"backlog: {digest['open_issue_count']} open · "
-          f"{digest['open_pr_count']} open PRs · digest-cache {digest.get('cache')}")
+    print(
+        f"backlog: {digest['open_issue_count']} open · "
+        f"{digest['open_pr_count']} open PRs · digest-cache {digest.get('cache')}"
+    )
     cov = digest["label_coverage"]
-    print(f"labels: {cov['labeled']}/{cov['total']}"
-          + (f" · contract-ranked {cov['contract_ranked']}"
-             if cov["contract_ranked"] else "")
-          + (" COMPLETE" if cov["complete"] else
-             " — no tier: " + ",".join(f"#{n}" for n in cov["unranked"][:10])))
+    print(
+        f"labels: {cov['labeled']}/{cov['total']}"
+        + (
+            f" · contract-ranked {cov['contract_ranked']}"
+            if cov["contract_ranked"]
+            else ""
+        )
+        + (
+            " COMPLETE"
+            if cov["complete"]
+            else " — no tier: " + ",".join(f"#{n}" for n in cov["unranked"][:10])
+        )
+    )
     if ccov["missing"] or ccov["incomplete"]:
-        print(f"contract: {ccov['full']}/{ccov['total']} complete — "
-              f"{len(ccov['missing'])} missing, {ccov['partial']} partial "
-              "(issue_digest.py --audit for the list)")
+        print(
+            f"contract: {ccov['full']}/{ccov['total']} complete — "
+            f"{len(ccov['missing'])} missing, {ccov['partial']} partial "
+            "(issue_digest.py --audit for the list)"
+        )
     print()
-    print(f"mode: {args.mode} · plan: {plan_mode} · grouping: {confidence}"
-          + (f" · max-parallel {args.max_parallel}" if plan_mode == "parallel" else ""))
+    print(
+        f"mode: {args.mode} · plan: {plan_mode} · grouping: {confidence}"
+        + (f" · max-parallel {args.max_parallel}" if plan_mode == "parallel" else "")
+    )
     if plan_mode == "parallel":
-        print("  ⚠ the batch below is a PROPOSAL, not a decision — confirm it "
-              "before provisioning (step 2c)")
+        print(
+            "  ⚠ the batch below is a PROPOSAL, not a decision — confirm it "
+            "before provisioning (step 2c)"
+        )
         if confidence == "PARTIAL":
-            print("    no touches= on " + ",".join(f"#{n}" for n in undeclared)
-                  + ": those were grouped on dependency edges alone")
+            print(
+                "    no touches= on "
+                + ",".join(f"#{n}" for n in undeclared)
+                + ": those were grouped on dependency edges alone"
+            )
     for i, batch in enumerate(batches[:3]):
         tag = "batch " + chr(ord("A") + i)
         rows = ", ".join(
@@ -502,34 +610,49 @@ def main() -> int:
         print(f"  (+{len(batches) - 3} more batches after those)")
     if lead:
         top = lead[0]
-        print(f"select: #{top['number']} [{top['effective_tier']}] {top['title']} "
-              f"(score {top['score']} · {' · '.join(top['reasons']) or '—'})")
+        print(
+            f"select: #{top['number']} [{top['effective_tier']}] {top['title']} "
+            f"(score {top['score']} · {' · '.join(top['reasons']) or '—'})"
+        )
         print("branch: " + " ".join(f"#{n}→{b}" for n, b in branches.items()))
     elif explicit_hold:
         print(f"select: none — {explicit_hold}")
     else:
         print("select: none — no READY issue matches the filter")
     if digest["needs_design"]:
-        print("needs-design: "
-              + ",".join(f"#{n}" for n in digest["needs_design"])
-              + " → step 8b background agents (spawn now, do not wait)")
+        print(
+            "needs-design: "
+            + ",".join(f"#{n}" for n in digest["needs_design"])
+            + " → step 8b background agents (spawn now, do not wait)"
+        )
     if stale_dependency_by_number:
         stale_numbers = sorted(stale_dependency_by_number)
         label_spelling = stale_dependency_by_number[stale_numbers[0]][0]
-        print("stale-labels: "
-              + ",".join(f"#{n}" for n in stale_numbers)
-              + f" → {label_spelling} with every dependency closed; clear with "
-              + "apply_priority_labels.py "
-              + " ".join(f"--clear-dependency {n}" for n in stale_numbers))
+        print(
+            "stale-labels: "
+            + ",".join(f"#{n}" for n in stale_numbers)
+            + f" → {label_spelling} with every dependency closed; clear with "
+            + "apply_priority_labels.py "
+            + " ".join(f"--clear-dependency {n}" for n in stale_numbers)
+        )
     if tracking:
-        print("tracking: " + ",".join(f"#{n}" for n in tracking)
-              + " → never ranked; ship their sub-issues")
-    held = [r for r in ranking
-            if r["readiness"] != "READY" and not r["readiness"].startswith("DESIGN:")]
+        print(
+            "tracking: "
+            + ",".join(f"#{n}" for n in tracking)
+            + " → never ranked; ship their sub-issues"
+        )
+    held = [
+        r
+        for r in ranking
+        if r["readiness"] != "READY" and not r["readiness"].startswith("DESIGN:")
+    ]
     if held:
         more = f" (+{len(held) - 6} more)" if len(held) > 6 else ""
-        print("held: " + ", ".join(
-            f"#{r['number']} {r['readiness']}" for r in held[:6]) + more)
+        print(
+            "held: "
+            + ", ".join(f"#{r['number']} {r['readiness']}" for r in held[:6])
+            + more
+        )
     print()
     print(f"next: {next_cmd}")
     print("verdict: READY")

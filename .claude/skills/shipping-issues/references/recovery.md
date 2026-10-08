@@ -71,13 +71,14 @@ the first; a third miss means the issue itself is underspecified, so record
 
 ## The PR review did not settle
 
-`review_watch.py` printed something other than `CLEAN` or `FINDINGS`. None of these is
-a pass, and none is answered with a local review, an `@codex review` comment, or a
-close/reopen of the PR — each would be a second review the owner did not choose.
+`review_watch.py` printed something other than `CLEAN`, `FINDINGS` or `NO_NEW_REVIEW`.
+None of these is a pass, and none is answered with a local review, an `@codex review`
+comment, or a close/reopen of the PR — each would be a review the owner did not choose.
 
 - `verdict: PENDING_TIMEOUT` → the watch ended before the review did. Run it again;
-  `pr_age_seconds:` counts from the PR's opening, so slices need no running total. Past
-  1800 s with the review still `Running` (or no Completed row), treat it as `ERROR`.
+  `pr_age_seconds:` counts from the PR's opening and `push_age_seconds:` from the first
+  `--after-push` call, so slices need no running total. Past 1800 s with the review
+  still `Running` (or no Completed row), treat it as `ERROR`.
 - `verdict: NO_REVIEW` → the bot left no trace within `--grace` of the PR opening: the
   repository has no Codex integration, or it is not reviewing. Leave the PR open and
   unmerged, record `--event blocked --field issue=<n> --field reason=no-review`, and put
@@ -85,11 +86,13 @@ close/reopen of the PR — each would be a second review the owner did not choos
   [stop condition](../SKILL.md#stop-conditions): every later PR would wait the same 15
   minutes for nothing. Whether this repository merges without a PR review is the
   owner's decision.
-- `verdict: ERROR` → read `detail:`. A failed or cancelled review, or a summary naming a
-  commit that is not on the PR, holds the PR the same way
-  (`--field reason=review-error`). A draft PR was opened wrong: Codex never reviews a
-  draft, and marking it ready is a write this run does not make on its own — hold it and
-  report. An unreadable GitHub read: re-run the watch once before holding.
+- `verdict: ERROR` → read `detail:`. A failed or cancelled opening review, or a summary
+  naming a commit that is not on the PR, holds the PR the same way
+  (`--field reason=review-error`). A later review that fails is not one: `--after-push`
+  reports `NO_NEW_REVIEW`, and the latest settled round stands. A draft PR was opened
+  wrong: Codex never reviews a draft, and marking it ready is a write this run does not
+  make on its own — hold it and report. An unreadable GitHub read: re-run the watch once
+  before holding.
 
 A held PR is not a failed issue for the rest of the batch: in `all` mode, skip what
 depends on it and continue, as for any `FAILED` issue.

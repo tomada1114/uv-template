@@ -217,8 +217,8 @@ is_registered_worktree() {
 
 # --- dependency-manager detection ---------------------------------------
 # This is purely a function of repo_root's file listing, so (unlike the
-# per-worktree steps below) it's computed once, not once per spec. Kept in
-# sync by hand with preflight.sh's pkg_manager/lockfile detection.
+# per-worktree steps below) it's computed once, not once per spec. Only uv is
+# provisioned by this template.
 deps_kind="none"
 deps_cmd=()
 if [[ -f "$repo_root/uv.lock" ]]; then

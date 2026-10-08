@@ -4,6 +4,7 @@
 Run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
      (from the shipping-issues skill directory)
 """
+
 from __future__ import annotations
 
 import os
@@ -16,8 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _fakegh import FakeGh  # noqa: E402
-
+from _fakegh import FakeGh
 
 SCRIPT = Path(__file__).resolve().parent.parent / "link_check.sh"
 
@@ -76,9 +76,11 @@ def run_resave(args, responses, *, sequences=None, exits=None, sleep_body=None):
     and with TMPDIR pointed at a directory the test can inspect. The fake adds
     the newline `gh -q` prints after a value, so responses are bare values and
     a saved body equal to the response proves that newline was not written back."""
-    with FakeGh(responses, exits=exits, sequences=sequences, jq_newline=True) as fake, \
-            tempfile.TemporaryDirectory() as stub_td, \
-            tempfile.TemporaryDirectory() as tmp_td:
+    with (
+        FakeGh(responses, exits=exits, sequences=sequences, jq_newline=True) as fake,
+        tempfile.TemporaryDirectory() as stub_td,
+        tempfile.TemporaryDirectory() as tmp_td,
+    ):
         stub_dir = Path(stub_td)
         sleep_log = stub_dir / "sleeps.log"
         stub = stub_dir / "sleep"
@@ -103,9 +105,14 @@ def run_resave(args, responses, *, sequences=None, exits=None, sleep_body=None):
         leftovers = {
             f.name: f.read_text(encoding="utf-8") for f in Path(tmp_td).iterdir()
         }
-        return Run(proc, list(fake.calls), body_edits=fake.body_edits,
-                   saved_bodies=fake.saved_bodies, sleeps=sleeps,
-                   leftovers=leftovers)
+        return Run(
+            proc,
+            list(fake.calls),
+            body_edits=fake.body_edits,
+            saved_bodies=fake.saved_bodies,
+            sleeps=sleeps,
+            leftovers=leftovers,
+        )
 
 
 def base_prefix(pr):
@@ -139,9 +146,7 @@ class LinkCheckTest(unittest.TestCase):
         self.assertIn("base: main (default: main)\n", proc.stdout)
         self.assertIn("closes: 7,8\n", proc.stdout)
         self.assertIn("verdict: LINKED\n", proc.stdout)
-        self.assertEqual(
-            sum(call[:5] == list(closing_prefix(pr)) for call in calls), 1
-        )
+        self.assertEqual(sum(call[:5] == list(closing_prefix(pr)) for call in calls), 1)
 
     def test_non_default_base_is_failure(self):
         pr = "32"
@@ -234,7 +239,9 @@ class LinkCheckTest(unittest.TestCase):
         self.assertTrue(any(call[:2] == ["pr", "edit"] for call in calls))
 
 
-BODY_WITH_KEYWORD = "## Summary\n\nCloses #7\n\nA long body.\n\n## Test Plan\n\n- ran it\n"
+BODY_WITH_KEYWORD = (
+    "## Summary\n\nCloses #7\n\nA long body.\n\n## Test Plan\n\n- ran it\n"
+)
 
 
 # Bodies whose only closing keyword for #7 is one GitHub does not link: hidden
@@ -339,8 +346,10 @@ class ResaveTest(unittest.TestCase):
             [pr, "--issue", "7", "--fix"],
             resave_responses(pr, body),
             # GitHub holds the appended body once the append has saved.
-            sequences={closing_prefix(pr): [""],
-                       ("pr", "view", pr, "--json", "body"): [body, appended]},
+            sequences={
+                closing_prefix(pr): [""],
+                ("pr", "view", pr, "--json", "body"): [body, appended],
+            },
         )
 
         self.assertEqual(run.proc.returncode, 1)
@@ -358,8 +367,10 @@ class ResaveTest(unittest.TestCase):
         run = run_resave(
             [pr, "--issue", "7", "--fix"],
             resave_responses(pr, BODY_WITH_KEYWORD),
-            sequences={closing_prefix(pr): [""],
-                       ("pr", "view", pr, "--json", "body"): [BODY_WITH_KEYWORD, edited]},
+            sequences={
+                closing_prefix(pr): [""],
+                ("pr", "view", pr, "--json", "body"): [BODY_WITH_KEYWORD, edited],
+            },
         )
 
         self.assertEqual(run.proc.returncode, 1)
@@ -368,7 +379,8 @@ class ResaveTest(unittest.TestCase):
         self.assertIn(
             "detail: the PR body has a closing keyword for #7, but GitHub has not "
             "linked it (re-save stopped: the body changed while --fix ran)\n",
-            run.proc.stdout)
+            run.proc.stdout,
+        )
         self.assertEqual(run.leftovers, {})
 
     def test_a_body_edited_between_re_saves_stops_the_next_one(self):
@@ -377,9 +389,14 @@ class ResaveTest(unittest.TestCase):
         run = run_resave(
             [pr, "--issue", "7", "--fix"],
             resave_responses(pr, BODY_WITH_KEYWORD),
-            sequences={closing_prefix(pr): [""],
-                       ("pr", "view", pr, "--json", "body"):
-                           [BODY_WITH_KEYWORD, BODY_WITH_KEYWORD, edited]},
+            sequences={
+                closing_prefix(pr): [""],
+                ("pr", "view", pr, "--json", "body"): [
+                    BODY_WITH_KEYWORD,
+                    BODY_WITH_KEYWORD,
+                    edited,
+                ],
+            },
         )
 
         self.assertEqual(run.proc.returncode, 1)
@@ -412,45 +429,36 @@ class ResaveTest(unittest.TestCase):
         self.assertEqual(run.proc.returncode, 1)
         self.assertIn("fix: FAILED (could not edit PR body)\n", run.proc.stdout)
         self.assertIn(
-            "detail: the PR body has no Closes/Fixes/Resolves keyword\n", run.proc.stdout
+            "detail: the PR body has no Closes/Fixes/Resolves keyword\n",
+            run.proc.stdout,
         )
         self.assertEqual(run.saved_bodies, [])
 
     def test_without_fix_detail_distinguishes_keyword_present_from_absent(self):
         pr = "45"
         cases = {
-            BODY_WITH_KEYWORD:
-                "detail: the PR body has a closing keyword for #7, but GitHub has "
-                "not linked it (--fix re-saves the body)\n",
-            "Fixes: #7\n":
-                "detail: the PR body has a closing keyword for #7, but GitHub has "
-                "not linked it (--fix re-saves the body)\n",
-            "resolved #7.\n":
-                "detail: the PR body has a closing keyword for #7, but GitHub has "
-                "not linked it (--fix re-saves the body)\n",
-            "Closes acme/widgets#7\n":
-                "detail: the PR body has a closing keyword for #7, but GitHub has "
-                "not linked it (--fix re-saves the body)\n",
-            "Fixes https://github.com/acme/widgets/issues/7\n":
-                "detail: the PR body has a closing keyword for #7, but GitHub has "
-                "not linked it (--fix re-saves the body)\n",
-            "Closes #70 and see #7\n":
+            BODY_WITH_KEYWORD: "detail: the PR body has a closing keyword for #7, but GitHub has "
+            "not linked it (--fix re-saves the body)\n",
+            "Fixes: #7\n": "detail: the PR body has a closing keyword for #7, but GitHub has "
+            "not linked it (--fix re-saves the body)\n",
+            "resolved #7.\n": "detail: the PR body has a closing keyword for #7, but GitHub has "
+            "not linked it (--fix re-saves the body)\n",
+            "Closes acme/widgets#7\n": "detail: the PR body has a closing keyword for #7, but GitHub has "
+            "not linked it (--fix re-saves the body)\n",
+            "Fixes https://github.com/acme/widgets/issues/7\n": "detail: the PR body has a closing keyword for #7, but GitHub has "
+            "not linked it (--fix re-saves the body)\n",
+            "Closes #70 and see #7\n": "detail: the PR body has no Closes/Fixes/Resolves keyword\n",
+            "Closes #7x\n": "detail: the PR body has no Closes/Fixes/Resolves keyword\n",
+            "Closes acme/widgets#70\n": "detail: the PR body has no Closes/Fixes/Resolves keyword\n",
+            "Fixes https://github.com/acme/widgets/issues/7x\n": "detail: the PR body has no Closes/Fixes/Resolves keyword\n",
+            "Fixes https://github.com/acme/widgets/pull/7\n": "detail: the PR body has no Closes/Fixes/Resolves keyword\n",
+            "prefixes #7\n": "detail: the PR body has no Closes/Fixes/Resolves keyword\n",
+            "Closes ACME/Widgets#7\n": "detail: the PR body has a closing keyword for #7, but GitHub has "
+            "not linked it (--fix re-saves the body)\n",
+            **dict.fromkeys(
+                UNLINKED_KEYWORD_BODIES,
                 "detail: the PR body has no Closes/Fixes/Resolves keyword\n",
-            "Closes #7x\n":
-                "detail: the PR body has no Closes/Fixes/Resolves keyword\n",
-            "Closes acme/widgets#70\n":
-                "detail: the PR body has no Closes/Fixes/Resolves keyword\n",
-            "Fixes https://github.com/acme/widgets/issues/7x\n":
-                "detail: the PR body has no Closes/Fixes/Resolves keyword\n",
-            "Fixes https://github.com/acme/widgets/pull/7\n":
-                "detail: the PR body has no Closes/Fixes/Resolves keyword\n",
-            "prefixes #7\n":
-                "detail: the PR body has no Closes/Fixes/Resolves keyword\n",
-            "Closes ACME/Widgets#7\n":
-                "detail: the PR body has a closing keyword for #7, but GitHub has "
-                "not linked it (--fix re-saves the body)\n",
-            **dict.fromkeys(UNLINKED_KEYWORD_BODIES,
-                            "detail: the PR body has no Closes/Fixes/Resolves keyword\n"),
+            ),
         }
         for body, detail in cases.items():
             with self.subTest(body=body):
@@ -475,7 +483,9 @@ class ResaveTest(unittest.TestCase):
                 )
 
                 self.assertEqual(run.proc.returncode, 0, run.proc.stdout)
-                self.assertIn("fix: appended 'Closes #7' to the PR body\n", run.proc.stdout)
+                self.assertIn(
+                    "fix: appended 'Closes #7' to the PR body\n", run.proc.stdout
+                )
                 self.assertNotIn("re-save", run.proc.stdout)
                 self.assertEqual(run.saved_bodies, [body + "\n\nCloses #7\n"])
                 self.assertIn("verdict: LINKED\n", run.proc.stdout)
@@ -504,7 +514,9 @@ class ResaveTest(unittest.TestCase):
         )
 
         self.assertEqual(run.proc.returncode, 1)
-        self.assertIn("detail: the PR body has a closing keyword for #7", run.proc.stdout)
+        self.assertIn(
+            "detail: the PR body has a closing keyword for #7", run.proc.stdout
+        )
 
     def test_unreadable_body_without_fix_says_so(self):
         pr = "48"
@@ -635,8 +647,10 @@ class ResaveTest(unittest.TestCase):
         )
 
         self.assertEqual(run.proc.returncode, 3, run.proc.stdout)
-        self.assertIn("fix: interrupted during a re-save — restoring the full body\n",
-                      run.proc.stdout)
+        self.assertIn(
+            "fix: interrupted during a re-save — restoring the full body\n",
+            run.proc.stdout,
+        )
         self.assertEqual(run.saved_bodies, ["Closes #7\n", BODY_WITH_KEYWORD])
         self.assertEqual(run.leftovers, {})
 
