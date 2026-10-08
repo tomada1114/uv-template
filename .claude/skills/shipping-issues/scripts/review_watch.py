@@ -155,8 +155,10 @@ def gh_items(path: str) -> list[dict]:
 
 
 def read_pr(pr: str) -> dict:
+    """The PR over REST, in the keys `poll` reads (the GraphQL-backed
+    `gh pr view` is refused by the Claude Code cloud GitHub proxy)."""
     try:
-        out = gh(["pr", "view", pr, "--json", "headRefOid,createdAt,isDraft,state"])
+        out = gh(["api", f"repos/{{owner}}/{{repo}}/pulls/{pr}"])
         data = json.loads(out)
     except ReadError as exc:
         raise PrUnreadableError(str(exc))
@@ -166,7 +168,19 @@ def read_pr(pr: str) -> dict:
     if not isinstance(data, dict):
         msg = f"unreadable JSON for PR #{pr}"
         raise PrUnreadableError(msg)
-    return data
+    head = data.get("head")
+    if data.get("state") == "open":
+        state = "OPEN"
+    elif data.get("merged_at"):
+        state = "MERGED"
+    else:
+        state = "CLOSED"
+    return {
+        "headRefOid": (head.get("sha") if isinstance(head, dict) else None) or "",
+        "createdAt": data.get("created_at"),
+        "isDraft": bool(data.get("draft")),
+        "state": state,
+    }
 
 
 def trusted(item: dict, bot: str) -> bool:
