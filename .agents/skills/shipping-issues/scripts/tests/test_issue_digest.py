@@ -806,6 +806,220 @@ class MainEndToEndTest(DigestRunner, unittest.TestCase):
         self.assertIn("gh CLI not found", err)
 
 
+class RestFilesTest(DigestRunner, unittest.TestCase):
+    """--issues-file / --prs-file: rank REST JSON the caller fetched itself."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+
+    @staticmethod
+    def rest_issue(number, labels=(), *, body="", milestone=None,
+                   assignees=(), extra=None):
+        item = {
+            "number": number, "title": "issue",
+            "labels": [{"name": n} for n in labels],
+            "assignees": [{"login": a} for a in assignees],
+            "milestone": {"title": milestone} if milestone else None,
+            "body": body,
+            "created_at": "2026-10-01T00:00:00Z",
+            "updated_at": "2026-10-02T00:00:00Z",
+            "html_url": f"https://github.com/acme/widgets/issues/{number}",
+        }
+        return {**item, **(extra or {})}
+
+    @staticmethod
+    def rest_pr(number, *, body="", head="feature", draft=False, title="pr"):
+        return {"number": number, "title": title, "body": body,
+                "head": {"ref": head}, "draft": draft,
+                "html_url": f"https://github.com/acme/widgets/pull/{number}"}
+
+    def write(self, name, payload):
+        path = self.dir / name
+        path.write_text(payload if isinstance(payload, str) else json.dumps(payload),
+                        encoding="utf-8")
+        return str(path)
+
+    def _run_files(self, issues, prs, args=("--select", "--json"), **kw):
+        files = ["--issues-file", self.write("issues.json", issues),
+                 "--prs-file", self.write("prs.json", prs)]
+        return self._run([*files, *args], [], **kw)
+
+    def test_example_selects_issue_with_no_gh_process(self):
+        rc, out, err = self._run_files(
+            [[self.rest_issue(12, ["priority: P1"])]], [[]])
+        self.assertEqual(rc, 0, err)
+        top = json.loads(out)["ranking"][0]
+        self.assertEqual((top["number"], top["tier"]), (12, "P1"))
+        self.assertEqual(self.last_calls.calls, [])
+
+    def test_output_equals_the_gh_path_for_the_same_data(self):
+        gh_issues = [
+            gh_issue(1, labels=["priority: P1"], milestone="m1", assignees=["bo"],
+                     body="Depends on #2", created="2026-10-01T00:00:00Z",
+                     updated="2026-10-02T00:00:00Z"),
+            gh_issue(2, labels=["priority: P0"], created="2026-10-01T00:00:00Z",
+                     updated="2026-10-02T00:00:00Z"),
+            gh_issue(3, created="2026-10-01T00:00:00Z", updated="2026-10-02T00:00:00Z"),
+        ]
+        gh_prs = [gh_pr(40, body="Closes #3", head="claude/x")]
+        gh_prs[0]["closingIssuesReferences"] = []
+        rest_issues = [
+            self.rest_issue(1, ["priority: P1"], milestone="m1", assignees=["bo"],
+                            body="Depends on #2"),
+            self.rest_issue(2, ["priority: P0"]),
+            self.rest_issue(3),
+        ]
+        rest_prs = [self.rest_pr(40, body="Closes #3", head="claude/x")]
+        for args in (["--json"], ["--with-rank", "--select"], ["--audit"]):
+            with self.subTest(args=args):
+                want = self._run(args, gh_issues, gh_prs)
+                got = self._run_files(rest_issues, rest_prs, args)
+                self.assertEqual(want[0], 0, want[2])
+                self.assertEqual(got, want)
+
+    def test_open_pr_body_claims_the_issue(self):
+        pr = self.rest_pr(40, body="Closes #12", head="claude/x")
+        rc, out, err = self._run_files(
+            [self.rest_issue(12, ["priority: P1"])], [pr], ["--json"])
+        self.assertEqual(rc, 0, err)
+        rec = next(r for r in json.loads(out)["issues"] if r["number"] == 12)
+        self.assertEqual(rec["readiness"], "HAS-PR:#40")
+        self.assertEqual(rec["open_pr"]["number"], 40)
+
+    def test_draft_flag_and_branch_come_from_rest_fields(self):
+        pr = self.rest_pr(41, head="issue-12-fix", draft=True)
+        rc, out, err = self._run_files(
+            [self.rest_issue(12)], [pr], ["--json"])
+        self.assertEqual(rc, 0, err)
+        rec = json.loads(out)["issues"][0]
+        self.assertEqual(rec["open_pr"],
+                         {"number": 41, "url": pr["html_url"], "draft": True})
+
+    def test_cache_is_neither_read_nor_written(self):
+        state = self.dir / "state"
+        for extra in (["--cache-ttl", "300"], ["--cache-ttl", "300", "--refresh"]):
+            rc, out, err = self._run_files(
+                [self.rest_issue(1)], [], ["--select", *extra],
+                state_dir=state, cache=True)
+            self.assertEqual(rc, 0, err)
+        self.assertEqual(list(state.glob("**/digest-cache.json")), [])
+
+    def test_gh_not_on_path_is_fine(self):
+        empty = self.dir / "empty-bin"
+        empty.mkdir()
+        rc, out, err = self._run_files(
+            [self.rest_issue(1, ["priority: P0"])], [],
+            path_override=str(empty))
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(json.loads(out)["ranking"][0]["number"], 1)
+
+    def test_one_flag_alone_exits_2(self):
+        issues = self.write("issues.json", [])
+        prs = self.write("prs.json", [])
+        for flag, path in (("--issues-file", issues), ("--prs-file", prs)):
+            with self.subTest(flag=flag):
+                rc, out, err = self._run([flag, path], [])
+                self.assertEqual(rc, 2)
+                self.assertIn("error:", err)
+
+    def test_combined_with_a_server_side_filter_exits_2(self):
+        for extra in (["--label", "bug"], ["--assignee", "bo"],
+                      ["--milestone", "m1"]):
+            with self.subTest(extra=extra):
+                rc, out, err = self._run(
+                    ["--issues-file", self.write("i.json", []),
+                     "--prs-file", self.write("p.json", []), *extra], [])
+                self.assertEqual(rc, 2)
+                self.assertIn("error:", err)
+
+    def test_flag_misuse_starts_no_gh_process(self):
+        self._run(["--issues-file", self.write("i.json", []), "--label", "x"], [])
+        self.assertEqual(self.last_calls.calls, [])
+
+    def test_bad_file_exits_1_naming_the_path(self):
+        good = self.write("good.json", [])
+        missing = str(self.dir / "missing.json")
+        cases = {
+            "missing": missing,
+            "not json": self.write("bad.json", "{not json"),
+            "object": self.write("obj.json", {"number": 1}),
+            "scalar items": self.write("scalars.json", [1, 2]),
+            "mixed items": self.write("mixed.json", [[{"number": 1}], "x"]),
+        }
+        for name, path in cases.items():
+            for flag_pair in (("--issues-file", path, "--prs-file", good),
+                              ("--issues-file", good, "--prs-file", path)):
+                with self.subTest(case=name, flags=flag_pair):
+                    rc, out, err = self._run(list(flag_pair), [])
+                    self.assertEqual(rc, 1)
+                    self.assertTrue(err.startswith(f"error: {path}: "), err)
+                    self.assertEqual(out, "")
+
+    def test_directory_as_file_exits_1(self):
+        rc, out, err = self._run(
+            ["--issues-file", str(self.dir), "--prs-file", self.write("p.json", [])], [])
+        self.assertEqual(rc, 1)
+        self.assertTrue(err.startswith(f"error: {self.dir}: "), err)
+
+    def test_plain_and_slurped_shapes_both_flatten(self):
+        issues = [self.rest_issue(1), self.rest_issue(2), self.rest_issue(3)]
+        for shape in (issues, [issues[:2], issues[2:]]):
+            rc, out, err = self._run_files(shape, [], ["--json"])
+            self.assertEqual(rc, 0, err)
+            self.assertEqual(json.loads(out)["open_issue_count"], 3)
+
+    def test_empty_files_print_an_empty_digest(self):
+        for payload in ([], [[]]):
+            with self.subTest(payload=payload):
+                rc, out, err = self._run_files(payload, payload, ["--json"])
+                self.assertEqual(rc, 0, err)
+                self.assertEqual(json.loads(out)["open_issue_count"], 0)
+
+    def test_empty_files_match_the_gh_path_for_an_empty_backlog(self):
+        self.assertEqual(self._run_files([], []), self._run(["--select", "--json"], []))
+
+    def test_pull_requests_in_the_issues_file_are_dropped(self):
+        pr_item = self.rest_issue(5, extra={"pull_request": {"url": "u"}})
+        rc, out, err = self._run_files([[pr_item]], [], ["--json"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(json.loads(out)["open_issue_count"], 0)
+        rc, out, err = self._run_files(
+            [[self.rest_issue(1), pr_item]], [], ["--json"])
+        self.assertEqual([r["number"] for r in json.loads(out)["issues"]], [1])
+
+    def test_null_fields_behave_like_missing_ones(self):
+        item = self.rest_issue(7, extra={
+            "body": None, "milestone": None, "assignees": None, "labels": None,
+            "created_at": None, "updated_at": None})
+        rc, out, err = self._run_files([item], [self.rest_pr(9, head="x")],
+                                       ["--json"])
+        self.assertEqual(rc, 0, err)
+        rec = json.loads(out)["issues"][0]
+        self.assertEqual((rec["milestone"], rec["assignees"], rec["labels"]),
+                         (None, [], []))
+
+    def test_pr_with_null_head_is_tolerated(self):
+        pr = self.rest_pr(9)
+        pr["head"] = None
+        rc, out, err = self._run_files([self.rest_issue(7)], [pr], ["--json"])
+        self.assertEqual(rc, 0, err)
+
+    def test_limit_keeps_the_first_n_issues_in_file_order(self):
+        issues = [self.rest_issue(n) for n in (30, 10, 20)]
+        rc, out, err = self._run_files(issues, [], ["--json", "--limit", "2"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(sorted(r["number"] for r in json.loads(out)["issues"]),
+                         [10, 30])
+
+    def test_limit_counts_issues_after_pull_requests_are_dropped(self):
+        items = [self.rest_issue(1, extra={"pull_request": {}}),
+                 self.rest_issue(2), self.rest_issue(3)]
+        rc, out, err = self._run_files(items, [], ["--json", "--limit", "1"])
+        self.assertEqual([r["number"] for r in json.loads(out)["issues"]], [2])
+
+
 if __name__ == "__main__":
     unittest.main()
 
