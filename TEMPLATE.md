@@ -27,7 +27,7 @@ marks which steps are a human's. Its `references/bootstrap.md` documents
   cooldown equal to `[tool.uv] exclude-newer = "14 days"`; a human merges
   them with the `merging-dependency-prs` skill, and `managing-dependencies`
   holds the window and its one-package exception.
-- `just verify` (lock check, skills mirror, lint, skill tests, tests) is the
+- `just verify` (its steps are listed in AGENTS.md's Quick Reference) is the
   non-mutating gate for a PR or a completion claim; `just check` mutates the
   tree first (`fmt`) and is for local iteration only.
 

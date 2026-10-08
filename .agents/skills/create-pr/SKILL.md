@@ -62,10 +62,10 @@ gh pr list --head <branch> --state open --json number,url,title
 
 ## 2. The gate
 
-Run `just verify`, the non-mutating gate: lock check, skills mirror, lint and types,
-skill script tests, and the test suite with the 80% coverage floor. It never rewrites a
-file, so a pass proves the *committed* tree is green — `just check` runs `fmt` first and
-proves nothing about what was committed.
+Run `just verify`, the non-mutating gate whose steps AGENTS.md's Quick Reference lists
+(`just --show verify` prints the recipe). It never rewrites a file, so a pass proves the
+*committed* tree is green — `just check` runs `fmt` first and proves nothing about what
+was committed.
 
 - **Any failure stops the PR.** Fix it on the branch, or report it. A formatting failure
   is fixed with `just fmt`; committing that fix needs the sign-off step 1 names (this

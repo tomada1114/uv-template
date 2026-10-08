@@ -55,8 +55,9 @@ just test            # Run tests in parallel with coverage
 just test-durations  # Regenerate the pytest-split duration file used by CI shards
 just check           # Mutating dev check: fmt → lint → test
 just lock            # Update uv.lock after dependency changes
+just lock-check      # Fail when uv.lock is out of date, without changing it
 just verify          # Non-mutating gate: lock-check → agents-check → check-harness → lint → test-skills → test
-just check-harness   # Harness drift (skills, Skills table, recipes, ruleset, labels, workflows) + the Product section check
+just check-harness   # Harness drift (skills, Skills table, recipes, this index, ruleset, labels, workflows) + the Product section check
 just test-skills     # Run the unittest suites bundled under .agents/skills/*/scripts/tests
 just run *ARGS       # Run the CLI, e.g. `just run todo list` (uv run --locked my-app ...)
 just worktree-prepare # Recreate the locked Python environment in an existing linked worktree

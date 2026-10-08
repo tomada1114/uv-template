@@ -98,11 +98,11 @@ check: fmt lint test
 # Non-mutating local PR gate (fail-fast: cheap gates before the suite)
 verify: lock-check agents-check check-harness lint test-skills test
 
-# tests/harness checks skills, AGENTS.md, recipes, the ruleset, labels, and
-# workflows against each other. tests/test_product_section.py rides along
-# because it is the harness's (g) check: in an app it stays red until AGENTS.md's
-# Product section is filled in, which is not drift. `just test` runs both again
-# as part of the whole suite.
+# tests/harness checks skills, AGENTS.md (its Skills table and Quick Reference),
+# recipes, the ruleset, labels, and workflows against each other.
+# tests/test_product_section.py rides along because it is the harness's (g)
+# check: in an app it stays red until AGENTS.md's Product section is filled in,
+# which is not drift. `just test` runs both again as part of the whole suite.
 # Fail on harness drift (tests/harness) or an unfilled Product section
 check-harness:
     uv run --locked pytest tests/harness tests/test_product_section.py

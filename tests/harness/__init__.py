@@ -29,6 +29,9 @@ repository and fails on a fixture built under ``tmp_path``:
   ``.github/actions/``;
 - (h) ``test_dependabot_cooldown.py``: the Dependabot ``uv`` update's
   ``cooldown.default-days`` equals ``[tool.uv] exclude-newer``'s day count;
+- (i) ``test_quick_reference.py``: AGENTS.md's Quick Reference names every
+  justfile recipe but ``default``, and its ``just verify`` line lists
+  ``verify``'s dependencies in order;
 - (g) the Product section check is ``tests/test_product_section.py`` (#95),
   not duplicated here.
 
