@@ -65,6 +65,11 @@ def STATUSES(sha):
 
 def run_script(args, responses, *, exits=None, stderrs=None, sequences=None):
     with FakeGh(responses, exits=exits, stderrs=stderrs, sequences=sequences) as fake:
+        # Nominal watch tests never wait on a real retry or background deadline.
+        # Deadline scenarios supply their own timeout stub or advancing clock.
+        stub_dir = Path(fake.env["PATH"].split(os.pathsep)[0])
+        install_stub(stub_dir, "sleep", "#!/usr/bin/env bash\nexit 0\n")
+        install_stub(stub_dir, "timeout", '#!/usr/bin/env bash\nshift\nexec "$@"\n')
         proc = subprocess.run(
             ["bash", str(SCRIPT), *args],
             env=fake.env,
@@ -114,6 +119,10 @@ def run_script_with_stub_path(args, responses, stub_dir, *, exits=None, stderrs=
     with FakeGh(responses, exits=exits, stderrs=stderrs) as fake:
         env = dict(fake.env)
         env["PATH"] = f"{stub_dir}{os.pathsep}{env['PATH']}"
+        if not (stub_dir / "timeout").exists():
+            install_stub(stub_dir, "timeout", '#!/usr/bin/env bash\nshift\nexec "$@"\n')
+        if not (stub_dir / "sleep").exists():
+            install_stub(stub_dir, "sleep", "#!/usr/bin/env bash\nexit 0\n")
         proc = subprocess.run(
             ["bash", str(SCRIPT), *args],
             env=env,
@@ -125,6 +134,19 @@ def run_script_with_stub_path(args, responses, stub_dir, *, exits=None, stderrs=
 
 
 class CiWatchTest(unittest.TestCase):
+    def test_fake_cli_ignores_site_customization(self):
+        with tempfile.TemporaryDirectory() as root:
+            Path(root, "sitecustomize.py").write_text(
+                'print("unexpected startup output")\n', encoding="utf-8"
+            )
+            with FakeGh({("version",): "fixture version\n"}) as fake:
+                env = dict(fake.env, PYTHONPATH=root)
+                proc = subprocess.run(
+                    ["gh", "version"], env=env, text=True, capture_output=True
+                )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(proc.stdout, "fixture version\n")
+
     def test_missing_pr_is_usage_error(self):
         proc, calls = run_script([], {})
 

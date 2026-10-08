@@ -11,7 +11,7 @@ gh run list --branch <branch> --limit 1 --json databaseId -q '.[0].databaseId' \
 ```
 
 Which _job_ failed is the fastest way to tell these apart. CI runs `Lint & Type Check`,
-the sharded `Test` jobs and `Coverage`, `Spell Check`, and `Workflow Security Lint`
+`Coverage`, `Spell Check`, and `Workflow Security Lint`
 (zizmor).
 
 ## F1 — Workflow security lint
@@ -84,7 +84,7 @@ pointer to it. Never hand-edit `uv.lock`, and never move
 
 ## F5 — Test or coverage failure
 
-**Symptom:** lint passes; a `Test` shard fails, or `Coverage` drops below
+**Symptom:** lint passes; `Coverage` fails, or `Coverage` drops below
 `--fail-under=80`.
 
 **Fix:** this is a real signal. Read the failure. Hold the PR and report it — do not
