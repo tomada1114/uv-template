@@ -79,6 +79,7 @@ from issue_records import (
 DEPENDENCY_LABEL = "blocked: dependency"
 MISSING_LABEL_EXIT = 4
 
+# Set once in main; the shared runner qualifies every write with this repo.
 REPO: str | None = None
 
 

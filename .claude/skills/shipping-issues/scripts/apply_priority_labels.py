@@ -76,6 +76,10 @@ from contextlib import redirect_stderr
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+if TYPE_CHECKING:
+    from issue_types import DigestPayload, Label
+
+
 # Run from the .claude/skills mirror, a sibling import would leave __pycache__/
 # there, which `just agents-check` reports as drift.
 sys.dont_write_bytecode = True
@@ -97,9 +101,6 @@ from issue_records import (
     resolve_design_label,
     resolve_tier_label,
 )
-
-# gh prints these when the token lacks push access; the caller must stop asking
-# for labels rather than retry.
 
 
 def gh(args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -131,9 +132,6 @@ def load_digest() -> DigestPayload:
         raise SystemExit(1)
     return build_records(issues, prs, body_chars=0)
 
-
-if TYPE_CHECKING:
-    from issue_types import DigestPayload, Label
 
 MISSING_LABEL_EXIT = 4
 

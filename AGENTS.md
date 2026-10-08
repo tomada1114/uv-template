@@ -147,6 +147,7 @@ Skills are authored under `.agents/skills/` (Codex CLI) and mirrored into
 | `authoring-skills` | adding, editing, or reviewing a skill under `.agents/skills/`, or a skill never fires |
 | `building-api-routes` | adding or changing an HTTP route, request or response model, or API dependency, and the TestClient tests for it |
 | `changing-gates` | editing a hook, a CI workflow, the ruleset, or a ruff, mypy, pytest, or coverage setting, or asking whether a change weakens a gate |
+| `cloud-claude-shipping-issues` | Claude Code cloud sessions only (`CLAUDE_CODE_REMOTE=true`): shipping the next issue or the backlog over REST `gh api` calls, serially — rank, implement, PR, the PR's review, CI, merge, follow-ups |
 | `codex-shipping-issues` | shipping one GitHub issue from a Codex-managed checkout through a regular PR, up to three Codex review rounds with their findings addressed, current-head CI, and an explicitly authorized merge |
 | `create-pr` | opening or updating a pull request by hand |
 | `designing-clis` | adding or changing a `my-app` command, its arguments, or its output, and the CliRunner tests for it |
@@ -206,6 +207,9 @@ pins a `model` (`gpt-6-luna`) — the others inherit the session's.
 - In Codex, always load the repository-local `codex-shipping-issues` for issue
   shipping; it takes precedence over a global skill of the same name. The existing
   `shipping-issues` workflow is Claude Code only and is never executed by Codex.
+- In a Claude Code cloud session (`CLAUDE_CODE_REMOTE=true`), ship issues with
+  `cloud-claude-shipping-issues`, never `shipping-issues`, whose scripts' GraphQL
+  calls the session's GitHub proxy refuses.
 - In Codex, use GitHub MCP for all remote GitHub operations; never invoke `gh`
   directly or through live-GitHub helpers, and never use a direct HTTP fallback.
   Report missing MCP capabilities. Local checkout, commit and push use Git;
@@ -235,6 +239,16 @@ sign-off for exactly those, for that invocation only:
   `just labels`, pushing its own branches, creating the pull request, merging
   it once CI passes, filing and labelling follow-up issues and the comments it
   posts, and deleting the branches it created.
+- `cloud-claude-shipping-issues`: the writes its `SKILL.md` lists — pushing its own
+  branch; creating the pull request; on that open PR alone, appending `Closes #<n>` to
+  its body when missing or retargeting its base to the default branch; merging it once
+  CI passes; closing by hand, with a back-reference comment naming the PR, the issue
+  that merged PR was meant to close when GitHub left it open; for the design-held issue
+  the run takes on, its design-decision comment and then clearing its design block
+  (the design-block label and the ship contract's `design=open`); filing and labelling
+  follow-up issues; and removing `blocked: dependency` from the issues its merge
+  unblocked — never a force-push, a branch deletion, a reply to or resolution of a
+  review thread, `@codex review`, `just labels`, or Auto-fix.
 - `create-pr`: pushing the current branch, `gh pr create` for it, and
   `gh pr edit` on its own open pull request — never a force-push or a merge.
 - `smart-commit`: the commits it makes on the current branch, and pushing that

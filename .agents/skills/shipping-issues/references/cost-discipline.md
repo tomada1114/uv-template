@@ -40,8 +40,8 @@ reads one line per finding: `review_watch.py` keeps the bodies in a file.
 
 The trade is explicit and bounded: Codex may review a fix push again, and a PR takes at
 most 3 rounds, fixing every accepted finding in round 1 and only `P0`–`P2` after it
-(`P3` becomes a follow-up). A fix push waits at most a 180 s start grace for a new
-review, which the CI watch already covers; fixes after the last round get no further
+(`P3` becomes a follow-up). A fix push waits at most a 300 s start grace for a new
+review, most of which the CI watch already covers; fixes after the last round get no further
 review — local verification and current-head CI cover them, and the step 10 report says
 so. A
 repository with no PR reviewer gets `NO_REVIEW`, which holds the PR rather than falling

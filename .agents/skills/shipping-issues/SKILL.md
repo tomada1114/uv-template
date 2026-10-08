@@ -1,7 +1,7 @@
 ---
 name: shipping-issues
 description: >-
-  Claude Code only. Rank open GitHub Issues by their `priority: P0`-`P3` labels, backfilling missing ones,
+  Claude Code only, outside a cloud session. Rank open GitHub Issues by their `priority: P0`-`P3` labels, backfilling missing ones,
   then implement the top issue, open a PR that closes it, wait for the PR's automatic Codex
   reviews (up to 3) and fix their accepted findings, watch CI to green, merge, and return to the
   default branch. Pass "all" to work through every issue in dependency order, independent
@@ -12,7 +12,7 @@ description: >-
 # Shipping Issues (Claude Code)
 
 Claude Code only. In Codex, use `codex-shipping-issues`; do not run this workflow. In a
-Claude Code cloud session, read [cloud-sessions.md](references/cloud-sessions.md) first.
+Claude Code cloud session (`CLAUDE_CODE_REMOTE=true`), use `cloud-claude-shipping-issues`.
 **Done:** review settled, PR merged, issue CLOSED, no gate deleted or weakened.
 
 **Invoking this skill is the sign-off for exactly the remote writes it lists, for this
