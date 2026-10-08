@@ -276,7 +276,9 @@ def parse_summary(body: str) -> ReviewRound | None:
     for row in rows:
         if "code review" in row["kind"].lower():
             return row
-    return rows[0]
+    # Another review's row (a Security Review alone) is never the code review:
+    # returning None keeps the caller waiting for a Code Review row.
+    return None
 
 
 def status_class(status: str) -> str:
@@ -707,7 +709,7 @@ def poll(args: argparse.Namespace, memory: Memory) -> PollState:
             else:
                 state["detail"] = "the review summary is not posted yet"
         elif row is None:
-            state["detail"] = "the review summary has no status row yet"
+            state["detail"] = "the review summary has no Code Review row yet"
         elif status_class(row["status"]) == "failed":
             state["verdict"] = "ERROR"
             state["detail"] = f"the Codex review reported {row['status']!r}"
