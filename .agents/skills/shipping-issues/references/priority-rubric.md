@@ -25,20 +25,17 @@ doing."** Concretely, in this order:
 4. **Damage being taken right now** — broken build, crash, data loss, vulnerability,
    failing CI on main. These jump the queue regardless of score.
 
-Everything else — nice-to-have features, docs polish, personal preference — ranks below
-all four, however small it is.
+Apply `triaging-issues`' priority definitions to this evidence. Documentation can
+carry any tier when its impact warrants it; its format alone does not imply P3.
 
 ## The label is the answer, written down
 
 Those four axes get evaluated **once per issue** and the verdict is stored on GitHub as
 a label, so the next run reads it instead of re-deriving it:
 
-| Label          | Means    | Typical evidence                                                                                                                                       |
-| -------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `priority: P0` | Ship now | Other open issues are blocked on it, or damage is being taken right now (red main, crash, data loss, vulnerability)                                    |
-| `priority: P1` | Do next  | Leverage — CI, schema, shared types, test harness, config: the ground later issues stand on. Or a must-be-first ordering that causes rework if skipped |
-| `priority: P2` | Normal   | A real, self-contained change. Nothing waits on it                                                                                                     |
-| `priority: P3` | Defer    | Nice-to-have, docs polish, cosmetics                                                                                                                   |
+**REQUIRED:** `triaging-issues` owns the P0–P3 definitions and the independence of
+priority and design readiness. Use its priority table; this reference owns only
+the research procedure and vocabulary aliases.
 
 Existing vocabularies are read as equivalents, so a repo with its own convention is
 never force-relabeled: `p0`/`critical`/`urgent`/`blocker` → P0, `priority: high` → P1,
@@ -56,19 +53,12 @@ then re-run the same call once; a second exit 4 means the label is not in
 `apply_priority_labels.py --check-labels` asks the same question for the four tier
 labels without writing anything.
 
-Tier and design-readiness are orthogonal: `blocked: design` says the approach isn't
-settled, not how urgent the issue is once it is. Tier an issue even while it carries
-`blocked: design`, so it ranks correctly the instant the block is cleared — see
-`dependency-triage.md`'s "Deciding a held design".
+Correct a wrong tier using `apply_priority_labels.py --set N=P1`, within the
+shipping run's authorized label-write scope (`triaging-issues`).
 
-Two rules keep the labels trustworthy:
-
-- **A wrong label gets fixed, not worked around.** Ranking around a stale label in your
-  head leaves the next run to make the same mistake. Re-tier it with
-  `apply_priority_labels.py --set N=P1`.
-- **Re-tier on new information, not on a hunch.** A merged blocker, a new dependency
-  edge, or a `P2(~P0)` marker from the digest is new information; "this feels more
-  urgent today" is not.
+**Re-tier on new information, not on a hunch.** A merged blocker, a new dependency
+edge, or a `P2(~P0)` marker from the digest is new information; "this feels more
+urgent today" is not.
 
 ## The research pass
 
