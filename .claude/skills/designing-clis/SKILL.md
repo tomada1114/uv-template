@@ -31,6 +31,14 @@ never a core change:
   AGENTS.md's Quick Reference; `just check-harness` fails while one remains), and in
   `pyproject.toml`'s ruff config the `typer.*` entries and the `src/my_app/cli/**`
   per-file-ignore;
+- update AGENTS.md's Overview and Architecture tree and bullets to describe only
+  the API; in the paragraph after Quick Reference, replace `my-app serve` with
+  a direct `uvicorn ... --factory` invocation on a free port while preserving
+  the rule that the developer's server is human-run;
+- update README's Quickstart: remove CLI examples, the CLI column, and the
+  exit-code table; keep the API examples using `just dev`;
+- replace the CLI reproduction command in `.github/ISSUE_TEMPLATE/bug_report.yml`
+  with an HTTP request example;
 - delete `.agents/skills/designing-clis/`, remove its row from AGENTS.md's Skills
   table, and run `just agents-sync`.
 
