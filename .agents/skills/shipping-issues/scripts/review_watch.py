@@ -119,6 +119,19 @@ import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+if TYPE_CHECKING:
+    from review_types import (
+        Finding,
+        GitHubItem,
+        PollState,
+        PrState,
+        PushWait,
+        ReviewRound,
+    )
 
 DEFAULT_BOT = "chatgpt-codex-connector[bot]"
 SUMMARY_MARKER = "<!-- codex-pull-request-review-summary -->"
@@ -169,10 +182,10 @@ def gh(args: list[str]) -> str:
     return proc.stdout or ""
 
 
-def gh_items(path: str) -> list[dict]:
+def gh_items(path: str) -> list[GitHubItem]:
     """Every item of a paginated REST list, one JSON object per line."""
     out = gh(["api", path, "--paginate", "-q", ".[] | @json"])
-    items = []
+    items: list[GitHubItem] = []
     for raw in out.splitlines():
         line = raw.strip()
         if not line:
@@ -183,11 +196,11 @@ def gh_items(path: str) -> list[dict]:
             msg = f"unreadable JSON from {path}"
             raise ReadError(msg)
         if isinstance(item, dict):
-            items.append(item)
+            items.append(cast("GitHubItem", item))
     return items
 
 
-def read_pr(pr: str) -> dict:
+def read_pr(pr: str) -> PrState:
     """The PR over REST, in the keys `poll` reads (the GraphQL-backed `gh pr view` is refused by the Claude Code cloud GitHub proxy)."""
     try:
         out = gh(["api", f"repos/{{owner}}/{{repo}}/pulls/{pr}"])
@@ -208,14 +221,16 @@ def read_pr(pr: str) -> dict:
     else:
         state = "CLOSED"
     return {
-        "headRefOid": (head.get("sha") if isinstance(head, dict) else None) or "",
-        "createdAt": data.get("created_at"),
+        "headRefOid": cast(
+            "str", (head.get("sha") if isinstance(head, dict) else None) or ""
+        ),
+        "createdAt": cast("str | None", data.get("created_at")),
         "isDraft": bool(data.get("draft")),
         "state": state,
     }
 
 
-def trusted(item: dict, bot: str) -> bool:
+def trusted(item: GitHubItem, bot: str) -> bool:
     """Authored by the bot account itself, matched on the exact login.
 
     A `[bot]` login belongs to a GitHub App alone: a person's login holds only
@@ -224,15 +239,17 @@ def trusted(item: dict, bot: str) -> bool:
     Codex app's 👍 with type "User" (observed on PR #170, 2026-10-07) — so a
     `[bot]` login is trusted on the login, and any other login needs type Bot.
     """
-    user = item.get("user") or {}
+    user = item.get("user")
+    if user is None:
+        return False
     if user.get("login") != bot:
         return False
     return bot.endswith("[bot]") or user.get("type") == "Bot"
 
 
-def parse_summary(body: str) -> dict | None:
+def parse_summary(body: str) -> ReviewRound | None:
     """The summary table's code-review row: kind, status, sha, trigger."""
-    rows = []
+    rows: list[ReviewRound] = []
     for raw in body.splitlines():
         line = raw.strip()
         if not line.startswith("|"):
@@ -310,10 +327,12 @@ def same_commit(one: str | None, other: str | None) -> bool:
     return one.startswith(other) or other.startswith(one)
 
 
-def collect_findings(reviews: list[dict], inline: list[dict]) -> list[dict]:
+def collect_findings(
+    reviews: list[GitHubItem], inline: list[GitHubItem]
+) -> list[Finding]:
     """The bot's top-level inline comments, plus any bot review that carries no inline comment at all (its body is then the finding), ordered by review and then by comment: a later review's findings are always appended."""
     reviewed = {review.get("id"): review.get("commit_id") or "" for review in reviews}
-    keyed = []
+    keyed: list[tuple[tuple[int, int], Finding]] = []
     seen_reviews = set()
     for comment in inline:
         if comment.get("in_reply_to_id"):
@@ -411,8 +430,8 @@ class Memory:
 
     def __init__(self, pr: str) -> None:
         self.pr = pr
-        self.rounds: list[dict] = []
-        self.wait: dict | None = None
+        self.rounds: list[ReviewRound] = []
+        self.wait: PushWait | None = None
         self._loaded = False
         self._saved = ""
 
@@ -427,15 +446,17 @@ class Memory:
         data = read_json(self._path("rounds"))
         if isinstance(data, dict):
             self.rounds = [
-                dict(row) for row in data.get("rounds") or [] if settled_row(row)
+                cast("ReviewRound", dict(row))
+                for row in data.get("rounds") or []
+                if settled_row(row)
             ]
             wait = data.get("await")
             if isinstance(wait, dict) and wait.get("sha"):
-                self.wait = wait
+                self.wait = cast("PushWait", wait)
         else:
             legacy = read_json(self._path("opening"))
             if isinstance(legacy, dict) and settled_row(legacy):
-                self.rounds = [dict(legacy)]
+                self.rounds = [cast("ReviewRound", dict(legacy))]
         self._saved = self._dump()
 
     def _dump(self) -> str:
@@ -453,18 +474,23 @@ class Memory:
         except OSError:
             pass  # memory is a convenience; the verdict stands without it
 
-    def find(self, sha: str) -> dict | None:
+    def find(self, sha: str) -> ReviewRound | None:
         return next(
             (row for row in self.rounds if same_commit(row.get("sha"), sha)), None
         )
 
-    def add(self, row: dict) -> None:
+    def add(self, row: ReviewRound) -> None:
         self.rounds.append(
-            {key: row.get(key) or "" for key in ("sha", "status", "trigger", "at")}
+            {
+                "sha": row.get("sha") or "",
+                "status": row.get("status") or "",
+                "trigger": row.get("trigger") or "",
+                "at": row.get("at") or "",
+            }
         )
 
     def order(self) -> None:
-        def key(row: dict) -> tuple[int, float]:
+        def key(row: ReviewRound) -> tuple[int, float]:
             moment = stamp_seconds(row.get("at"))
             return (0, moment) if moment is not None else (1, 0.0)
 
@@ -488,7 +514,11 @@ def on_pr(pr: str, head: str, sha: str) -> bool:
 
 
 def settle_rounds(
-    pr: str, head: str, row: dict | None, reviews: list[dict], memory: Memory
+    pr: str,
+    head: str,
+    row: ReviewRound | None,
+    reviews: list[GitHubItem],
+    memory: Memory,
 ) -> str:
     """Fold what GitHub shows now into the memory's rounds; returns an ERROR detail, or "" when every completed review is a commit of this PR."""
     kind = status_class(row["status"]) if row else ""
@@ -501,7 +531,9 @@ def settle_rounds(
                 return f"the summary's reviewed commit {row['sha']} is not a commit of PR #{pr}"
             memory.add(row)
         elif known.get("trigger") in ("", "none"):
-            known.update(status=row["status"], trigger=row["trigger"], at=row["at"])
+            known.update(
+                {"status": row["status"], "trigger": row["trigger"], "at": row["at"]}
+            )
     for review in sorted(reviews, key=lambda r: r.get("id") or 0):
         sha = review.get("commit_id") or ""
         if review.get("state") not in REVIEW_STATES or not sha:
@@ -522,7 +554,7 @@ def settle_rounds(
 
 
 def after_push_verdict(
-    state: dict, memory: Memory, after_push: str, start_grace: int, verdict: str
+    state: PollState, memory: Memory, after_push: str, start_grace: int, verdict: str
 ) -> None:
     """Decide an --after-push call once at least one round has settled."""
     rounds = memory.rounds
@@ -532,7 +564,7 @@ def after_push_verdict(
     if not wait or not same_commit(str(wait.get("sha") or ""), after_push):
         # A failed row already showing when the wait begins is not a review
         # of this push: it never ends the grace early.
-        stale = [later["sha"], later["at"]] if later_kind == "failed" else []
+        stale = [later["sha"], later["at"]] if later and later_kind == "failed" else []
         wait = {
             "sha": after_push,
             "since": time.time(),
@@ -593,13 +625,13 @@ def after_push_verdict(
         )
 
 
-def poll(args: argparse.Namespace, memory: Memory) -> dict:
+def poll(args: argparse.Namespace, memory: Memory) -> PollState:
     """One full read of the PR's review state. Raises ReadError."""
     pr, bot, grace = args.pr, args.bot, args.grace
     data = read_pr(pr)
     head = data.get("headRefOid") or ""
     age = pr_age_seconds(data.get("createdAt"))
-    state = {
+    state: PollState = {
         "head": head,
         "age": age,
         "summary": None,
@@ -720,7 +752,7 @@ def default_findings_file(pr: str) -> Path:
     return Path(name)
 
 
-def write_findings(path: Path, pr: str, findings: list[dict]) -> None:
+def write_findings(path: Path, pr: str, findings: list[Finding]) -> None:
     parts = [f"# Review findings for PR #{pr}\n"]
     parts.extend(
         f"## {finding['n']} [{finding['priority']}] {finding['where']} "
@@ -736,7 +768,11 @@ def write_findings(path: Path, pr: str, findings: list[dict]) -> None:
 
 
 def report(
-    verdict: str, args: argparse.Namespace, state: dict | None, waited: int, detail: str
+    verdict: str,
+    args: argparse.Namespace,
+    state: PollState | None,
+    waited: int,
+    detail: str,
 ) -> int:
     state = state or {}
     row = state.get("summary") or {}
@@ -862,7 +898,7 @@ def main(argv: list[str] | None = None) -> int:
     memory = Memory(args.pr)
     start = time.monotonic()
     deadline = start + args.timeout
-    state: dict | None = None
+    state: PollState | None = None
     last_error = ""
     first = True
     while True:

@@ -175,8 +175,11 @@ template deliberately, one change at a time; routine local refactoring needs no 
 
 Ruff formats the authored scripts and checks them with the remaining justified
 `[tool.ruff.lint.per-file-ignores]` in `pyproject.toml`; sibling layout is no reason
-for a waiver. mypy does not check the scripts yet. Add a new scoped ignore only with
-a reason comment, never by relaxing the global rule set.
+for a waiver. Strict mypy checks authored production modules through the shared
+`[tool.mypy].files` targets used by `just lint`, CI and the commit hook; mirrored
+modules and the stdlib unittest fixtures keep their existing checks. Model JSON
+boundaries and payloads explicitly. Add a scoped ignore only with a reason comment,
+never by relaxing the global rule set.
 
 ## What catches a broken skill
 

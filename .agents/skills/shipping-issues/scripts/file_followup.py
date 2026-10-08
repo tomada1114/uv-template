@@ -58,13 +58,14 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
 
 # Run from the .claude/skills mirror, a sibling import would leave __pycache__/
 # there, which `just agents-check` reports as drift.
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from issue_digest import (
+from github_cli import gh as run_gh
+from github_cli import read_repo_labels
+from issue_records import (
     DEPENDENCY_BLOCK_LABELS,
     TIER_LABELS,
     TIER_ORDER,
@@ -78,57 +79,28 @@ from issue_digest import (
 DEPENDENCY_LABEL = "blocked: dependency"
 MISSING_LABEL_EXIT = 4
 
-PERMISSION_MARKERS = (
-    "HTTP 403",
-    "Resource not accessible",
-    "must have admin",
-    "does not have permission",
-    "HTTP 404: Not Found",
-)
-
-# Set once in main(); every gh call is qualified with it so cwd cannot decide
-# which repo a finding lands in.
+# Set once in main; the shared runner qualifies every write with this repo.
 REPO: str | None = None
 
 
-def gh(args: list[str], check: bool = True) -> subprocess.CompletedProcess:
-    if REPO:
-        args = [*args, "--repo", REPO]
-    try:
-        return subprocess.run(
-            ["gh", *args], capture_output=True, text=True, check=check, timeout=120
-        )
-    except FileNotFoundError:
-        print("error: gh CLI not found", file=sys.stderr)
-        raise SystemExit(1)
-    except subprocess.TimeoutExpired:
-        print(f"error: gh {' '.join(args)} timed out", file=sys.stderr)
-        raise SystemExit(1)
-    except subprocess.CalledProcessError as exc:
-        stderr = exc.stderr or ""
-        if any(m in stderr for m in PERMISSION_MARKERS):
-            print(
-                f"verdict: NO_WRITE_ACCESS\nerror: gh {' '.join(args)}:\n{stderr}",
-                file=sys.stderr,
-            )
-            raise SystemExit(2)
-        print(f"error: gh {' '.join(args)} failed:\n{stderr}", file=sys.stderr)
-        raise SystemExit(1)
+def gh(args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
+    """Delegate the write boundary while retaining the CLI test seam."""
+    return run_gh(args, check, repo=REPO)
 
 
 def repo_labels() -> list[str]:
-    raw = gh(["label", "list", "--limit", "500", "--json", "name"]).stdout or "[]"
-    return [lbl["name"] for lbl in json.loads(raw)]
+    """Read labels through the shared boundary with this CLI's runner."""
+    return read_repo_labels(gh)
 
 
-def dependency_section(args: Any) -> str:
+def dependency_section(args: argparse.Namespace) -> str:
     """The `## Dependencies` section `triaging-issues` defines, or "" when the finding has no edge. One `Depends on: #N` / `Blocks: #N` per line: the spelling `triaging-issues` asks for and issue_digest.py parses."""
     lines = [f"Depends on: #{n}" for n in re.findall(r"\d+", args.blocked_by or "")]
     lines += [f"Blocks: #{n}" for n in re.findall(r"\d+", args.blocks or "")]
     return "## Dependencies\n\n" + "\n".join(lines) if lines else ""
 
 
-def ship_contract(args: Any) -> str:
+def ship_contract(args: argparse.Namespace) -> str:
     """The `<!-- ship: ... -->` block for a newly filed issue.
 
     Written on every issue this skill files, because the alternative is a later

@@ -40,7 +40,12 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, cast
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+if TYPE_CHECKING:
+    from issue_types import DigestPayload, PlanPayload, RankingRow
 
 SKILL_DIR = Path(__file__).resolve().parent
 # How many worktrees a run will hold open at once unless the caller says
@@ -116,7 +121,7 @@ def slugify(title: str, limit: int = 40) -> str:
     return slug.strip("-")
 
 
-def branch_type(row: dict[str, Any], labels: list[str]) -> str:
+def branch_type(row: RankingRow, labels: list[str]) -> str:
     m = re.match(
         r"^\s*(feat|fix|docs|chore|test|refactor|perf|build|ci|style)\b",
         row.get("title", ""),
@@ -131,7 +136,7 @@ def branch_type(row: dict[str, Any], labels: list[str]) -> str:
     return "chore"
 
 
-def branch_name(row: dict[str, Any], labels: list[str]) -> str:
+def branch_name(row: RankingRow, labels: list[str]) -> str:
     slug = slugify(row.get("title", ""))
     return f"{branch_type(row, labels)}/{row['number']}" + (f"-{slug}" if slug else "")
 
@@ -178,8 +183,8 @@ def paths_collide(a: list[str], b: list[str]) -> bool:
 
 
 def group_batches(
-    ready: list[dict[str, Any]], max_parallel: int
-) -> tuple[list[list[dict[str, Any]]], str, list[int]]:
+    ready: list[RankingRow], max_parallel: int
+) -> tuple[list[list[RankingRow]], str, list[int]]:
     """Split the READY issues into batches that can be worked concurrently.
 
     Returns (batches, confidence, undeclared) where confidence is MECHANICAL
@@ -187,11 +192,11 @@ def group_batches(
     at least one did not — in which case the batch is a proposal and the caller
     still owes it a look.
     """
-    batches: list[list[dict[str, Any]]] = []
+    batches: list[list[RankingRow]] = []
     remaining = list(ready)
     while remaining:
         batch = [remaining.pop(0)]
-        rest: list[dict[str, Any]] = []
+        rest: list[RankingRow] = []
         for row in remaining:
             in_batch = {r["number"] for r in batch}
             depends = set(row.get("depends_on_open") or [])
@@ -375,7 +380,7 @@ def main() -> int:
         print("verdict: BLOCKED")
         return 1
     try:
-        digest = json.loads(out)
+        digest = cast("DigestPayload", json.loads(out))
     except ValueError:
         print("error: issue_digest.py did not return JSON", file=sys.stderr)
         return 1
@@ -447,7 +452,7 @@ def main() -> int:
     else:
         next_cmd = "nothing to ship — see held:/needs-design: above"
 
-    payload = {
+    payload: PlanPayload = {
         "preflight": pre,
         "mode": args.mode,
         "plan_mode": plan_mode,

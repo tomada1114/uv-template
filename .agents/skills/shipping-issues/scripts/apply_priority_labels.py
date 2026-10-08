@@ -64,6 +64,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import re
@@ -71,20 +72,29 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from contextlib import redirect_stderr
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from issue_types import DigestPayload, Label
+
 
 # Run from the .claude/skills mirror, a sibling import would leave __pycache__/
 # there, which `just agents-check` reports as drift.
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from issue_digest import (
+from github_cli import gh as run_gh
+from github_cli import read_repo_labels
+from issue_records import (
     CONTRACT_FIELD_RE,
     DEPENDENCY_BLOCK_LABELS,
     DESIGN_BLOCK_LABELS,
     TIER_ALIASES,
     TIER_LABELS,
     TIER_ORDER,
+    build_records,
+    fetch_issues_and_prs,
     find_ship_contracts,
     normalize_label,
     parse_ship_contract,
@@ -92,61 +102,35 @@ from issue_digest import (
     resolve_tier_label,
 )
 
-DIGEST = Path(__file__).resolve().parent / "issue_digest.py"
 
-# gh prints these when the token lacks push access; the caller must stop asking
-# for labels rather than retry.
-PERMISSION_MARKERS = (
-    "HTTP 403",
-    "Resource not accessible",
-    "must have admin",
-    "does not have permission",
-    "HTTP 404: Not Found",
-)
+def gh(args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
+    """Delegate the write boundary while retaining the CLI test seam."""
+    return run_gh(args, check)
 
 
-def gh(args: list[str], check: bool = True) -> subprocess.CompletedProcess:
+def load_digest() -> DigestPayload:
+    """Rank the fetched backlog directly, preserving the CLI failure boundary."""
+    errors = io.StringIO()
     try:
-        # UTF-8, not the locale's encoding: clear_design() writes a body read
-        # here back to GitHub as UTF-8, and the round trip must be symmetric.
-        return subprocess.run(
-            ["gh", *args],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            check=check,
-            timeout=120,
-        )
-    except FileNotFoundError:
-        print("error: gh CLI not found", file=sys.stderr)
-        raise SystemExit(1)
-    except subprocess.TimeoutExpired:
-        print(f"error: gh {' '.join(args)} timed out", file=sys.stderr)
-        raise SystemExit(1)
-    except subprocess.CalledProcessError as exc:
-        stderr = exc.stderr or ""
-        if any(m in stderr for m in PERMISSION_MARKERS):
-            print(
-                f"verdict: NO_WRITE_ACCESS\nerror: gh {' '.join(args)}:\n{stderr}",
-                file=sys.stderr,
+        with redirect_stderr(errors):
+            issues, prs, _ = fetch_issues_and_prs(
+                [
+                    "issue",
+                    "list",
+                    "--state",
+                    "open",
+                    "--limit",
+                    "200",
+                    "--json",
+                    "number,title,labels,assignees,milestone,body,createdAt,updatedAt,url",
+                ],
+                0,
+                False,
             )
-            raise SystemExit(2)
-        print(f"error: gh {' '.join(args)} failed:\n{stderr}", file=sys.stderr)
+    except SystemExit:
+        print(f"error: issue_digest.py failed:\n{errors.getvalue()}", file=sys.stderr)
         raise SystemExit(1)
-
-
-def load_digest() -> dict[str, Any]:
-    """Open issues with their tiers and suggestions — bodies deliberately omitted."""
-    proc = subprocess.run(
-        [sys.executable, str(DIGEST), "--json", "--body-chars", "0"],
-        capture_output=True,
-        text=True,
-        timeout=180,
-    )
-    if proc.returncode != 0:
-        print(f"error: issue_digest.py failed:\n{proc.stderr}", file=sys.stderr)
-        raise SystemExit(1)
-    return json.loads(proc.stdout)
+    return build_records(issues, prs, body_chars=0)
 
 
 MISSING_LABEL_EXIT = 4
@@ -199,13 +183,15 @@ def parse_sets(pairs: list[str]) -> dict[int, str]:
 
 
 def repo_labels() -> list[str]:
-    raw = gh(["label", "list", "--limit", "500", "--json", "name"]).stdout or "[]"
-    return [lbl["name"] for lbl in json.loads(raw)]
+    """Read labels through the shared boundary with this CLI's runner."""
+    return read_repo_labels(gh)
 
 
 def issue_labels(number: int) -> list[str]:
     raw = gh(["issue", "view", str(number), "--json", "labels"]).stdout or "{}"
-    return [lbl["name"] for lbl in json.loads(raw).get("labels", [])]
+    return [
+        lbl["name"] for lbl in cast("list[Label]", json.loads(raw).get("labels", []))
+    ]
 
 
 def design_label() -> str:
@@ -517,7 +503,7 @@ def main() -> int:
             # replace a human's answer with a score — the one thing a backfill
             # must never do. The label still gets written, so the tier ends up
             # where every later run reads it; it is just the author's tier.
-            if rec.get("contract_tier"):
+            if rec["contract_tier"]:
                 plan.append((rec["number"], rec["contract_tier"], "ship contract"))
             else:
                 plan.append(
@@ -536,16 +522,16 @@ def main() -> int:
 
     changed, unchanged, missing = [], [], []
     for number, tier, why in sorted(plan):
-        rec = issues.get(number)
-        if rec is None:
+        selected = issues.get(number)
+        if selected is None:
             # Not in the open-issue digest: closed, or filtered out. Still label
             # it — an explicit --set on a just-closed issue is not an error.
             missing.append(number)
             if apply(number, tier, [], args.dry_run, names[tier]):
                 changed.append((number, tier, why, "not-open"))
             continue
-        if apply(number, tier, rec["labels"], args.dry_run, names[tier]):
-            changed.append((number, tier, why, rec["priority_tier"] or "none"))
+        if apply(number, tier, selected["labels"], args.dry_run, names[tier]):
+            changed.append((number, tier, why, selected["priority_tier"] or "none"))
         else:
             unchanged.append(number)
 

@@ -529,10 +529,29 @@ class ClearDependencyTest(unittest.TestCase):
 
 
 class MainEndToEndTest(unittest.TestCase):
-    """Runs main() in-process against a fake `gh` on PATH. load_digest()
-    still shells out to issue_digest.py as a real subprocess (that is its
-    actual design), so only apply_priority_labels.py's own lines are covered
-    here — issue_digest.py has its own in-process tests."""
+    """Run the label CLI in-process, with only GitHub calls routed to FakeGh."""
+
+    def test_backfill_uses_the_ranking_library_without_a_child_python(self):
+        real_run = subprocess.run
+        with patch("subprocess.run", wraps=real_run) as invoked:
+            rc, out, err, calls = self._run(
+                ["--backfill", "--json"],
+                {
+                    ("label", "list"): ALL_LABELS,
+                    ("issue", "list"): json.dumps([issue(12, [])]),
+                    ("pr", "list"): "[]",
+                    ("issue", "edit"): "",
+                },
+            )
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(json.loads(out)["changed"][0]["number"], 12)
+        self.assertTrue(any(call[:2] == ["issue", "edit"] for call in calls))
+        self.assertFalse(
+            any(
+                str(call.args[0][0]) == sys.executable
+                for call in invoked.call_args_list
+            )
+        )
 
     def _run(self, args, responses, path_override=None):
         with FakeGh(responses) as fake:
@@ -929,12 +948,10 @@ class GhErrorBranchesTest(unittest.TestCase):
         self.assertEqual(cm.exception.code, 1)
 
     def test_load_digest_nonzero_exit_raises_1(self):
-        class FakeProc:
-            returncode = 1
-            stderr = "boom"
-            stdout = ""
-
-        with patch("apply_priority_labels.subprocess.run", return_value=FakeProc()):
+        with patch(
+            "issue_records.subprocess.run",
+            side_effect=subprocess.CalledProcessError(1, ["gh"], stderr="boom"),
+        ):
             with self.assertRaises(SystemExit) as cm:
                 apl.load_digest()
         self.assertEqual(cm.exception.code, 1)

@@ -513,6 +513,17 @@ class DigestRunner:
 
 
 class MainEndToEndTest(DigestRunner, unittest.TestCase):
+    def test_library_ranks_fetched_records_without_a_subprocess(self):
+        issues = [
+            gh_issue(1, title="small task", labels=["priority: P2"]),
+            gh_issue(2, title="blocking task", body="Blocks: #1"),
+        ]
+        rc, out, err = self._run(["--json", "--body-chars", "0"], issues)
+        self.assertEqual(rc, 0, err)
+        with patch("subprocess.run", side_effect=AssertionError("unexpected fetch")):
+            payload = idg.build_records(issues, [], body_chars=0)
+        self.assertEqual(payload, json.loads(out))
+
     def test_select_reports_top_ready_issue(self):
         issues = [
             gh_issue(1, title="unlabeled small thing"),
@@ -1538,7 +1549,7 @@ class DigestCacheTest(DigestRunner, unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.state = Path(self._tmp.name)
         # The cache fixture must work without a Git checkout or origin remote.
-        repo = patch.object(idg, "repo_slug", return_value="acme/widgets")
+        repo = patch("issue_records.repo_slug", return_value="acme/widgets")
         repo.start()
         self.addCleanup(repo.stop)
 

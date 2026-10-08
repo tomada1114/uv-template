@@ -13,6 +13,7 @@ scalar; anything else is reported, never guessed at.
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -43,6 +44,28 @@ _FOLDED = frozenset({">", ">-"})
 # Plain one-line values a strict YAML parser rejects or cuts short.
 _PLAIN_TRAPS = re.compile(r": |:\t|:$| #|\t#|^\? |^- |^[\[{&*!%@`|>]")
 _SEPARATOR_CELL = re.compile(r"^:?-+:?$")
+
+
+def test_mypy_targets_cover_authored_production_scripts() -> None:
+    config = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    mypy = config["tool"]["mypy"]
+    targets = mypy["files"]
+    assert {"src", "scripts", "tests"} <= set(targets)
+    assert mypy["strict"] is True
+    covered = {
+        Path(path).resolve() for target in targets for path in REPO_ROOT.glob(target)
+    }
+    production = set((REPO_ROOT / SKILLS_DIR).glob("*/scripts/*.py"))
+    assert production <= covered
+    assert not any(
+        ".claude" in path.parts or (path.is_file() and path.parent.name == "tests")
+        for path in covered
+    )
+
+
+def test_mypy_hook_uses_the_shared_target_configuration() -> None:
+    hooks = (REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+    assert "entry: uv run --locked mypy\n" in hooks
 
 
 class FrontmatterError(ValueError):

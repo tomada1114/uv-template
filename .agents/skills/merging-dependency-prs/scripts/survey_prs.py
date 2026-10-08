@@ -20,10 +20,67 @@ import json
 import re
 import subprocess
 import sys
-from typing import Any
+from typing import TypedDict, cast
 
-Row = dict[str, Any]
-"""One triage row, or one raw `gh` JSON object — heterogeneous by nature."""
+
+class CheckRun(TypedDict, total=False):
+    conclusion: str | None
+    state: str | None
+    status: str | None
+    name: str | None
+    context: str | None
+
+
+class NamedLabel(TypedDict):
+    name: str
+
+
+class ChangedFile(TypedDict, total=False):
+    path: str
+
+
+class Author(TypedDict, total=False):
+    login: str
+
+
+class RawPr(TypedDict, total=False):
+    number: int
+    title: str
+    url: str
+    headRefName: str
+    baseRefName: str | None
+    author: Author | None
+    statusCheckRollup: list[CheckRun] | None
+    mergeable: str | None
+    mergeStateStatus: str | None
+    files: list[ChangedFile] | None
+    labels: list[NamedLabel] | None
+    createdAt: str | None
+
+
+Row = TypedDict(
+    "Row",
+    {
+        "number": int,
+        "title": str,
+        "url": str,
+        "branch": str,
+        "base": "str | None",
+        "package": "str | None",
+        "from": "str | None",
+        "to": "str | None",
+        "level": str,
+        "pre_one_minor": bool,
+        "ecosystem": str,
+        "mergeable": "str | None",
+        "merge_state": "str | None",
+        "checks": str,
+        "failing_checks": list[str],
+        "files": list[str],
+        "labels": list[str],
+        "created_at": "str | None",
+    },
+)
 
 FIELDS = (
     "number,title,author,headRefName,baseRefName,mergeable,mergeStateStatus,"
@@ -64,7 +121,7 @@ def emit(line: str = "") -> None:
     sys.stdout.write(f"{line}\n")
 
 
-def gh_json(*args: str) -> list[Row]:
+def gh_json(*args: str) -> list[RawPr]:
     """Run a read-only `gh ... --json` command and return the parsed payload.
 
     Raises:
@@ -93,7 +150,7 @@ def gh_json(*args: str) -> list[Row]:
         )
         raise GhError(msg)
     parsed = json.loads(proc.stdout or "[]")
-    return parsed if isinstance(parsed, list) else []
+    return cast("list[RawPr]", parsed) if isinstance(parsed, list) else []
 
 
 def parse_versions(title: str) -> tuple[str | None, str | None, str | None]:
@@ -141,7 +198,7 @@ def is_pre_one_minor_bump(old: str | None, new: str | None) -> bool:
     )
 
 
-def check_summary(rollup: list[Row] | None) -> tuple[str, list[str]]:
+def check_summary(rollup: list[CheckRun] | None) -> tuple[str, list[str]]:
     """Reduce statusCheckRollup to an overall state plus the failing checks.
 
     Fails closed: only PASSING_STATES pass and only PENDING_STATES hold; any
@@ -207,7 +264,7 @@ def contested_files(rows: list[Row]) -> dict[str, list[int]]:
     return {path: nums for path, nums in seen.items() if len(nums) > 1}
 
 
-def to_row(pr: Row) -> Row:
+def to_row(pr: RawPr) -> Row:
     """Shape one raw `gh pr list` object into a triage row."""
     pkg, old, new = parse_versions(pr.get("title") or "")
     state, failing = check_summary(pr.get("statusCheckRollup"))
@@ -234,12 +291,12 @@ def to_row(pr: Row) -> Row:
     }
 
 
-def select_bot_rows(prs: list[Row]) -> list[Row]:
+def select_bot_rows(prs: list[RawPr]) -> list[Row]:
     """Keep the Dependabot-authored PRs, as triage rows ordered by PR number."""
     rows = [
         to_row(pr)
         for pr in prs
-        if "dependabot" in ((pr.get("author") or {}).get("login") or "")
+        if "dependabot" in ((pr.get("author") or Author()).get("login") or "")
     ]
     rows.sort(key=lambda row: row["number"])
     return rows

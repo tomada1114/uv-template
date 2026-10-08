@@ -43,7 +43,7 @@ jobs:
             uv run --locked python scripts/sync_agents.py --check
             uv run --locked ruff check .
             uv run --locked ruff format --check .
-            uv run --locked mypy src scripts tests
+            uv run --locked mypy
             uv run --locked pre-commit run shellcheck --all-files
           ) &
           lint_pid=$!
