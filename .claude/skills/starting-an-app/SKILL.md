@@ -96,7 +96,7 @@ the answer into the Product section's core interaction:
 Dropping an entry point is a list of deletions, never a core change: the "A project
 without the API" section of `building-api-routes` and "A project without the CLI" of
 `designing-clis` name every file, dependency, recipe, ruff entry, and skill that goes
-with each, and README's "Architecture" holds the same list for readers. Run `uv lock` after
+with each; README's "Architecture" points to those checklists. Run `uv lock` after
 removing a dependency, then `just verify`.
 
 ## Record the first ADRs
