@@ -812,9 +812,20 @@ class AfterPushTest(unittest.TestCase):
         saved = json.loads(self.memory().read_text(encoding="utf-8"))
         self.assertEqual(saved["await"]["sha"], FIXED)
 
+    def test_the_default_grace_outlasts_the_slowest_observed_start(self):
+        # A push-started review began 2 min 13 s after the push on PR #184;
+        # 200 s in, the default 300 s grace is still waiting for one.
+        self.seed_wait(FIXED, seconds_ago=200)
+
+        proc = self.run_watch(["7", "--after-push", FIXED, "--timeout", "0"],
+                              self.opening_findings())
+
+        self.assertEqual(field(proc.stdout, "verdict"), "PENDING_TIMEOUT", proc.stdout)
+        self.assertIn("start grace", field(proc.stdout, "detail"))
+
     def test_the_grace_runs_from_the_first_call_for_that_push(self):
         # Slices add up without the caller counting: a watch for FIXED began
-        # 1000 s ago, so this call is already past the default 180 s grace.
+        # 1000 s ago, so this call is already past the default 300 s grace.
         self.seed_wait(FIXED, seconds_ago=1000)
 
         proc = self.run_watch(["7", "--after-push", FIXED, "--timeout", "0"],
