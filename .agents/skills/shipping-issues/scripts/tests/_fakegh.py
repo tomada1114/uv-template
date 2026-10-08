@@ -160,7 +160,7 @@ class FakeGh:
             self.env["FAKE_GH_JQ_NEWLINE"] = "1"
         else:
             self.env.pop("FAKE_GH_JQ_NEWLINE", None)
-        # Three isolations every test wants, and neither is safe to leave to the
+        # Three isolations every test wants, and none is safe to leave to the
         # individual test to remember:
         #   * the run-state dir is redirected into this temp dir, so nothing a
         #     test does can write into the user's real ~/.local/state;
