@@ -215,29 +215,24 @@ runtime-evaluated-decorators = [
 # Skill scripts belong here; authoring-skills' "Scripts bundled inside a skill"
 # section records ownership and deliberate per-change porting to other templates.
 # They are stdlib-only CLI tools run with the system `python3` and tested with
-# unittest, never part of the package's public API. Former upstream-layout waivers
-# remain pending a separate cleanup; they waive nothing for src/, scripts/ or tests/.
+# unittest, never part of the package's public API. These scoped waivers do not
+# affect src/, scripts/ or tests/.
 ".agents/skills/**/scripts/**" = [
     "D1",      # missing docstrings — CLI helpers, not a public API
-    "D2",      # docstring layout (D205/D209) — kept as authored upstream
     "T20",     # print is the CLI's output channel
     "S603",    # subprocess with an argv list built from fixed commands (gh, git)
     "S607",    # `gh`/`git` resolved from PATH on purpose, like a shell would
     "PLW1510", # subprocess.run callers check returncode themselves
     "B904",    # re-raised SystemExit carries the user-facing message on its own
     "E402",    # sys.path set up before a sibling-script import
-    "I001",    # import order kept as authored upstream
-    "ISC003",  # explicit concatenation kept as authored upstream
     "PLR0911", # long dispatch functions mirror the documented exit codes
     "PLR0912", # dispatch branches mirror documented CLI outcomes
-    "PLR0915", # sequential CLI steps retain the upstream layout
+    "PLR0915", # sequential CLI steps retain the documented workflow
     "PLR2004", # exit codes and limits are documented in each script's header
     "PLW0603", # module-level CLI state set once from argv
     "RUF001",  # deliberate typographic characters in user-facing output
     "TC003",   # runtime imports kept simple in stdlib-only scripts
     "DTZ011",  # an issue's age in local days is approximate by design
-    "UP017",   # timezone.utc spelling kept as authored upstream
-    "UP031",   # printf-style formatting kept as authored upstream
 ]
 ".agents/skills/**/scripts/tests/**" = [
     "D",       # test names are self-documenting
@@ -250,7 +245,6 @@ runtime-evaluated-decorators = [
     "PLW2901", # fixture loops deliberately rebind values for each scenario
     "RUF005", # list concatenation keeps command argv fixtures explicit
     "RUF059",  # unpacked-but-unused results document the call's shape
-    "RUF100",  # `noqa: E402` kept from upstream, where E402 is not ignored
     "SIM117", # nested contexts preserve the upstream unittest fixture layout
 ]
 
@@ -258,9 +252,6 @@ runtime-evaluated-decorators = [
 required-imports = ["from __future__ import annotations"]
 
 [tool.ruff.format]
-# Former upstream-layout exclusion awaits separate cleanup; see authoring-skills'
-# "Scripts bundled inside a skill" section for the repository ownership decision.
-exclude = [".agents/skills/*/scripts/**"]
 quote-style = "double"
 indent-style = "space"
 

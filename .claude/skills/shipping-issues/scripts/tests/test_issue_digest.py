@@ -4,6 +4,7 @@
 Run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
      (from the shipping-issues skill directory)
 """
+
 from __future__ import annotations
 
 import datetime as _dt
@@ -13,35 +14,52 @@ import re
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from _fakegh import FakeGh  # noqa: E402
-import issue_digest as idg  # noqa: E402
+import issue_digest as idg
+from _fakegh import FakeGh
 
 
-def gh_issue(number, title="issue", labels=None, *, body="", updated=None,
-             created=None, milestone=None, assignees=None):
+def gh_issue(
+    number,
+    title="issue",
+    labels=None,
+    *,
+    body="",
+    updated=None,
+    created=None,
+    milestone=None,
+    assignees=None,
+):
     updated = updated or "2026-01-01T00:00:00Z"
     created = created or updated
     return {
-        "number": number, "title": title,
+        "number": number,
+        "title": title,
         "labels": [{"name": n} for n in (labels or [])],
         "assignees": [{"login": a} for a in (assignees or [])],
         "milestone": {"title": milestone} if milestone else None,
-        "body": body, "createdAt": created, "updatedAt": updated,
+        "body": body,
+        "createdAt": created,
+        "updatedAt": updated,
         "url": f"https://github.com/acme/widgets/issues/{number}",
     }
 
 
 def gh_pr(number, title="pr", body="", head="feature", draft=False):
-    return {"number": number, "title": title, "body": body,
-            "headRefName": head, "isDraft": draft,
-            "url": f"https://github.com/acme/widgets/pull/{number}"}
+    return {
+        "number": number,
+        "title": title,
+        "body": body,
+        "headRefName": head,
+        "isDraft": draft,
+        "url": f"https://github.com/acme/widgets/pull/{number}",
+    }
 
 
 class NormalizeLabelTest(unittest.TestCase):
@@ -91,7 +109,9 @@ class ExtractDepsTest(unittest.TestCase):
         self.assertEqual(deps["depends_on"], [1, 2])
 
     def test_mixed_list_after_blocked_by_and_requires(self):
-        deps = idg.extract_deps("Blocked by: #3, #4, and #5\nRequires: #6 and #7", "t", self_number=9)
+        deps = idg.extract_deps(
+            "Blocked by: #3, #4, and #5\nRequires: #6 and #7", "t", self_number=9
+        )
         self.assertEqual(deps["depends_on"], [3, 4, 5, 6, 7])
 
     def test_blocks_pattern(self):
@@ -182,8 +202,14 @@ class ScoreIssueTest(unittest.TestCase):
         # age so the staleness/freshness bonus never perturbs the assertions
         # below, which are about the *other* scoring inputs.
         neutral = (_dt.date.today() - _dt.timedelta(days=90)).isoformat()
-        rec = {"unblocks_open": [], "referenced_by_open": [], "labels": [],
-               "title": "t", "milestone": None, "updated_at": neutral}
+        rec = {
+            "unblocks_open": [],
+            "referenced_by_open": [],
+            "labels": [],
+            "title": "t",
+            "milestone": None,
+            "updated_at": neutral,
+        }
         rec.update(over)
         return rec
 
@@ -253,58 +279,103 @@ class TierCellTest(unittest.TestCase):
 
 class ReadinessTest(unittest.TestCase):
     def test_blocked_by_wins_over_everything(self):
-        rec = {"depends_on_open": [3], "not_ready_labels": ["blocked"],
-               "design_labels": [], "open_pr": {"number": 1}}
+        rec = {
+            "depends_on_open": [3],
+            "not_ready_labels": ["blocked"],
+            "design_labels": [],
+            "open_pr": {"number": 1},
+        }
         self.assertEqual(idg.readiness(rec), "BLOCKED-BY:#3")
 
     def test_not_ready_label_next(self):
-        rec = {"depends_on_open": [], "not_ready_labels": ["question"],
-               "design_labels": [], "open_pr": {"number": 1}}
+        rec = {
+            "depends_on_open": [],
+            "not_ready_labels": ["question"],
+            "design_labels": [],
+            "open_pr": {"number": 1},
+        }
         self.assertEqual(idg.readiness(rec), "LABEL:question")
 
     def test_open_pr_next(self):
-        rec = {"depends_on_open": [], "not_ready_labels": [],
-               "design_labels": [], "open_pr": {"number": 7}}
+        rec = {
+            "depends_on_open": [],
+            "not_ready_labels": [],
+            "design_labels": [],
+            "open_pr": {"number": 7},
+        }
         self.assertEqual(idg.readiness(rec), "HAS-PR:#7")
 
     def test_ready_when_nothing_blocks(self):
-        rec = {"depends_on_open": [], "not_ready_labels": [],
-               "design_labels": [], "open_pr": None}
+        rec = {
+            "depends_on_open": [],
+            "not_ready_labels": [],
+            "design_labels": [],
+            "open_pr": None,
+        }
         self.assertEqual(idg.readiness(rec), "READY")
 
     def test_design_label_blocks_by_default(self):
-        rec = {"depends_on_open": [], "not_ready_labels": [],
-               "design_labels": ["blocked: design"], "open_pr": None}
+        rec = {
+            "depends_on_open": [],
+            "not_ready_labels": [],
+            "design_labels": ["blocked: design"],
+            "open_pr": None,
+        }
         self.assertEqual(idg.readiness(rec), "DESIGN:blocked: design")
 
     def test_design_label_wins_over_open_pr(self):
-        rec = {"depends_on_open": [], "not_ready_labels": [],
-               "design_labels": ["needs-design"], "open_pr": {"number": 7}}
+        rec = {
+            "depends_on_open": [],
+            "not_ready_labels": [],
+            "design_labels": ["needs-design"],
+            "open_pr": {"number": 7},
+        }
         self.assertEqual(idg.readiness(rec), "DESIGN:needs-design")
 
     def test_not_ready_label_wins_over_design_label(self):
-        rec = {"depends_on_open": [], "not_ready_labels": ["blocked"],
-               "design_labels": ["blocked: design"], "open_pr": None}
+        rec = {
+            "depends_on_open": [],
+            "not_ready_labels": ["blocked"],
+            "design_labels": ["blocked: design"],
+            "open_pr": None,
+        }
         self.assertEqual(idg.readiness(rec), "LABEL:blocked")
 
     def test_allow_design_treats_design_label_as_ready(self):
-        rec = {"depends_on_open": [], "not_ready_labels": [],
-               "design_labels": ["blocked: design"], "open_pr": None}
+        rec = {
+            "depends_on_open": [],
+            "not_ready_labels": [],
+            "design_labels": ["blocked: design"],
+            "open_pr": None,
+        }
         self.assertEqual(idg.readiness(rec, allow_design=True), "READY")
 
     def test_allow_design_still_respects_open_pr(self):
-        rec = {"depends_on_open": [], "not_ready_labels": [],
-               "design_labels": ["blocked: design"], "open_pr": {"number": 7}}
+        rec = {
+            "depends_on_open": [],
+            "not_ready_labels": [],
+            "design_labels": ["blocked: design"],
+            "open_pr": {"number": 7},
+        }
         self.assertEqual(idg.readiness(rec, allow_design=True), "HAS-PR:#7")
 
 
 class DesignBlockLabelsTest(unittest.TestCase):
     def test_normalized_equivalents_all_recognized(self):
-        for name in ("blocked: design", "Blocked: Design", "blocked/design",
-                     "needs design", "needs-design", "needs:design",
-                     "design-needed"):
-            self.assertIn(idg.normalize_label(name), idg.DESIGN_BLOCK_LABELS,
-                          f"{name!r} should be a recognized design-block label")
+        for name in (
+            "blocked: design",
+            "Blocked: Design",
+            "blocked/design",
+            "needs design",
+            "needs-design",
+            "needs:design",
+            "design-needed",
+        ):
+            self.assertIn(
+                idg.normalize_label(name),
+                idg.DESIGN_BLOCK_LABELS,
+                f"{name!r} should be a recognized design-block label",
+            )
 
     def test_unrelated_label_not_recognized(self):
         self.assertNotIn(idg.normalize_label("bug"), idg.DESIGN_BLOCK_LABELS)
@@ -312,11 +383,19 @@ class DesignBlockLabelsTest(unittest.TestCase):
 
 class DependencyBlockLabelsTest(unittest.TestCase):
     def test_normalized_equivalents_all_recognized(self):
-        for name in ("blocked: dependency", "Blocked: Dependency",
-                     "blocked/dependency", "blocked-by-dependency",
-                     "blocked: dependencies", "waiting on dependency"):
-            self.assertIn(idg.normalize_label(name), idg.DEPENDENCY_BLOCK_LABELS,
-                          f"{name!r} should be a recognized dependency-block label")
+        for name in (
+            "blocked: dependency",
+            "Blocked: Dependency",
+            "blocked/dependency",
+            "blocked-by-dependency",
+            "blocked: dependencies",
+            "waiting on dependency",
+        ):
+            self.assertIn(
+                idg.normalize_label(name),
+                idg.DEPENDENCY_BLOCK_LABELS,
+                f"{name!r} should be a recognized dependency-block label",
+            )
 
     def test_bare_blocked_not_recognized(self):
         # Deliberately excluded — ambiguous with READY_NEGATIVE_LABELS's
@@ -340,7 +419,8 @@ class ResolveDesignLabelTest(unittest.TestCase):
 
     def test_shortest_alias_wins_when_repo_carries_several(self):
         name, needs_create = idg.resolve_design_label(
-            ["needs design", "needs-design", "design-needed"])
+            ["needs design", "needs-design", "design-needed"]
+        )
         # "needs design"/"needs-design" tie on length (12); the tie-break is
         # plain string ordering (min()'s documented behavior) rather than a
         # meaningful preference, and a space sorts before a hyphen.
@@ -364,7 +444,9 @@ def declared_labels() -> dict[str, tuple[str, str]]:
     text = LABELS_YML.read_text(encoding="utf-8")
     entries = re.findall(
         r'^- name: "?([^"\n]+?)"?\n\s+color: (\w+)\n\s+description: "([^"]*)"',
-        text, re.MULTILINE)
+        text,
+        re.MULTILINE,
+    )
     return {name: (color, desc) for name, color, desc in entries}
 
 
@@ -396,8 +478,9 @@ class DigestRunner:
     inheriting it from a TestCase would re-run that class's own tests inside
     each of them."""
 
-    def _run(self, args, issues, prs=None, *, path_override=None,
-             state_dir=None, cache=False):
+    def _run(
+        self, args, issues, prs=None, *, path_override=None, state_dir=None, cache=False
+    ):
         """Run main() once. `cache=True` re-enables the digest cache (FakeGh
         disables it by default) and `state_dir` pins where it lives, so a test
         can drive two calls through one cache and count the gh invocations."""
@@ -415,9 +498,12 @@ class DigestRunner:
                 env["AGENT_SKILL_STATE_DIR"] = str(state_dir)
             self.last_calls = fake
             out, err = io.StringIO(), io.StringIO()
-            with patch.dict("os.environ", env, clear=False), \
-                    patch.object(sys, "argv", ["issue_digest.py", *args]), \
-                    redirect_stdout(out), redirect_stderr(err):
+            with (
+                patch.dict("os.environ", env, clear=False),
+                patch.object(sys, "argv", ["issue_digest.py", *args]),
+                redirect_stdout(out),
+                redirect_stderr(err),
+            ):
                 try:
                     rc = idg.main()
                 except SystemExit as exc:
@@ -440,8 +526,12 @@ class MainEndToEndTest(DigestRunner, unittest.TestCase):
 
     def test_tracking_issue_is_never_ranked_selected_or_offered_a_tier(self):
         issues = [
-            gh_issue(96, title="back-port harness (tracking)", labels=["tracking"],
-                     body="- [ ] #97\n- [ ] #98"),
+            gh_issue(
+                96,
+                title="back-port harness (tracking)",
+                labels=["tracking"],
+                body="- [ ] #97\n- [ ] #98",
+            ),
             gh_issue(95, title="old umbrella", labels=["Epic", "priority: P0"]),
             gh_issue(97, title="the work", labels=["priority: P2"]),
             gh_issue(98, title="untiered work"),
@@ -473,8 +563,9 @@ class MainEndToEndTest(DigestRunner, unittest.TestCase):
         payload = json.loads(out)
         self.assertEqual(payload["tracking_issues"], [])
         row = payload["ranking"][0]
-        self.assertEqual((row["number"], row["tier"], row["readiness"]),
-                         (5, "P1", "LABEL:on hold"))
+        self.assertEqual(
+            (row["number"], row["tier"], row["readiness"]), (5, "P1", "LABEL:on hold")
+        )
 
     def test_select_text_output_names_the_pick(self):
         issues = [gh_issue(2, title="ship now", labels=["priority: P0"])]
@@ -484,8 +575,9 @@ class MainEndToEndTest(DigestRunner, unittest.TestCase):
 
     def test_blocked_issue_is_never_selected(self):
         issues = [
-            gh_issue(1, title="blocked one", labels=["priority: P0"],
-                     body="depends on #2"),
+            gh_issue(
+                1, title="blocked one", labels=["priority: P0"], body="depends on #2"
+            ),
             gh_issue(2, title="the blocker", labels=["priority: P3"]),
         ]
         rc, out, err = self._run(["--select"], issues)
@@ -495,8 +587,11 @@ class MainEndToEndTest(DigestRunner, unittest.TestCase):
 
     def test_design_labeled_issue_excluded_from_select_by_default(self):
         issues = [
-            gh_issue(3, title="needs a design call", labels=["priority: P0",
-                     "blocked: design"]),
+            gh_issue(
+                3,
+                title="needs a design call",
+                labels=["priority: P0", "blocked: design"],
+            ),
             gh_issue(4, title="ready to go", labels=["priority: P2"]),
         ]
         rc, out, err = self._run(["--select"], issues)
@@ -504,36 +599,59 @@ class MainEndToEndTest(DigestRunner, unittest.TestCase):
         self.assertIn("select: #4", out)
         self.assertNotIn("select: #3", out)
         self.assertIn("needs-design: #3", out)
-        self.assertIn("held until the design is settled (take one on by number or "
-                      "with --include-design)", out)
+        self.assertIn(
+            "held until the design is settled (take one on by number or "
+            "with --include-design)",
+            out,
+        )
         # Not duplicated into `held:` alongside genuinely blocked issues.
         self.assertNotIn("held:", out)
 
     def test_include_design_makes_it_selectable(self):
-        issues = [gh_issue(3, title="needs a design call",
-                            labels=["priority: P0", "blocked: design"])]
+        issues = [
+            gh_issue(
+                3,
+                title="needs a design call",
+                labels=["priority: P0", "blocked: design"],
+            )
+        ]
         rc, out, err = self._run(["--select", "--include-design"], issues)
         self.assertEqual(rc, 0, err)
         self.assertIn("select: #3", out)
         self.assertNotIn("needs-design:", out)
 
     def test_explicit_issue_number_also_bypasses_design_block(self):
-        issues = [gh_issue(3, title="needs a design call",
-                            labels=["priority: P0", "blocked: design"])]
+        issues = [
+            gh_issue(
+                3,
+                title="needs a design call",
+                labels=["priority: P0", "blocked: design"],
+            )
+        ]
         rc, out, err = self._run(["--select", "--issue", "3"], issues)
         self.assertEqual(rc, 0, err)
         self.assertIn("select: #3", out)
 
     def test_design_label_recognized_via_alias_and_normalization(self):
-        issues = [gh_issue(3, title="needs a design call",
-                            labels=["priority: P0", "Blocked: Design"])]
+        issues = [
+            gh_issue(
+                3,
+                title="needs a design call",
+                labels=["priority: P0", "Blocked: Design"],
+            )
+        ]
         rc, out, err = self._run(["--select"], issues)
         self.assertEqual(rc, 0, err)
         self.assertIn("needs-design: #3", out)
 
     def test_needs_design_flag_and_payload_field(self):
-        issues = [gh_issue(3, title="needs a design call",
-                            labels=["priority: P0", "blocked: design"])]
+        issues = [
+            gh_issue(
+                3,
+                title="needs a design call",
+                labels=["priority: P0", "blocked: design"],
+            )
+        ]
         rc, out, err = self._run(["--json"], issues)
         self.assertEqual(rc, 0, err)
         payload = json.loads(out)
@@ -543,8 +661,13 @@ class MainEndToEndTest(DigestRunner, unittest.TestCase):
         self.assertEqual(rec["readiness"], "DESIGN:blocked: design")
 
     def test_needs_design_flag_shown_in_markdown_output(self):
-        issues = [gh_issue(3, title="needs a design call",
-                            labels=["priority: P0", "blocked: design"])]
+        issues = [
+            gh_issue(
+                3,
+                title="needs a design call",
+                labels=["priority: P0", "blocked: design"],
+            )
+        ]
         rc, out, err = self._run([], issues)
         self.assertEqual(rc, 0, err)
         self.assertIn("NEEDS-DESIGN:blocked: design", out)
@@ -552,8 +675,14 @@ class MainEndToEndTest(DigestRunner, unittest.TestCase):
     def test_stale_dependency_label_detected_when_all_deps_closed(self):
         # #2 is not in the open-issue list at all, i.e. closed — so #1's only
         # recorded dependency has closed and its label is stale.
-        issues = [gh_issue(1, title="stale label", labels=["priority: P1",
-                            "blocked: dependency"], body="depends on #2")]
+        issues = [
+            gh_issue(
+                1,
+                title="stale label",
+                labels=["priority: P1", "blocked: dependency"],
+                body="depends on #2",
+            )
+        ]
         rc, out, err = self._run(["--json"], issues)
         self.assertEqual(rc, 0, err)
         payload = json.loads(out)
@@ -563,8 +692,12 @@ class MainEndToEndTest(DigestRunner, unittest.TestCase):
 
     def test_not_stale_when_a_dependency_is_still_open(self):
         issues = [
-            gh_issue(1, title="still blocked", labels=["priority: P1",
-                     "blocked: dependency"], body="depends on #2"),
+            gh_issue(
+                1,
+                title="still blocked",
+                labels=["priority: P1", "blocked: dependency"],
+                body="depends on #2",
+            ),
             gh_issue(2, title="the blocker", labels=["priority: P3"]),
         ]
         rc, out, err = self._run(["--json"], issues)
@@ -578,8 +711,13 @@ class MainEndToEndTest(DigestRunner, unittest.TestCase):
         # The label is present but no edge was ever declared or scraped — the
         # edge may be expressed somewhere the regex/contract scrape misses,
         # so this is deliberately left alone rather than flagged.
-        issues = [gh_issue(1, title="no recorded dep",
-                            labels=["priority: P1", "blocked: dependency"])]
+        issues = [
+            gh_issue(
+                1,
+                title="no recorded dep",
+                labels=["priority: P1", "blocked: dependency"],
+            )
+        ]
         rc, out, err = self._run(["--json"], issues)
         self.assertEqual(rc, 0, err)
         payload = json.loads(out)
@@ -650,8 +788,9 @@ class MainEndToEndTest(DigestRunner, unittest.TestCase):
         ]
         for body in bodies:
             with self.subTest(body=body):
-                rc, out, err = self._run(["--json"], [gh_issue(123)],
-                                          [gh_pr(10, body=body)])
+                rc, out, err = self._run(
+                    ["--json"], [gh_issue(123)], [gh_pr(10, body=body)]
+                )
                 self.assertEqual(rc, 0, err)
                 self.assertIsNone(json.loads(out)["issues"][0]["open_pr"])
 
@@ -667,8 +806,9 @@ class MainEndToEndTest(DigestRunner, unittest.TestCase):
         ]
         for body in bodies:
             with self.subTest(body=body):
-                rc, out, err = self._run(["--json"], [gh_issue(123)],
-                                          [gh_pr(10, body=body)])
+                rc, out, err = self._run(
+                    ["--json"], [gh_issue(123)], [gh_pr(10, body=body)]
+                )
                 self.assertEqual(rc, 0, err)
                 self.assertIsNone(json.loads(out)["issues"][0]["open_pr"])
 
@@ -684,26 +824,38 @@ class MainEndToEndTest(DigestRunner, unittest.TestCase):
         ]
         for body in bodies:
             with self.subTest(body=body):
-                rc, out, err = self._run(["--json"], [gh_issue(123)],
-                                          [gh_pr(10, body=body)])
+                rc, out, err = self._run(
+                    ["--json"], [gh_issue(123)], [gh_pr(10, body=body)]
+                )
                 self.assertEqual(rc, 0, err)
                 self.assertIsNotNone(json.loads(out)["issues"][0]["open_pr"])
 
     def test_pr_hyphenated_word_ending_in_a_keyword_does_not_claim_issue(self):
-        for body in ("hot-fix #123", "pre-fixes #123", "un-closed #123",
-                     "re-resolves #123"):
+        for body in (
+            "hot-fix #123",
+            "pre-fixes #123",
+            "un-closed #123",
+            "re-resolves #123",
+        ):
             with self.subTest(body=body):
-                rc, out, err = self._run(["--json"], [gh_issue(123)],
-                                          [gh_pr(10, body=body)])
+                rc, out, err = self._run(
+                    ["--json"], [gh_issue(123)], [gh_pr(10, body=body)]
+                )
                 self.assertEqual(rc, 0, err)
                 self.assertIsNone(json.loads(out)["issues"][0]["open_pr"])
 
     def test_pr_keyword_after_punctuation_or_at_line_start_claims_issue(self):
-        for body in ("Fixes #123", "(fixes #123)", "Summary.\nCloses #123",
-                     "- Resolves #123", "Done; fixed #123."):
+        for body in (
+            "Fixes #123",
+            "(fixes #123)",
+            "Summary.\nCloses #123",
+            "- Resolves #123",
+            "Done; fixed #123.",
+        ):
             with self.subTest(body=body):
-                rc, out, err = self._run(["--json"], [gh_issue(123)],
-                                          [gh_pr(10, body=body)])
+                rc, out, err = self._run(
+                    ["--json"], [gh_issue(123)], [gh_pr(10, body=body)]
+                )
                 self.assertEqual(rc, 0, err)
                 self.assertIsNotNone(json.loads(out)["issues"][0]["open_pr"])
 
@@ -721,11 +873,13 @@ class MainEndToEndTest(DigestRunner, unittest.TestCase):
         ]
         for body, claimed in cases:
             with self.subTest(body=body):
-                rc, out, err = self._run(["--json"], [gh_issue(7)],
-                                          [gh_pr(10, body=body)])
+                rc, out, err = self._run(
+                    ["--json"], [gh_issue(7)], [gh_pr(10, body=body)]
+                )
                 self.assertEqual(rc, 0, err)
-                self.assertEqual(json.loads(out)["issues"][0]["open_pr"] is not None,
-                                 claimed)
+                self.assertEqual(
+                    json.loads(out)["issues"][0]["open_pr"] is not None, claimed
+                )
 
     def test_pr_api_references_union_with_prose_and_branch_ownership(self):
         pr = gh_pr(10, body="Fixes #8", head="codex/9-feature")
@@ -735,14 +889,22 @@ class MainEndToEndTest(DigestRunner, unittest.TestCase):
         ]
         rc, out, err = self._run(["--json"], [gh_issue(n) for n in (7, 8, 9, 10)], [pr])
         self.assertEqual(rc, 0, err)
-        self.assertEqual({r["number"] for r in json.loads(out)["issues"]
-                          if r["open_pr"] is not None}, {7, 8, 9})
+        self.assertEqual(
+            {
+                r["number"]
+                for r in json.loads(out)["issues"]
+                if r["open_pr"] is not None
+            },
+            {7, 8, 9},
+        )
         fields = next(c for c in self.gh_calls if c[:2] == ["pr", "list"])
         self.assertIn("closingIssuesReferences", fields[fields.index("--json") + 1])
 
     def test_pr_api_foreign_repository_same_number_does_not_claim_local_issue(self):
-        for url in ("https://github.com/other/widgets/issues/7",
-                    "https://example.com/acme/widgets/issues/7"):
+        for url in (
+            "https://github.com/other/widgets/issues/7",
+            "https://example.com/acme/widgets/issues/7",
+        ):
             with self.subTest(url=url):
                 pr = gh_pr(10)
                 pr["closingIssuesReferences"] = [{"number": 7, "url": url}]
@@ -751,23 +913,40 @@ class MainEndToEndTest(DigestRunner, unittest.TestCase):
                 self.assertIsNone(json.loads(out)["issues"][0]["open_pr"])
 
     def test_pr_visible_keyword_after_ignored_examples_claims_issue(self):
-        pr = gh_pr(10, title="Example `Closes #6`", body=(
-            "<!-- Closes #6 -->\n```\nCloses #6\n```\nFixes #7"))
+        pr = gh_pr(
+            10,
+            title="Example `Closes #6`",
+            body=("<!-- Closes #6 -->\n```\nCloses #6\n```\nFixes #7"),
+        )
         rc, out, err = self._run(["--json"], [gh_issue(6), gh_issue(7)], [pr])
         self.assertEqual(rc, 0, err)
-        self.assertEqual({r["number"] for r in json.loads(out)["issues"]
-                          if r["open_pr"] is not None}, {7})
+        self.assertEqual(
+            {
+                r["number"]
+                for r in json.loads(out)["issues"]
+                if r["open_pr"] is not None
+            },
+            {7},
+        )
 
     def test_pr_branch_conventions_preserve_issue_ownership(self):
-        cases = [("7-feature", True), ("feat/7-feature", True),
-                 ("issue-7", True), ("issues/7", True),
-                 ("bump-foo-7-2-3", False), ("hotfix-7", False)]
+        cases = [
+            ("7-feature", True),
+            ("feat/7-feature", True),
+            ("issue-7", True),
+            ("issues/7", True),
+            ("bump-foo-7-2-3", False),
+            ("hotfix-7", False),
+        ]
         for head, claimed in cases:
             with self.subTest(head=head):
-                rc, out, err = self._run(["--json"], [gh_issue(7)], [gh_pr(10, head=head)])
+                rc, out, err = self._run(
+                    ["--json"], [gh_issue(7)], [gh_pr(10, head=head)]
+                )
                 self.assertEqual(rc, 0, err)
-                self.assertEqual(json.loads(out)["issues"][0]["open_pr"] is not None,
-                                 claimed)
+                self.assertEqual(
+                    json.loads(out)["issues"][0]["open_pr"] is not None, claimed
+                )
 
     def test_pr_draft_flag_surfaces_in_markdown(self):
         issues = [gh_issue(5, title="claimed")]
@@ -815,10 +994,12 @@ class RestFilesTest(DigestRunner, unittest.TestCase):
         self.dir = Path(tmp.name)
 
     @staticmethod
-    def rest_issue(number, labels=(), *, body="", milestone=None,
-                   assignees=(), extra=None):
+    def rest_issue(
+        number, labels=(), *, body="", milestone=None, assignees=(), extra=None
+    ):
         item = {
-            "number": number, "title": "issue",
+            "number": number,
+            "title": "issue",
             "labels": [{"name": n} for n in labels],
             "assignees": [{"login": a} for a in assignees],
             "milestone": {"title": milestone} if milestone else None,
@@ -831,24 +1012,34 @@ class RestFilesTest(DigestRunner, unittest.TestCase):
 
     @staticmethod
     def rest_pr(number, *, body="", head="feature", draft=False, title="pr"):
-        return {"number": number, "title": title, "body": body,
-                "head": {"ref": head}, "draft": draft,
-                "html_url": f"https://github.com/acme/widgets/pull/{number}"}
+        return {
+            "number": number,
+            "title": title,
+            "body": body,
+            "head": {"ref": head},
+            "draft": draft,
+            "html_url": f"https://github.com/acme/widgets/pull/{number}",
+        }
 
     def write(self, name, payload):
         path = self.dir / name
-        path.write_text(payload if isinstance(payload, str) else json.dumps(payload),
-                        encoding="utf-8")
+        path.write_text(
+            payload if isinstance(payload, str) else json.dumps(payload),
+            encoding="utf-8",
+        )
         return str(path)
 
     def _run_files(self, issues, prs, args=("--select", "--json"), **kw):
-        files = ["--issues-file", self.write("issues.json", issues),
-                 "--prs-file", self.write("prs.json", prs)]
+        files = [
+            "--issues-file",
+            self.write("issues.json", issues),
+            "--prs-file",
+            self.write("prs.json", prs),
+        ]
         return self._run([*files, *args], [], **kw)
 
     def test_example_selects_issue_with_no_gh_process(self):
-        rc, out, err = self._run_files(
-            [[self.rest_issue(12, ["priority: P1"])]], [[]])
+        rc, out, err = self._run_files([[self.rest_issue(12, ["priority: P1"])]], [[]])
         self.assertEqual(rc, 0, err)
         top = json.loads(out)["ranking"][0]
         self.assertEqual((top["number"], top["tier"]), (12, "P1"))
@@ -856,18 +1047,33 @@ class RestFilesTest(DigestRunner, unittest.TestCase):
 
     def test_output_equals_the_gh_path_for_the_same_data(self):
         gh_issues = [
-            gh_issue(1, labels=["priority: P1"], milestone="m1", assignees=["bo"],
-                     body="Depends on #2", created="2026-10-01T00:00:00Z",
-                     updated="2026-10-02T00:00:00Z"),
-            gh_issue(2, labels=["priority: P0"], created="2026-10-01T00:00:00Z",
-                     updated="2026-10-02T00:00:00Z"),
+            gh_issue(
+                1,
+                labels=["priority: P1"],
+                milestone="m1",
+                assignees=["bo"],
+                body="Depends on #2",
+                created="2026-10-01T00:00:00Z",
+                updated="2026-10-02T00:00:00Z",
+            ),
+            gh_issue(
+                2,
+                labels=["priority: P0"],
+                created="2026-10-01T00:00:00Z",
+                updated="2026-10-02T00:00:00Z",
+            ),
             gh_issue(3, created="2026-10-01T00:00:00Z", updated="2026-10-02T00:00:00Z"),
         ]
         gh_prs = [gh_pr(40, body="Closes #3", head="claude/x")]
         gh_prs[0]["closingIssuesReferences"] = []
         rest_issues = [
-            self.rest_issue(1, ["priority: P1"], milestone="m1", assignees=["bo"],
-                            body="Depends on #2"),
+            self.rest_issue(
+                1,
+                ["priority: P1"],
+                milestone="m1",
+                assignees=["bo"],
+                body="Depends on #2",
+            ),
             self.rest_issue(2, ["priority: P0"]),
             self.rest_issue(3),
         ]
@@ -882,7 +1088,8 @@ class RestFilesTest(DigestRunner, unittest.TestCase):
     def test_open_pr_body_claims_the_issue(self):
         pr = self.rest_pr(40, body="Closes #12", head="claude/x")
         rc, out, err = self._run_files(
-            [self.rest_issue(12, ["priority: P1"])], [pr], ["--json"])
+            [self.rest_issue(12, ["priority: P1"])], [pr], ["--json"]
+        )
         self.assertEqual(rc, 0, err)
         rec = next(r for r in json.loads(out)["issues"] if r["number"] == 12)
         self.assertEqual(rec["readiness"], "HAS-PR:#40")
@@ -890,19 +1097,23 @@ class RestFilesTest(DigestRunner, unittest.TestCase):
 
     def test_draft_flag_and_branch_come_from_rest_fields(self):
         pr = self.rest_pr(41, head="issue-12-fix", draft=True)
-        rc, out, err = self._run_files(
-            [self.rest_issue(12)], [pr], ["--json"])
+        rc, out, err = self._run_files([self.rest_issue(12)], [pr], ["--json"])
         self.assertEqual(rc, 0, err)
         rec = json.loads(out)["issues"][0]
-        self.assertEqual(rec["open_pr"],
-                         {"number": 41, "url": pr["html_url"], "draft": True})
+        self.assertEqual(
+            rec["open_pr"], {"number": 41, "url": pr["html_url"], "draft": True}
+        )
 
     def test_cache_is_neither_read_nor_written(self):
         state = self.dir / "state"
         for extra in (["--cache-ttl", "300"], ["--cache-ttl", "300", "--refresh"]):
             rc, out, err = self._run_files(
-                [self.rest_issue(1)], [], ["--select", *extra],
-                state_dir=state, cache=True)
+                [self.rest_issue(1)],
+                [],
+                ["--select", *extra],
+                state_dir=state,
+                cache=True,
+            )
             self.assertEqual(rc, 0, err)
         self.assertEqual(list(state.glob("**/digest-cache.json")), [])
 
@@ -910,8 +1121,8 @@ class RestFilesTest(DigestRunner, unittest.TestCase):
         empty = self.dir / "empty-bin"
         empty.mkdir()
         rc, out, err = self._run_files(
-            [self.rest_issue(1, ["priority: P0"])], [],
-            path_override=str(empty))
+            [self.rest_issue(1, ["priority: P0"])], [], path_override=str(empty)
+        )
         self.assertEqual(rc, 0, err)
         self.assertEqual(json.loads(out)["ranking"][0]["number"], 1)
 
@@ -925,12 +1136,18 @@ class RestFilesTest(DigestRunner, unittest.TestCase):
                 self.assertIn("error:", err)
 
     def test_combined_with_a_server_side_filter_exits_2(self):
-        for extra in (["--label", "bug"], ["--assignee", "bo"],
-                      ["--milestone", "m1"]):
+        for extra in (["--label", "bug"], ["--assignee", "bo"], ["--milestone", "m1"]):
             with self.subTest(extra=extra):
                 rc, out, err = self._run(
-                    ["--issues-file", self.write("i.json", []),
-                     "--prs-file", self.write("p.json", []), *extra], [])
+                    [
+                        "--issues-file",
+                        self.write("i.json", []),
+                        "--prs-file",
+                        self.write("p.json", []),
+                        *extra,
+                    ],
+                    [],
+                )
                 self.assertEqual(rc, 2)
                 self.assertIn("error:", err)
 
@@ -949,8 +1166,10 @@ class RestFilesTest(DigestRunner, unittest.TestCase):
             "mixed items": self.write("mixed.json", [[{"number": 1}], "x"]),
         }
         for name, path in cases.items():
-            for flag_pair in (("--issues-file", path, "--prs-file", good),
-                              ("--issues-file", good, "--prs-file", path)):
+            for flag_pair in (
+                ("--issues-file", path, "--prs-file", good),
+                ("--issues-file", good, "--prs-file", path),
+            ):
                 with self.subTest(case=name, flags=flag_pair):
                     rc, out, err = self._run(list(flag_pair), [])
                     self.assertEqual(rc, 1)
@@ -959,7 +1178,8 @@ class RestFilesTest(DigestRunner, unittest.TestCase):
 
     def test_directory_as_file_exits_1(self):
         rc, out, err = self._run(
-            ["--issues-file", str(self.dir), "--prs-file", self.write("p.json", [])], [])
+            ["--issues-file", str(self.dir), "--prs-file", self.write("p.json", [])], []
+        )
         self.assertEqual(rc, 1)
         self.assertTrue(err.startswith(f"error: {self.dir}: "), err)
 
@@ -985,20 +1205,27 @@ class RestFilesTest(DigestRunner, unittest.TestCase):
         rc, out, err = self._run_files([[pr_item]], [], ["--json"])
         self.assertEqual(rc, 0, err)
         self.assertEqual(json.loads(out)["open_issue_count"], 0)
-        rc, out, err = self._run_files(
-            [[self.rest_issue(1), pr_item]], [], ["--json"])
+        rc, out, err = self._run_files([[self.rest_issue(1), pr_item]], [], ["--json"])
         self.assertEqual([r["number"] for r in json.loads(out)["issues"]], [1])
 
     def test_null_fields_behave_like_missing_ones(self):
-        item = self.rest_issue(7, extra={
-            "body": None, "milestone": None, "assignees": None, "labels": None,
-            "created_at": None, "updated_at": None})
-        rc, out, err = self._run_files([item], [self.rest_pr(9, head="x")],
-                                       ["--json"])
+        item = self.rest_issue(
+            7,
+            extra={
+                "body": None,
+                "milestone": None,
+                "assignees": None,
+                "labels": None,
+                "created_at": None,
+                "updated_at": None,
+            },
+        )
+        rc, out, err = self._run_files([item], [self.rest_pr(9, head="x")], ["--json"])
         self.assertEqual(rc, 0, err)
         rec = json.loads(out)["issues"][0]
-        self.assertEqual((rec["milestone"], rec["assignees"], rec["labels"]),
-                         (None, [], []))
+        self.assertEqual(
+            (rec["milestone"], rec["assignees"], rec["labels"]), (None, [], [])
+        )
 
     def test_pr_with_null_head_is_tolerated(self):
         pr = self.rest_pr(9)
@@ -1010,12 +1237,16 @@ class RestFilesTest(DigestRunner, unittest.TestCase):
         issues = [self.rest_issue(n) for n in (30, 10, 20)]
         rc, out, err = self._run_files(issues, [], ["--json", "--limit", "2"])
         self.assertEqual(rc, 0, err)
-        self.assertEqual(sorted(r["number"] for r in json.loads(out)["issues"]),
-                         [10, 30])
+        self.assertEqual(
+            sorted(r["number"] for r in json.loads(out)["issues"]), [10, 30]
+        )
 
     def test_limit_counts_issues_after_pull_requests_are_dropped(self):
-        items = [self.rest_issue(1, extra={"pull_request": {}}),
-                 self.rest_issue(2), self.rest_issue(3)]
+        items = [
+            self.rest_issue(1, extra={"pull_request": {}}),
+            self.rest_issue(2),
+            self.rest_issue(3),
+        ]
         rc, out, err = self._run_files(items, [], ["--json", "--limit", "1"])
         self.assertEqual([r["number"] for r in json.loads(out)["issues"]], [2])
 
@@ -1024,8 +1255,10 @@ if __name__ == "__main__":
     unittest.main()
 
 
-CONTRACT = ("<!-- ship: tier=P1 area=test-infra blocked-by=none "
-            "blocks=#98 touches=tests/,pyproject.toml design=settled -->")
+CONTRACT = (
+    "<!-- ship: tier=P1 area=test-infra blocked-by=none "
+    "blocks=#98 touches=tests/,pyproject.toml design=settled -->"
+)
 
 
 class ShipContractTest(unittest.TestCase):
@@ -1049,8 +1282,7 @@ class ShipContractTest(unittest.TestCase):
         self.assertIsNone(idg.parse_ship_contract(None))
 
     def test_later_block_wins_field_by_field(self):
-        body = ("<!-- ship: tier=P3 touches=a/ -->\n"
-                "<!-- ship: tier=P0 blocked-by=#7 -->")
+        body = "<!-- ship: tier=P3 touches=a/ -->\n<!-- ship: tier=P0 blocked-by=#7 -->"
         c = idg.parse_ship_contract(body)
         self.assertEqual(c["tier"], "P0")
         self.assertEqual(c["depends_on"], [7])
@@ -1078,7 +1310,8 @@ class ShipContractTest(unittest.TestCase):
 
     def test_an_empty_field_does_not_swallow_the_next_field(self):
         c = idg.parse_ship_contract(
-            "<!-- ship: tier=P0 blocked-by= blocks=#93,#94 touches=* -->")
+            "<!-- ship: tier=P0 blocked-by= blocks=#93,#94 touches=* -->"
+        )
         self.assertEqual(c["depends_on"], [])
         self.assertEqual(c["blocks"], [93, 94])
         self.assertEqual(c["missing_fields"], [])
@@ -1113,8 +1346,10 @@ class ShipContractInCodeTest(unittest.TestCase):
     def test_fenced_example_before_the_real_contract_is_ignored(self):
         for fence in ("```", "~~~", "````"):
             with self.subTest(fence=fence):
-                body = (f"Quoted:\n\n{fence}\n{self.EXAMPLE}\n{fence}\n\n"
-                        f"Prose.\n\n{CONTRACT}\n")
+                body = (
+                    f"Quoted:\n\n{fence}\n{self.EXAMPLE}\n{fence}\n\n"
+                    f"Prose.\n\n{CONTRACT}\n"
+                )
                 c = idg.parse_ship_contract(body)
                 self.assertEqual(c["tier"], "P1")
                 self.assertEqual(c["design"], "settled")
@@ -1153,18 +1388,22 @@ class ShipContractInCodeTest(unittest.TestCase):
     def test_backticks_never_pair_across_a_contract_paragraph(self):
         # A lone backtick before the contract and an inline span after it are
         # in different paragraphs; pairing them hid the real contract.
-        body = ("Press the ` key.\n\n"
-                "<!-- ship: tier=P1 blocked-by=#5 touches=src/a.py design=open -->\n\n"
-                "Then run `just test`.\n")
+        body = (
+            "Press the ` key.\n\n"
+            "<!-- ship: tier=P1 blocked-by=#5 touches=src/a.py design=open -->\n\n"
+            "Then run `just test`.\n"
+        )
         c = idg.parse_ship_contract(body)
         self.assertIsNotNone(c)
         self.assertEqual(c["tier"], "P1")
         self.assertEqual(c["depends_on"], [5])
 
     def test_a_contract_comment_block_ends_the_paragraph_without_blank_lines(self):
-        body = ("Press the ` key.\n"
-                "<!-- ship: tier=P2 blocked-by=none touches=* -->\n"
-                "Then run `just test`.\n")
+        body = (
+            "Press the ` key.\n"
+            "<!-- ship: tier=P2 blocked-by=none touches=* -->\n"
+            "Then run `just test`.\n"
+        )
         self.assertEqual(idg.parse_ship_contract(body)["tier"], "P2")
 
     def test_an_unmatched_backtick_does_not_hide_the_contract(self):
@@ -1216,7 +1455,9 @@ class ContractIntegrationTest(DigestRunner, unittest.TestCase):
         self.assertIn("#1[P0] BLOCKED-BY:#2", out)
 
     def test_design_open_holds_the_issue_without_a_label(self):
-        issues = [gh_issue(1, labels=["priority: P0"], body="<!-- ship: design=open -->")]
+        issues = [
+            gh_issue(1, labels=["priority: P0"], body="<!-- ship: design=open -->")
+        ]
         rc, out, err = self._run(["--select"], issues)
         self.assertIn("select: none", out)
         self.assertIn("needs-design: #1", out)
@@ -1246,7 +1487,10 @@ class ComposableOutputTest(DigestRunner, unittest.TestCase):
     startup's three digest calls into one."""
 
     def test_with_rank_appends_the_table_to_select(self):
-        issues = [gh_issue(1, labels=["priority: P0"]), gh_issue(2, labels=["priority: P2"])]
+        issues = [
+            gh_issue(1, labels=["priority: P0"]),
+            gh_issue(2, labels=["priority: P2"]),
+        ]
         rc, out, err = self._run(["--select", "--with-rank"], issues)
         self.assertEqual(rc, 0, err)
         self.assertIn("select: #1", out)
@@ -1278,7 +1522,8 @@ class ComposableOutputTest(DigestRunner, unittest.TestCase):
 
     def test_detail_for_an_issue_outside_the_digest_says_so(self):
         rc, out, err = self._run(
-            ["--select", "--detail", "404"], [gh_issue(1, labels=["priority: P0"])])
+            ["--select", "--detail", "404"], [gh_issue(1, labels=["priority: P0"])]
+        )
         self.assertIn("not-in-digest: #404", out)
 
     def test_plain_select_is_unchanged(self):
@@ -1298,27 +1543,36 @@ class DigestCacheTest(DigestRunner, unittest.TestCase):
         self.addCleanup(repo.stop)
 
     def _gh_fetches(self):
-        return [c for c in self.gh_calls if c[:2] in (["issue", "list"], ["pr", "list"])]
+        return [
+            c for c in self.gh_calls if c[:2] in (["issue", "list"], ["pr", "list"])
+        ]
 
     def _warm_cache(self, issues):
         """Prove this setup can hit the cache before testing a bypass."""
-        self._run(["--select", "--cache-ttl", "300"], issues,
-                  state_dir=self.state, cache=True)
+        self._run(
+            ["--select", "--cache-ttl", "300"], issues, state_dir=self.state, cache=True
+        )
         self.assertEqual(len(self._gh_fetches()), 2)
-        rc, out, err = self._run(["--select", "--cache-ttl", "300"], issues,
-                                 state_dir=self.state, cache=True)
+        rc, out, err = self._run(
+            ["--select", "--cache-ttl", "300"], issues, state_dir=self.state, cache=True
+        )
         self.assertEqual(rc, 0, err)
         self.assertEqual(self._gh_fetches(), [])
 
     def test_second_call_serves_from_cache(self):
         issues = [gh_issue(1, labels=["priority: P0"], body="cached body")]
-        self._run(["--select", "--cache-ttl", "300"], issues,
-                  state_dir=self.state, cache=True)
+        self._run(
+            ["--select", "--cache-ttl", "300"], issues, state_dir=self.state, cache=True
+        )
         self.assertEqual(len(self._gh_fetches()), 2)
         # A second, differently-shaped call within the TTL: no gh at all, and
         # the detail comes out of the same fetch the --select paid for.
-        rc, out, err = self._run(["--select", "--detail", "1", "--cache-ttl", "300"],
-                                 issues, state_dir=self.state, cache=True)
+        rc, out, err = self._run(
+            ["--select", "--detail", "1", "--cache-ttl", "300"],
+            issues,
+            state_dir=self.state,
+            cache=True,
+        )
         self.assertEqual(rc, 0, err)
         self.assertEqual(self._gh_fetches(), [])
         self.assertIn("cached body", out)
@@ -1326,47 +1580,62 @@ class DigestCacheTest(DigestRunner, unittest.TestCase):
     def test_refresh_bypasses_a_warm_cache(self):
         issues = [gh_issue(1, labels=["priority: P0"])]
         self._warm_cache(issues)
-        self._run(["--select", "--refresh", "--cache-ttl", "300"], issues,
-                  state_dir=self.state, cache=True)
+        self._run(
+            ["--select", "--refresh", "--cache-ttl", "300"],
+            issues,
+            state_dir=self.state,
+            cache=True,
+        )
         self.assertEqual(len(self._gh_fetches()), 2)
 
     def test_zero_ttl_disables_the_cache(self):
         issues = [gh_issue(1, labels=["priority: P0"])]
         self._warm_cache(issues)
-        self._run(["--select", "--cache-ttl", "0"], issues,
-                  state_dir=self.state, cache=True)
+        self._run(
+            ["--select", "--cache-ttl", "0"], issues, state_dir=self.state, cache=True
+        )
         self.assertEqual(len(self._gh_fetches()), 2)
 
     def test_a_different_filter_is_a_different_cache_entry(self):
         issues = [gh_issue(1, labels=["priority: P0", "bug"])]
-        self._run(["--select", "--cache-ttl", "300"], issues,
-                  state_dir=self.state, cache=True)
-        self._run(["--select", "--label", "bug", "--cache-ttl", "300"], issues,
-                  state_dir=self.state, cache=True)
+        self._run(
+            ["--select", "--cache-ttl", "300"], issues, state_dir=self.state, cache=True
+        )
+        self._run(
+            ["--select", "--label", "bug", "--cache-ttl", "300"],
+            issues,
+            state_dir=self.state,
+            cache=True,
+        )
         self.assertEqual(len(self._gh_fetches()), 2)
 
     def test_expired_cache_refetches(self):
         issues = [gh_issue(1, labels=["priority: P0"])]
-        self._run(["--select", "--cache-ttl", "300"], issues,
-                  state_dir=self.state, cache=True)
-        self._run(["--select", "--cache-ttl", "1"], issues,
-                  state_dir=self.state, cache=True)
+        self._run(
+            ["--select", "--cache-ttl", "300"], issues, state_dir=self.state, cache=True
+        )
+        self._run(
+            ["--select", "--cache-ttl", "1"], issues, state_dir=self.state, cache=True
+        )
         cache_file = next(self.state.glob("shipping-issues/*/digest-cache.json"))
         blob = json.loads(cache_file.read_text())
         blob["fetched_at"] -= 3600
         cache_file.write_text(json.dumps(blob))
-        self._run(["--select", "--cache-ttl", "300"], issues,
-                  state_dir=self.state, cache=True)
+        self._run(
+            ["--select", "--cache-ttl", "300"], issues, state_dir=self.state, cache=True
+        )
         self.assertEqual(len(self._gh_fetches()), 2)
 
     def test_malformed_cache_is_a_miss_not_an_error(self):
         issues = [gh_issue(1, labels=["priority: P0"])]
-        self._run(["--select", "--cache-ttl", "300"], issues,
-                  state_dir=self.state, cache=True)
+        self._run(
+            ["--select", "--cache-ttl", "300"], issues, state_dir=self.state, cache=True
+        )
         cache_file = next(self.state.glob("shipping-issues/*/digest-cache.json"))
         cache_file.write_text("{ not json")
-        rc, out, err = self._run(["--select", "--cache-ttl", "300"], issues,
-                  state_dir=self.state, cache=True)
+        rc, out, err = self._run(
+            ["--select", "--cache-ttl", "300"], issues, state_dir=self.state, cache=True
+        )
         self.assertEqual(rc, 0, err)
         self.assertIn("select: #1", out)
         self.assertEqual(len(self._gh_fetches()), 2)

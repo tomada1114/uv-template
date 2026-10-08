@@ -296,20 +296,12 @@ state_root="${state_root%/}"
 runstate="$state_root/shipping-issues/$runstate_leaf"
 emit runstate "$runstate"
 
-# pkg_manager / lockfile — this precedence is duplicated in worktree_setup.sh's
-# "install dependencies" section. It is intentionally the SAME order in both
-# places (see the comment there) — this file can't factor it into a shared
-# helper without touching a third file outside this track's ownership, so if
-# you change one, change the other.
+# This template provisions only uv; other stacks need their own profile.
 pkg_manager="none"
 lockfile="none"
-if   [[ -f "$repo_root/uv.lock" ]];           then pkg_manager=uv;     lockfile="uv.lock"
-elif [[ -f "$repo_root/poetry.lock" ]];       then pkg_manager=poetry; lockfile="poetry.lock"
-elif [[ -f "$repo_root/Pipfile.lock" ]];      then pkg_manager=pipenv; lockfile="Pipfile.lock"
-elif [[ -f "$repo_root/Gemfile.lock" ]];      then pkg_manager=bundle; lockfile="Gemfile.lock"
-elif [[ -f "$repo_root/go.sum" ]];            then pkg_manager=go;     lockfile="go.sum"
-elif [[ -f "$repo_root/Cargo.lock" ]];        then pkg_manager=cargo;  lockfile="Cargo.lock"
-elif [[ -f "$repo_root/requirements.txt" ]];  then pkg_manager=pip;    lockfile="requirements.txt"
+if [[ -f "$repo_root/uv.lock" ]]; then
+  pkg_manager=uv
+  lockfile="uv.lock"
 fi
 emit pkg_manager "$pkg_manager"
 emit lockfile "$lockfile"
@@ -368,24 +360,8 @@ if [[ -z "$VERIFY_COMMAND" ]]; then
   done
 fi
 
-if [[ -z "$VERIFY_COMMAND" ]]; then
-  if [[ -f "$repo_root/uv.lock" ]]; then
-    VERIFY_COMMAND="uv run --locked pytest"; VERIFY_SOURCE="uv.lock"
-  elif [[ -f "$repo_root/poetry.lock" ]]; then
-    VERIFY_COMMAND="poetry run pytest"; VERIFY_SOURCE="poetry.lock"
-  elif [[ -f "$repo_root/Pipfile.lock" ]]; then
-    VERIFY_COMMAND="pipenv run pytest"; VERIFY_SOURCE="Pipfile.lock"
-  fi
-fi
-
-if [[ -z "$VERIFY_COMMAND" ]]; then
-  if [[ -f "$repo_root/Cargo.lock" ]]; then
-    VERIFY_COMMAND="cargo test"; VERIFY_SOURCE="Cargo.lock"
-  elif [[ -f "$repo_root/go.sum" ]]; then
-    VERIFY_COMMAND="go test ./..."; VERIFY_SOURCE="go.sum"
-  elif [[ -f "$repo_root/Gemfile.lock" && -f "$repo_root/Rakefile" ]]; then
-    VERIFY_COMMAND="bundle exec rake"; VERIFY_SOURCE="Gemfile.lock+Rakefile"
-  fi
+if [[ -z "$VERIFY_COMMAND" && -f "$repo_root/uv.lock" ]]; then
+  VERIFY_COMMAND="uv run --locked pytest"; VERIFY_SOURCE="uv.lock"
 fi
 
 VERIFY_COMMAND="${VERIFY_COMMAND:-NONE}"
@@ -417,7 +393,7 @@ if [[ -n "$PROFILE_CACHE" ]]; then
   # answer the old rules gave — a stale verify_command is a weaker baseline
   # gate that nothing else in the run would notice. Bump on ANY change to how
   # verify_command, verify_source, hooks or pkg_manager are derived.
-  profile_logic_version="3"
+  profile_logic_version="4"
 
   cache_hit=0
   if [[ -f "$PROFILE_CACHE" ]]; then

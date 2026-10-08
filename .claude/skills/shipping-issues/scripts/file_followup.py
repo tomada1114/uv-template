@@ -64,15 +64,27 @@ from typing import Any
 # there, which `just agents-check` reports as drift.
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from issue_digest import (DEPENDENCY_BLOCK_LABELS, TIER_LABELS,
-                          TIER_ORDER, normalize_label, resolve_design_label,
-                          resolve_existing, resolve_tier_label, unclosed_fence)
+from issue_digest import (
+    DEPENDENCY_BLOCK_LABELS,
+    TIER_LABELS,
+    TIER_ORDER,
+    normalize_label,
+    resolve_design_label,
+    resolve_existing,
+    resolve_tier_label,
+    unclosed_fence,
+)
 
 DEPENDENCY_LABEL = "blocked: dependency"
 MISSING_LABEL_EXIT = 4
 
-PERMISSION_MARKERS = ("HTTP 403", "Resource not accessible", "must have admin",
-                      "does not have permission", "HTTP 404: Not Found")
+PERMISSION_MARKERS = (
+    "HTTP 403",
+    "Resource not accessible",
+    "must have admin",
+    "does not have permission",
+    "HTTP 404: Not Found",
+)
 
 # Set once in main(); every gh call is qualified with it so cwd cannot decide
 # which repo a finding lands in.
@@ -83,8 +95,9 @@ def gh(args: list[str], check: bool = True) -> subprocess.CompletedProcess:
     if REPO:
         args = [*args, "--repo", REPO]
     try:
-        return subprocess.run(["gh", *args], capture_output=True, text=True,
-                              check=check, timeout=120)
+        return subprocess.run(
+            ["gh", *args], capture_output=True, text=True, check=check, timeout=120
+        )
     except FileNotFoundError:
         print("error: gh CLI not found", file=sys.stderr)
         raise SystemExit(1)
@@ -94,8 +107,10 @@ def gh(args: list[str], check: bool = True) -> subprocess.CompletedProcess:
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr or ""
         if any(m in stderr for m in PERMISSION_MARKERS):
-            print(f"verdict: NO_WRITE_ACCESS\nerror: gh {' '.join(args)}:\n{stderr}",
-                  file=sys.stderr)
+            print(
+                f"verdict: NO_WRITE_ACCESS\nerror: gh {' '.join(args)}:\n{stderr}",
+                file=sys.stderr,
+            )
             raise SystemExit(2)
         print(f"error: gh {' '.join(args)} failed:\n{stderr}", file=sys.stderr)
         raise SystemExit(1)
@@ -107,9 +122,7 @@ def repo_labels() -> list[str]:
 
 
 def dependency_section(args: Any) -> str:
-    """The `## Dependencies` section `triaging-issues` defines, or "" when the
-    finding has no edge. One `Depends on: #N` / `Blocks: #N` per line: the
-    spelling `triaging-issues` asks for and issue_digest.py parses."""
+    """The `## Dependencies` section `triaging-issues` defines, or "" when the finding has no edge. One `Depends on: #N` / `Blocks: #N` per line: the spelling `triaging-issues` asks for and issue_digest.py parses."""
     lines = [f"Depends on: #{n}" for n in re.findall(r"\d+", args.blocked_by or "")]
     lines += [f"Blocks: #{n}" for n in re.findall(r"\d+", args.blocks or "")]
     return "## Dependencies\n\n" + "\n".join(lines) if lines else ""
@@ -127,6 +140,7 @@ def ship_contract(args: Any) -> str:
     Kept in sync with issue_digest.parse_ship_contract; both sides treat unknown
     fields as ignorable, so adding one here does not break an older reader.
     """
+
     def numbers(value: str | None) -> str:
         nums = re.findall(r"\d+", value or "")
         return ",".join(f"#{n}" for n in nums) if nums else "none"
@@ -144,43 +158,85 @@ def ship_contract(args: Any) -> str:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--title", required=True,
-                   help="issue title; follow the repo's commit/title convention")
-    p.add_argument("--body-file", required=True, type=Path,
-                   help="path to the issue body (write it to a file first)")
-    p.add_argument("--tier", required=True, choices=TIER_ORDER,
-                   help="priority tier for the finding, per references/priority-rubric.md")
-    p.add_argument("--label", action="append", default=[], metavar="NAME",
-                   help="extra label, such as the type label (repeatable); it must "
-                        "exist in the repo, or nothing is filed (exit 4)")
-    p.add_argument("--needs-design", action="store_true",
-                   help="mark the new issue design-not-settled (blocked: "
-                        "design or this repo's equivalent) — excludes it "
-                        "from automatic selection until the design is decided")
-    p.add_argument("--area", metavar="SLUG",
-                   help="the part of the codebase this belongs to; goes into "
-                        "the issue's ship contract")
-    p.add_argument("--touches", metavar="PATHS",
-                   help="comma-separated paths the fix will land in, or '*' if "
-                        "genuinely unknown. This is what lets a later run group "
-                        "this issue for parallel work without judging it — an "
-                        "omitted value reads as 'touches nothing', which is why "
-                        "'*' exists to say the honest thing instead")
-    p.add_argument("--blocked-by", metavar="NUMBERS",
-                   help="comma-separated issue numbers this waits on; writes a "
-                        "Depends on: #N line each and the blocked: dependency label")
-    p.add_argument("--blocks", metavar="NUMBERS",
-                   help="comma-separated issue numbers waiting on this")
-    p.add_argument("--found-while", type=int, metavar="N",
-                   help="issue number this was found while shipping; appends a "
-                        "provenance line to the body")
-    p.add_argument("--repo", metavar="OWNER/NAME",
-                   help="target repo; defaults to the one cwd resolves to. Pass "
-                        "it explicitly when cwd may not be the repo being shipped")
-    p.add_argument("--dry-run", action="store_true",
-                   help="resolve labels and print what would be filed")
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    p.add_argument(
+        "--title",
+        required=True,
+        help="issue title; follow the repo's commit/title convention",
+    )
+    p.add_argument(
+        "--body-file",
+        required=True,
+        type=Path,
+        help="path to the issue body (write it to a file first)",
+    )
+    p.add_argument(
+        "--tier",
+        required=True,
+        choices=TIER_ORDER,
+        help="priority tier for the finding, per references/priority-rubric.md",
+    )
+    p.add_argument(
+        "--label",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="extra label, such as the type label (repeatable); it must "
+        "exist in the repo, or nothing is filed (exit 4)",
+    )
+    p.add_argument(
+        "--needs-design",
+        action="store_true",
+        help="mark the new issue design-not-settled (blocked: "
+        "design or this repo's equivalent) — excludes it "
+        "from automatic selection until the design is decided",
+    )
+    p.add_argument(
+        "--area",
+        metavar="SLUG",
+        help="the part of the codebase this belongs to; goes into "
+        "the issue's ship contract",
+    )
+    p.add_argument(
+        "--touches",
+        metavar="PATHS",
+        help="comma-separated paths the fix will land in, or '*' if "
+        "genuinely unknown. This is what lets a later run group "
+        "this issue for parallel work without judging it — an "
+        "omitted value reads as 'touches nothing', which is why "
+        "'*' exists to say the honest thing instead",
+    )
+    p.add_argument(
+        "--blocked-by",
+        metavar="NUMBERS",
+        help="comma-separated issue numbers this waits on; writes a "
+        "Depends on: #N line each and the blocked: dependency label",
+    )
+    p.add_argument(
+        "--blocks",
+        metavar="NUMBERS",
+        help="comma-separated issue numbers waiting on this",
+    )
+    p.add_argument(
+        "--found-while",
+        type=int,
+        metavar="N",
+        help="issue number this was found while shipping; appends a "
+        "provenance line to the body",
+    )
+    p.add_argument(
+        "--repo",
+        metavar="OWNER/NAME",
+        help="target repo; defaults to the one cwd resolves to. Pass "
+        "it explicitly when cwd may not be the repo being shipped",
+    )
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="resolve labels and print what would be filed",
+    )
     p.add_argument("--json", action="store_true", help="machine-readable output")
     args = p.parse_args()
 
@@ -189,13 +245,20 @@ def main() -> int:
     # positional, not --repo, so this one call bypasses the gh() wrapper.
     global REPO
     view = ["gh", "repo", "view"] + ([args.repo] if args.repo else [])
-    proc = subprocess.run([*view, "--json", "nameWithOwner", "-q", ".nameWithOwner"],
-                          capture_output=True, text=True, timeout=120)
+    proc = subprocess.run(
+        [*view, "--json", "nameWithOwner", "-q", ".nameWithOwner"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
     REPO = (proc.stdout or "").strip()
     if proc.returncode != 0 or not REPO:
         target = args.repo or "the current directory"
-        print(f"error: cannot resolve {target} — run inside the repo or pass "
-              f"--repo OWNER/NAME\n{(proc.stderr or '').strip()}", file=sys.stderr)
+        print(
+            f"error: cannot resolve {target} — run inside the repo or pass "
+            f"--repo OWNER/NAME\n{(proc.stderr or '').strip()}",
+            file=sys.stderr,
+        )
         return 1
 
     if not args.body_file.is_file():
@@ -236,34 +299,51 @@ def main() -> int:
         design_label, absent = resolve_design_label(existing)
         need(None if absent else design_label, design_label)
     if re.search(r"\d", args.blocked_by or ""):
-        need(resolve_existing(DEPENDENCY_LABEL, DEPENDENCY_BLOCK_LABELS, existing),
-             DEPENDENCY_LABEL)
+        need(
+            resolve_existing(DEPENDENCY_LABEL, DEPENDENCY_BLOCK_LABELS, existing),
+            DEPENDENCY_LABEL,
+        )
     by_norm = {normalize_label(n): n for n in existing}
     for name in args.label:
         need(by_norm.get(normalize_label(name)), name)
     labels = list(dict.fromkeys(labels))
 
     if missing:
-        print(f"error: label(s) not defined in {REPO}: {', '.join(missing)} — "
-              "nothing was filed\n"
-              "next: check the spelling against .github/labels.yml; for a "
-              "declared label, run `just labels`, then re-run this call once. "
-              "A label .github/labels.yml does not declare: report the finding "
-              "instead of filing it.", file=sys.stderr)
+        print(
+            f"error: label(s) not defined in {REPO}: {', '.join(missing)} — "
+            "nothing was filed\n"
+            "next: check the spelling against .github/labels.yml; for a "
+            "declared label, run `just labels`, then re-run this call once. "
+            "A label .github/labels.yml does not declare: report the finding "
+            "instead of filing it.",
+            file=sys.stderr,
+        )
         return MISSING_LABEL_EXIT
 
     if args.dry_run:
-        out = {"dry_run": True, "repo": REPO, "title": args.title,
-               "labels": labels, "contract": contract,
-               "dependencies": dependencies, "body_chars": len(body)}
+        out = {
+            "dry_run": True,
+            "repo": REPO,
+            "title": args.title,
+            "labels": labels,
+            "contract": contract,
+            "dependencies": dependencies,
+            "body_chars": len(body),
+        }
         # The contract is shown, not just counted: a dry run exists to be read
         # before the write, and the contract is the half of the body a caller is
         # most likely to have got wrong.
-        print(json.dumps(out, ensure_ascii=False) if args.json
-              else f"would file in {REPO}: {args.title}\n  labels: {', '.join(labels)}"
-                   + f"\n  contract: {contract}"
-                   + (f"\n  dependencies: {'; '.join(dependencies.splitlines()[2:])}"
-                      if dependencies else ""))
+        print(
+            json.dumps(out, ensure_ascii=False)
+            if args.json
+            else f"would file in {REPO}: {args.title}\n  labels: {', '.join(labels)}"
+            f"\n  contract: {contract}"
+            + (
+                f"\n  dependencies: {'; '.join(dependencies.splitlines()[2:])}"
+                if dependencies
+                else ""
+            )
+        )
         return 0
 
     # gh reads the body from a file so no shell quoting can mangle it.
@@ -277,17 +357,20 @@ def main() -> int:
         # its output and the caller must not be told a URL that is not there.
         lines = [ln.strip() for ln in (gh(cmd).stdout or "").splitlines() if ln.strip()]
         if not lines:
-            print("error: gh issue create produced no output; check the repo "
-                  "manually before re-running (it may have been filed)",
-                  file=sys.stderr)
+            print(
+                "error: gh issue create produced no output; check the repo "
+                "manually before re-running (it may have been filed)",
+                file=sys.stderr,
+            )
             return 1
         url = lines[-1]
     finally:
         tmp.unlink(missing_ok=True)
 
     if args.json:
-        print(json.dumps({"url": url, "repo": REPO, "labels": labels},
-                         ensure_ascii=False))
+        print(
+            json.dumps({"url": url, "repo": REPO, "labels": labels}, ensure_ascii=False)
+        )
     else:
         print(f"filed: {url}  [{', '.join(labels)}]")
     return 0

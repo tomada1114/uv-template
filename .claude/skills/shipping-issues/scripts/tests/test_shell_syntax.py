@@ -17,6 +17,7 @@ a run on a Mac (every `just verify` there) does.
 Run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
      (from the shipping-issues skill directory)
 """
+
 from __future__ import annotations
 
 import re
@@ -24,7 +25,6 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-
 
 # tests/ -> scripts/ -> shipping-issues/ -> the skills tree this copy sits in
 # (.agents/skills/ in the source, so the .claude/skills/ mirror is not scanned).
@@ -73,7 +73,9 @@ class ShellSyntaxTest(unittest.TestCase):
         for script in SCRIPTS:
             text = script.read_text(encoding="utf-8")
             for number, line in enumerate(text.splitlines(), start=1):
-                with self.subTest(script=str(script.relative_to(SKILLS_ROOT)), line=number):
+                with self.subTest(
+                    script=str(script.relative_to(SKILLS_ROOT)), line=number
+                ):
                     self.assertIsNone(AWK_INTERVAL.search(line), line.strip())
 
 

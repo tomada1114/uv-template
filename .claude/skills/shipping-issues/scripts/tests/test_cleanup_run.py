@@ -4,6 +4,7 @@
 Run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
      (from the shipping-issues skill directory)
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -14,8 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _fakegh import FakeGh  # noqa: E402
-
+from _fakegh import FakeGh
 
 SCRIPT = Path(__file__).resolve().parent.parent / "cleanup_run.sh"
 
@@ -53,12 +53,20 @@ def add_local_origin(repo, parent):
 def branch_tip(repo, name):
     """The commit `name` points at: the local branch, else origin's, else
     nothing — which is what a merged PR's headRefOid is compared against."""
-    local = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"refs/heads/{name}"],
-                           cwd=repo, text=True, capture_output=True)
+    local = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", f"refs/heads/{name}"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+    )
     if local.returncode == 0:
         return local.stdout.strip()
-    remote = subprocess.run(["git", "ls-remote", "origin", f"refs/heads/{name}"],
-                            cwd=repo, text=True, capture_output=True)
+    remote = subprocess.run(
+        ["git", "ls-remote", "origin", f"refs/heads/{name}"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+    )
     return remote.stdout.split("\t")[0].strip() if remote.returncode == 0 else ""
 
 
@@ -70,8 +78,11 @@ def with_merged_tips(repo, responses):
     for prefix, stdout in responses.items():
         if prefix[:4] == ("pr", "list", "--state", "merged") and stdout:
             stdout = "\n".join(
-                line if "\t" in line or not line else f"{line}\t{branch_tip(repo, line)}"
-                for line in stdout.split("\n"))
+                line
+                if "\t" in line or not line
+                else f"{line}\t{branch_tip(repo, line)}"
+                for line in stdout.split("\n")
+            )
         out[prefix] = stdout
     return out
 
@@ -91,12 +102,28 @@ def run_script(args, repo, responses, *, exits=None, stderrs=None, env=None):
 
 
 MERGED_LIST = (
-    "pr", "list", "--state", "merged", "--limit", "5001", "--json",
-    "headRefName,headRefOid", "-q", ".[] | [.headRefName, .headRefOid] | @tsv",
+    "pr",
+    "list",
+    "--state",
+    "merged",
+    "--limit",
+    "5001",
+    "--json",
+    "headRefName,headRefOid",
+    "-q",
+    ".[] | [.headRefName, .headRefOid] | @tsv",
 )
 OPEN_LIST = (
-    "pr", "list", "--state", "open", "--limit", "5001", "--json",
-    "headRefName", "-q", ".[].headRefName",
+    "pr",
+    "list",
+    "--state",
+    "open",
+    "--limit",
+    "5001",
+    "--json",
+    "headRefName",
+    "-q",
+    ".[].headRefName",
 )
 
 
@@ -133,10 +160,14 @@ class CleanupRunTest(unittest.TestCase):
             make_repo(repo)
             git(repo, "branch", "feat/1-merged")
             proc, calls = run_script(
-                [], repo, {capped: "a\nb\nc\nfeat/1-merged", OPEN_LIST: ""},
+                [],
+                repo,
+                {capped: "a\nb\nc\nfeat/1-merged", OPEN_LIST: ""},
                 env={"CLEANUP_PR_LIMIT": "3"},
             )
-            branches = git(repo, "branch", "--format=%(refname:short)").stdout.splitlines()
+            branches = git(
+                repo, "branch", "--format=%(refname:short)"
+            ).stdout.splitlines()
 
         self.assertEqual(proc.returncode, 1, proc.stdout)
         self.assertIn("more than 3 merged pull requests", proc.stderr)
@@ -151,10 +182,14 @@ class CleanupRunTest(unittest.TestCase):
             make_repo(repo)
             git(repo, "branch", "feat/1-merged")
             proc, _ = run_script(
-                [], repo, {capped_merged: "feat/1-merged", capped_open: "a\nb\nc"},
+                [],
+                repo,
+                {capped_merged: "feat/1-merged", capped_open: "a\nb\nc"},
                 env={"CLEANUP_PR_LIMIT": "2"},
             )
-            branches = git(repo, "branch", "--format=%(refname:short)").stdout.splitlines()
+            branches = git(
+                repo, "branch", "--format=%(refname:short)"
+            ).stdout.splitlines()
 
         self.assertEqual(proc.returncode, 1, proc.stdout)
         self.assertIn("more than 2 open pull requests", proc.stderr)
@@ -168,10 +203,14 @@ class CleanupRunTest(unittest.TestCase):
             make_repo(repo)
             git(repo, "branch", "feat/1-merged")
             proc, _ = run_script(
-                [], repo, {capped: "a\nfeat/1-merged", capped_open: ""},
+                [],
+                repo,
+                {capped: "a\nfeat/1-merged", capped_open: ""},
                 env={"CLEANUP_PR_LIMIT": "2"},
             )
-            branches = git(repo, "branch", "--format=%(refname:short)").stdout.splitlines()
+            branches = git(
+                repo, "branch", "--format=%(refname:short)"
+            ).stdout.splitlines()
 
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertNotIn("feat/1-merged", branches)
@@ -182,7 +221,9 @@ class CleanupRunTest(unittest.TestCase):
             make_repo(repo)
             git(repo, "branch", "feat/1-merged")
             proc, _ = run_script([], repo, {MERGED_LIST: ""}, exits={MERGED_LIST: 1})
-            branches = git(repo, "branch", "--format=%(refname:short)").stdout.splitlines()
+            branches = git(
+                repo, "branch", "--format=%(refname:short)"
+            ).stdout.splitlines()
 
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("feat/1-merged", branches)
@@ -202,9 +243,13 @@ class CleanupRunTest(unittest.TestCase):
             git(repo, "symbolic-ref", "-d", "refs/remotes/origin/HEAD")
             git(repo, "branch", "feat/1-merged")
 
-            proc, calls = run_script([], repo, {MERGED_LIST: "feat/1-merged", OPEN_LIST: ""})
+            proc, calls = run_script(
+                [], repo, {MERGED_LIST: "feat/1-merged", OPEN_LIST: ""}
+            )
 
-            branches = git(repo, "branch", "--format=%(refname:short)").stdout.splitlines()
+            branches = git(
+                repo, "branch", "--format=%(refname:short)"
+            ).stdout.splitlines()
 
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("cleanup: done\n", proc.stdout)
@@ -223,9 +268,11 @@ class CleanupRunTest(unittest.TestCase):
             git(repo, "switch", "-q", "main")
 
             proc, _ = run_script(
-                [], repo,
-                {MERGED_LIST: f"feat/1-reused\t{merged_at}", OPEN_LIST: ""})
-            branches = git(repo, "branch", "--format=%(refname:short)").stdout.splitlines()
+                [], repo, {MERGED_LIST: f"feat/1-reused\t{merged_at}", OPEN_LIST: ""}
+            )
+            branches = git(
+                repo, "branch", "--format=%(refname:short)"
+            ).stdout.splitlines()
 
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("feat/1-reused", branches)
@@ -249,11 +296,18 @@ class CleanupRunTest(unittest.TestCase):
             git(repo, "switch", "-q", "main")
             git(repo, "push", "-q", "origin", "main", "feat/3-merged")
             git(repo, "branch", "-D", "feat/3-merged")
-            git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+            git(
+                repo,
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/main",
+            )
 
             proc, _ = run_script(
-                ["--remote"], repo,
-                {MERGED_LIST: f"feat/3-merged\t{merged_at}", OPEN_LIST: ""})
+                ["--remote"],
+                repo,
+                {MERGED_LIST: f"feat/3-merged\t{merged_at}", OPEN_LIST: ""},
+            )
             remote_branches = git(origin, "branch", "--list").stdout
 
         self.assertEqual(proc.returncode, 0, proc.stderr)
@@ -275,7 +329,9 @@ class CleanupRunTest(unittest.TestCase):
                 {MERGED_LIST: "feat/1-merged", OPEN_LIST: "feat/2-open"},
             )
 
-            branches = git(repo, "branch", "--format=%(refname:short)").stdout.splitlines()
+            branches = git(
+                repo, "branch", "--format=%(refname:short)"
+            ).stdout.splitlines()
 
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("cleanup: done\n", proc.stdout)
@@ -380,7 +436,10 @@ class CleanupRunTest(unittest.TestCase):
 
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn(f"removed worktree: {merged_wt}\n", proc.stdout)
-        self.assertIn(f"SKIPPED (no merged PR / open PR on feat/unmerged): {unmerged_wt}\n", proc.stdout)
+        self.assertIn(
+            f"SKIPPED (no merged PR / open PR on feat/unmerged): {unmerged_wt}\n",
+            proc.stdout,
+        )
         self.assertNotIn(str(merged_wt), worktrees)
         self.assertIn(str(unmerged_wt), worktrees)
 
@@ -450,7 +509,9 @@ class CleanupRunTest(unittest.TestCase):
             )
             worktrees_after_force = git(repo, "worktree", "list").stdout
 
-        self.assertIn(f"SKIPPED (dirty — salvage, then rerun with --force): {wt}\n", proc.stdout)
+        self.assertIn(
+            f"SKIPPED (dirty — salvage, then rerun with --force): {wt}\n", proc.stdout
+        )
         self.assertIn(str(wt), worktrees_after_default)
 
         self.assertEqual(proc2.returncode, 0, proc2.stderr)
@@ -476,7 +537,9 @@ class CleanupRunTest(unittest.TestCase):
                 {MERGED_LIST: "feat/1", OPEN_LIST: ""},
             )
 
-            branches = git(repo, "branch", "--format=%(refname:short)").stdout.splitlines()
+            branches = git(
+                repo, "branch", "--format=%(refname:short)"
+            ).stdout.splitlines()
 
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn(f"SKIPPED (checked out in worktree {wt}): feat/1\n", proc.stdout)
@@ -503,7 +566,9 @@ class CleanupRunTest(unittest.TestCase):
             )
 
             worktrees = git(repo, "worktree", "list").stdout
-            branches = git(repo, "branch", "--format=%(refname:short)").stdout.splitlines()
+            branches = git(
+                repo, "branch", "--format=%(refname:short)"
+            ).stdout.splitlines()
 
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn(str(wt), worktrees)
@@ -523,7 +588,9 @@ class CleanupRunTest(unittest.TestCase):
                 {MERGED_LIST: "feat/1-merged\nfeat/2-merged", OPEN_LIST: ""},
             )
 
-            branches = git(repo, "branch", "--format=%(refname:short)").stdout.splitlines()
+            branches = git(
+                repo, "branch", "--format=%(refname:short)"
+            ).stdout.splitlines()
 
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("deleted local branch: feat/1-merged\n", proc.stdout)
@@ -564,7 +631,9 @@ class CleanupRunTest(unittest.TestCase):
                 {MERGED_LIST: "feat/1-merged\nfeat/2-merged", OPEN_LIST: ""},
             )
 
-            branches = git(repo, "branch", "--format=%(refname:short)").stdout.splitlines()
+            branches = git(
+                repo, "branch", "--format=%(refname:short)"
+            ).stdout.splitlines()
 
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("deleted local branch: feat/1-merged\n", proc.stdout)
@@ -585,7 +654,9 @@ class CleanupRunTest(unittest.TestCase):
                 {MERGED_LIST: "", OPEN_LIST: ""},
             )
 
-            branches = git(repo, "branch", "--format=%(refname:short)").stdout.splitlines()
+            branches = git(
+                repo, "branch", "--format=%(refname:short)"
+            ).stdout.splitlines()
 
         self.assertEqual(proc.returncode, 0, proc.stderr)
         # Named explicitly, but it carries no merged PR — with --branch it
@@ -606,7 +677,9 @@ class CleanupRunTest(unittest.TestCase):
                 {MERGED_LIST: "", OPEN_LIST: ""},
             )
 
-            branches = git(repo, "branch", "--format=%(refname:short)").stdout.splitlines()
+            branches = git(
+                repo, "branch", "--format=%(refname:short)"
+            ).stdout.splitlines()
 
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("feat/unmerged", branches)
@@ -623,7 +696,12 @@ class CleanupRunTest(unittest.TestCase):
             git(repo, "branch", "feat/1-merged")
             git(repo, "branch", "feat/2-merged")
             git(repo, "push", "-q", "origin", "main", "feat/1-merged", "feat/2-merged")
-            git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+            git(
+                repo,
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/main",
+            )
 
             proc, calls = run_script(
                 ["--remote", "--branch", "feat/1-merged"],
@@ -650,7 +728,12 @@ class CleanupRunTest(unittest.TestCase):
             git(repo, "remote", "add", "origin", str(origin))
             git(repo, "branch", "feat/gone")
             git(repo, "push", "-q", "origin", "main", "feat/gone")
-            git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+            git(
+                repo,
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/main",
+            )
             git(repo, "fetch", "-q", "origin")
             # Simulate delete-on-merge: the ref is gone on origin, but this
             # checkout never fetched again, so its local remote-tracking ref
@@ -681,7 +764,9 @@ class CleanupRunTest(unittest.TestCase):
                 [], repo, {MERGED_LIST: "", OPEN_LIST: ""}, exits={MERGED_LIST: 1}
             )
 
-            branches = git(repo, "branch", "--format=%(refname:short)").stdout.splitlines()
+            branches = git(
+                repo, "branch", "--format=%(refname:short)"
+            ).stdout.splitlines()
 
         self.assertEqual(proc.returncode, 1)
         self.assertEqual(calls, [list(MERGED_LIST)])

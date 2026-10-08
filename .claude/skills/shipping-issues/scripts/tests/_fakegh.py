@@ -49,6 +49,7 @@ after its stdout, as the real gh does after a string value, so a response is
 written as the bare value ("main", not "main\\n") and a script that writes a
 `-q` value back can be tested for keeping that newline out.
 """
+
 from __future__ import annotations
 
 import json
@@ -58,7 +59,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-_RUNNER = '''#!/usr/bin/env python3
+_RUNNER = """#!/usr/bin/env python3
 import json, sys, os
 config = json.loads(open(os.environ["FAKE_GH_CONFIG"], encoding="utf-8").read())
 argv = sys.argv[1:]
@@ -94,7 +95,7 @@ if os.environ.get("FAKE_GH_JQ_NEWLINE") and ("-q" in argv or "--jq" in argv):
 sys.stderr.write(reply.get("stderr", ""))
 sys.stdout.write(stdout)
 sys.exit(reply.get("exit", 0))
-'''
+"""
 
 
 class FakeGh:
@@ -102,11 +103,15 @@ class FakeGh:
     `.env` (subprocess env with PATH pointed at the fake) and `.calls`
     (populated after each subprocess call reads the shared log file)."""
 
-    def __init__(self, responses: dict[tuple[str, ...], str] | None = None,
-                 *, exits: dict[tuple[str, ...], int] | None = None,
-                 stderrs: dict[tuple[str, ...], str] | None = None,
-                 sequences: dict[tuple[str, ...], list[str | tuple[str, int]]] | None = None,
-                 jq_newline: bool = False):
+    def __init__(
+        self,
+        responses: dict[tuple[str, ...], str] | None = None,
+        *,
+        exits: dict[tuple[str, ...], int] | None = None,
+        stderrs: dict[tuple[str, ...], str] | None = None,
+        sequences: dict[tuple[str, ...], list[str | tuple[str, int]]] | None = None,
+        jq_newline: bool = False,
+    ):
         self._responses = responses or {}
         self._exits = exits or {}
         self._stderrs = stderrs or {}
@@ -125,23 +130,31 @@ class FakeGh:
         # and repeat site-package startup in every CLI subprocess.
         runner = _RUNNER.replace("#!/usr/bin/env python3", f"#!{sys.executable} -S", 1)
         gh_path.write_text(runner, encoding="utf-8")
-        gh_path.chmod(gh_path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+        gh_path.chmod(
+            gh_path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH
+        )
 
         config = [
-            {"prefix": list(prefix), "stdout": stdout,
-             "exit": self._exits.get(prefix, 0),
-             "stderr": self._stderrs.get(prefix, "")}
+            {
+                "prefix": list(prefix),
+                "stdout": stdout,
+                "exit": self._exits.get(prefix, 0),
+                "stderr": self._stderrs.get(prefix, ""),
+            }
             for prefix, stdout in self._responses.items()
             if prefix not in self._sequences
         ]
         config += [
-            {"prefix": list(prefix),
-             "stderr": self._stderrs.get(prefix, ""),
-             "sequence": [
-                 {"stdout": item, "exit": 0} if isinstance(item, str)
-                 else {"stdout": item[0], "exit": item[1]}
-                 for item in items
-             ]}
+            {
+                "prefix": list(prefix),
+                "stderr": self._stderrs.get(prefix, ""),
+                "sequence": [
+                    {"stdout": item, "exit": 0}
+                    if isinstance(item, str)
+                    else {"stdout": item[0], "exit": item[1]}
+                    for item in items
+                ],
+            }
             for prefix, items in self._sequences.items()
         ]
         config_path = Path(self._tmpdir.name) / "gh_config.json"

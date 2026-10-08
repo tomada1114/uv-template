@@ -125,11 +125,16 @@ SUMMARY_MARKER = "<!-- codex-pull-request-review-summary -->"
 SKILL_STATE_NAME = "shipping-issues"
 REVIEW_CAP = 3
 
-EXIT = {"CLEAN": 0, "FINDINGS": 1, "PENDING_TIMEOUT": 2, "NO_REVIEW": 3,
-        "ERROR": 4, "NO_NEW_REVIEW": 5}
+EXIT = {
+    "CLEAN": 0,
+    "FINDINGS": 1,
+    "PENDING_TIMEOUT": 2,
+    "NO_REVIEW": 3,
+    "ERROR": 4,
+    "NO_NEW_REVIEW": 5,
+}
 
-FAILED_WORDS = ("fail", "error", "cancel", "timed out", "timeout", "skip",
-                "abort")
+FAILED_WORDS = ("fail", "error", "cancel", "timed out", "timeout", "skip", "abort")
 BADGE_RE = re.compile(r"!\[(P\d) Badge\]")
 IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 SHA_CELL_RE = re.compile(r"`([0-9a-fA-F]{7,40})`")
@@ -149,14 +154,17 @@ class PrUnreadableError(ReadError):
 
 def gh(args: list[str]) -> str:
     try:
-        proc = subprocess.run(["gh", *args], capture_output=True, text=True,
-                              timeout=120)
+        proc = subprocess.run(
+            ["gh", *args], capture_output=True, text=True, timeout=120
+        )
     except (OSError, subprocess.TimeoutExpired) as exc:
         msg = f"gh {' '.join(args[:3])}: {exc}"
         raise ReadError(msg)
     if proc.returncode != 0:
         err = " ".join((proc.stderr or "").split())
-        msg = f"gh {' '.join(args[:3])} exited {proc.returncode}" + (f": {err}" if err else "")
+        msg = f"gh {' '.join(args[:3])} exited {proc.returncode}" + (
+            f": {err}" if err else ""
+        )
         raise ReadError(msg)
     return proc.stdout or ""
 
@@ -180,8 +188,7 @@ def gh_items(path: str) -> list[dict]:
 
 
 def read_pr(pr: str) -> dict:
-    """The PR over REST, in the keys `poll` reads (the GraphQL-backed
-    `gh pr view` is refused by the Claude Code cloud GitHub proxy)."""
+    """The PR over REST, in the keys `poll` reads (the GraphQL-backed `gh pr view` is refused by the Claude Code cloud GitHub proxy)."""
     try:
         out = gh(["api", f"repos/{{owner}}/{{repo}}/pulls/{pr}"])
         data = json.loads(out)
@@ -238,13 +245,15 @@ def parse_summary(body: str) -> dict | None:
             continue  # the header row or the separator row
         sha = SHA_CELL_RE.search(cells[2])
         when = DATETIME_RE.search(cells[1])
-        rows.append({
-            "kind": cells[0].replace("*", "").strip(),
-            "status": status.group(1).strip(),
-            "at": when.group(1) if when else "",
-            "sha": sha.group(1).lower() if sha else "",
-            "trigger": cells[3] or "none",
-        })
+        rows.append(
+            {
+                "kind": cells[0].replace("*", "").strip(),
+                "status": status.group(1).strip(),
+                "at": when.group(1) if when else "",
+                "sha": sha.group(1).lower() if sha else "",
+                "trigger": cells[3] or "none",
+            }
+        )
     if not rows:
         return None
     for row in rows:
@@ -278,7 +287,8 @@ def stamp_seconds(text: str | None) -> float | None:
         # strptime rather than fromisoformat: the system python3 may predate
         # 3.11, whose fromisoformat is the first to accept a trailing "Z".
         moment = datetime.strptime(core, "%Y-%m-%dT%H:%M:%S").replace(
-            tzinfo=timezone.utc)
+            tzinfo=timezone.utc
+        )
     except ValueError:
         return None
     extra = float("0." + fraction) if fraction.isdigit() else 0.0
@@ -301,9 +311,7 @@ def same_commit(one: str | None, other: str | None) -> bool:
 
 
 def collect_findings(reviews: list[dict], inline: list[dict]) -> list[dict]:
-    """The bot's top-level inline comments, plus any bot review that carries
-    no inline comment at all (its body is then the finding), ordered by review
-    and then by comment: a later review's findings are always appended."""
+    """The bot's top-level inline comments, plus any bot review that carries no inline comment at all (its body is then the finding), ordered by review and then by comment: a later review's findings are always appended."""
     reviewed = {review.get("id"): review.get("commit_id") or "" for review in reviews}
     keyed = []
     seen_reviews = set()
@@ -315,28 +323,42 @@ def collect_findings(reviews: list[dict], inline: list[dict]) -> list[dict]:
         line = comment.get("line") or comment.get("original_line") or "?"
         review_id = comment.get("pull_request_review_id")
         seen_reviews.add(review_id)
-        keyed.append(((review_id or 0, comment.get("id") or 0), {
-            "id": str(comment.get("id")),
-            "priority": badge.group(1) if badge else "P?",
-            "where": f"{comment.get('path') or '?'}:{line}",
-            "title": finding_title(body),
-            "commit": (reviewed.get(review_id) or comment.get("original_commit_id")
-                       or comment.get("commit_id") or ""),
-            "url": comment.get("html_url") or "",
-            "body": body,
-        }))
+        keyed.append(
+            (
+                (review_id or 0, comment.get("id") or 0),
+                {
+                    "id": str(comment.get("id")),
+                    "priority": badge.group(1) if badge else "P?",
+                    "where": f"{comment.get('path') or '?'}:{line}",
+                    "title": finding_title(body),
+                    "commit": (
+                        reviewed.get(review_id)
+                        or comment.get("original_commit_id")
+                        or comment.get("commit_id")
+                        or ""
+                    ),
+                    "url": comment.get("html_url") or "",
+                    "body": body,
+                },
+            )
+        )
     for review in reviews:
         if review.get("id") in seen_reviews or review.get("state") not in REVIEW_STATES:
             continue
-        keyed.append(((review.get("id") or 0, 0), {
-            "id": f"review-{review.get('id')}",
-            "priority": "P?",
-            "where": "-",
-            "title": "a review with no inline comment; read its body",
-            "commit": review.get("commit_id") or "",
-            "url": review.get("html_url") or "",
-            "body": review.get("body") or "",
-        }))
+        keyed.append(
+            (
+                (review.get("id") or 0, 0),
+                {
+                    "id": f"review-{review.get('id')}",
+                    "priority": "P?",
+                    "where": "-",
+                    "title": "a review with no inline comment; read its body",
+                    "commit": review.get("commit_id") or "",
+                    "url": review.get("html_url") or "",
+                    "body": review.get("body") or "",
+                },
+            )
+        )
     findings = [finding for _, finding in sorted(keyed, key=lambda pair: pair[0])]
     for number, finding in enumerate(findings, start=1):
         finding["n"] = f"F{number}"
@@ -350,13 +372,14 @@ def review_dir() -> Path | None:
     """<runstate>/review for the current repo, resolved once; None if unknown."""
     if not _RUNSTATE:
         try:
-            repo = gh(["api", "repos/{owner}/{repo}",
-                       "-q", ".full_name"]).strip()
+            repo = gh(["api", "repos/{owner}/{repo}", "-q", ".full_name"]).strip()
         except ReadError:
             repo = ""
         _RUNSTATE.append(
             state_dir() / SKILL_STATE_NAME / repo.replace("/", "__") / "review"
-            if re.fullmatch(r"[^/\s]+/[^/\s]+", repo) else None)
+            if re.fullmatch(r"[^/\s]+/[^/\s]+", repo)
+            else None
+        )
     return _RUNSTATE[0]
 
 
@@ -367,8 +390,11 @@ def opening_trigger(trigger: str) -> bool:
 
 
 def settled_row(row: object) -> bool:
-    return (isinstance(row, dict) and bool(row.get("sha"))
-            and status_class(str(row.get("status") or "")) == "completed")
+    return (
+        isinstance(row, dict)
+        and bool(row.get("sha"))
+        and status_class(str(row.get("status") or "")) == "completed"
+    )
 
 
 def read_json(path: Path | None) -> object:
@@ -381,10 +407,7 @@ def read_json(path: Path | None) -> object:
 
 
 class Memory:
-    """What earlier calls for this PR saw: its settled rounds, oldest first,
-    and the push the current --after-push wait is about. Kept in
-    <runstate>/review/<pr>-rounds.json when the repo resolves, else for this
-    call only."""
+    """What earlier calls for this PR saw: its settled rounds, oldest first, and the push the current --after-push wait is about. Kept in <runstate>/review/<pr>-rounds.json when the repo resolves, else for this call only."""
 
     def __init__(self, pr: str) -> None:
         self.pr = pr
@@ -403,8 +426,9 @@ class Memory:
         self._loaded = True
         data = read_json(self._path("rounds"))
         if isinstance(data, dict):
-            self.rounds = [dict(row) for row in data.get("rounds") or []
-                           if settled_row(row)]
+            self.rounds = [
+                dict(row) for row in data.get("rounds") or [] if settled_row(row)
+            ]
             wait = data.get("await")
             if isinstance(wait, dict) and wait.get("sha"):
                 self.wait = wait
@@ -430,16 +454,20 @@ class Memory:
             pass  # memory is a convenience; the verdict stands without it
 
     def find(self, sha: str) -> dict | None:
-        return next((row for row in self.rounds if same_commit(row.get("sha"), sha)), None)
+        return next(
+            (row for row in self.rounds if same_commit(row.get("sha"), sha)), None
+        )
 
     def add(self, row: dict) -> None:
-        self.rounds.append({key: row.get(key) or "" for key in
-                            ("sha", "status", "trigger", "at")})
+        self.rounds.append(
+            {key: row.get(key) or "" for key in ("sha", "status", "trigger", "at")}
+        )
 
     def order(self) -> None:
         def key(row: dict) -> tuple[int, float]:
             moment = stamp_seconds(row.get("at"))
             return (0, moment) if moment is not None else (1, 0.0)
+
         self.rounds.sort(key=key)
 
 
@@ -447,15 +475,22 @@ def on_pr(pr: str, head: str, sha: str) -> bool:
     """The reviewed commit is the head, or one of the PR's own commits."""
     if same_commit(head, sha):
         return True
-    commits = gh(["api", f"repos/{{owner}}/{{repo}}/pulls/{pr}/commits", "--paginate",
-                  "-q", ".[].sha"]).split()
+    commits = gh(
+        [
+            "api",
+            f"repos/{{owner}}/{{repo}}/pulls/{pr}/commits",
+            "--paginate",
+            "-q",
+            ".[].sha",
+        ]
+    ).split()
     return any(same_commit(commit, sha) for commit in commits)
 
 
-def settle_rounds(pr: str, head: str, row: dict | None, reviews: list[dict],
-                  memory: Memory) -> str:
-    """Fold what GitHub shows now into the memory's rounds; returns an ERROR
-    detail, or "" when every completed review is a commit of this PR."""
+def settle_rounds(
+    pr: str, head: str, row: dict | None, reviews: list[dict], memory: Memory
+) -> str:
+    """Fold what GitHub shows now into the memory's rounds; returns an ERROR detail, or "" when every completed review is a commit of this PR."""
     kind = status_class(row["status"]) if row else ""
     if row and kind == "completed":
         known = memory.find(row["sha"]) if row["sha"] else None
@@ -474,14 +509,21 @@ def settle_rounds(pr: str, head: str, row: dict | None, reviews: list[dict],
         if row and kind == "running" and same_commit(row["sha"], sha):
             continue  # its row has not caught up yet: still in progress
         if memory.find(sha) is None:
-            memory.add({"sha": sha, "status": "Completed", "trigger": "none",
-                        "at": review.get("submitted_at") or ""})
+            memory.add(
+                {
+                    "sha": sha,
+                    "status": "Completed",
+                    "trigger": "none",
+                    "at": review.get("submitted_at") or "",
+                }
+            )
     memory.order()
     return ""
 
 
-def after_push_verdict(state: dict, memory: Memory, after_push: str,
-                       start_grace: int, verdict: str) -> None:
+def after_push_verdict(
+    state: dict, memory: Memory, after_push: str, start_grace: int, verdict: str
+) -> None:
     """Decide an --after-push call once at least one round has settled."""
     rounds = memory.rounds
     later = state["later"]
@@ -491,8 +533,13 @@ def after_push_verdict(state: dict, memory: Memory, after_push: str,
         # A failed row already showing when the wait begins is not a review
         # of this push: it never ends the grace early.
         stale = [later["sha"], later["at"]] if later_kind == "failed" else []
-        wait = {"sha": after_push, "since": time.time(),
-                "base": [row["sha"] for row in rounds], "outcome": "", "stale": stale}
+        wait = {
+            "sha": after_push,
+            "since": time.time(),
+            "base": [row["sha"] for row in rounds],
+            "outcome": "",
+            "stale": stale,
+        }
         memory.wait = wait
     if later and [later["sha"], later["at"]] == wait.get("stale"):
         later, later_kind = None, ""
@@ -504,33 +551,46 @@ def after_push_verdict(state: dict, memory: Memory, after_push: str,
     elapsed = max(0, int(time.time() - since))
     state["push_age"] = elapsed
     pushed = after_push[:7]
-    if (any(same_commit(row["sha"], after_push) for row in rounds)
-            or any(not any(same_commit(row["sha"], sha) for sha in base) for row in rounds)):
+    if any(same_commit(row["sha"], after_push) for row in rounds) or any(
+        not any(same_commit(row["sha"], sha) for sha in base) for row in rounds
+    ):
         state["verdict"] = verdict
     elif len(base) >= REVIEW_CAP:
         state["verdict"] = verdict
-        state["detail"] = (f"{len(base)} reviews had settled before {pushed} was pushed; "
-                           f"the cap is {REVIEW_CAP}, so no further review is waited for")
+        state["detail"] = (
+            f"{len(base)} reviews had settled before {pushed} was pushed; "
+            f"the cap is {REVIEW_CAP}, so no further review is waited for"
+        )
     elif wait.get("outcome") == "none":
         state["verdict"] = "NO_NEW_REVIEW"
-        state["detail"] = (f"no review started on {pushed} within the start grace "
-                           "(decided by an earlier call); the latest settled review stands")
+        state["detail"] = (
+            f"no review started on {pushed} within the start grace "
+            "(decided by an earlier call); the latest settled review stands"
+        )
     elif later and later_kind == "running":
-        state["detail"] = (f"a review of {later['sha']} ({later['trigger']}) started "
-                           f"after the push and is {later['status']!r}")
+        state["detail"] = (
+            f"a review of {later['sha']} ({later['trigger']}) started "
+            f"after the push and is {later['status']!r}"
+        )
     elif later and later_kind == "failed":
         wait["outcome"] = "none"
         state["verdict"] = "NO_NEW_REVIEW"
-        state["detail"] = (f"the review of {later['sha']} ended {later['status']!r}; "
-                           "the latest settled review stands")
+        state["detail"] = (
+            f"the review of {later['sha']} ended {later['status']!r}; "
+            "the latest settled review stands"
+        )
     elif elapsed >= start_grace:
         wait["outcome"] = "none"
         state["verdict"] = "NO_NEW_REVIEW"
-        state["detail"] = (f"no review started on {pushed} within the {start_grace}s "
-                           "start grace; the latest settled review stands")
+        state["detail"] = (
+            f"no review started on {pushed} within the {start_grace}s "
+            "start grace; the latest settled review stands"
+        )
     else:
-        state["detail"] = (f"no review has started on {pushed} yet ({elapsed}s of the "
-                           f"{start_grace}s start grace)")
+        state["detail"] = (
+            f"no review has started on {pushed} yet ({elapsed}s of the "
+            f"{start_grace}s start grace)"
+        )
 
 
 def poll(args: argparse.Namespace, memory: Memory) -> dict:
@@ -539,24 +599,42 @@ def poll(args: argparse.Namespace, memory: Memory) -> dict:
     data = read_pr(pr)
     head = data.get("headRefOid") or ""
     age = pr_age_seconds(data.get("createdAt"))
-    state = {"head": head, "age": age, "summary": None, "findings": [],
-             "verdict": None, "detail": "", "thumbs_up": False, "round": None,
-             "rounds": 0, "reviewed_is_head": None, "later": None, "push_age": None}
+    state = {
+        "head": head,
+        "age": age,
+        "summary": None,
+        "findings": [],
+        "verdict": None,
+        "detail": "",
+        "thumbs_up": False,
+        "round": None,
+        "rounds": 0,
+        "reviewed_is_head": None,
+        "later": None,
+        "push_age": None,
+    }
     if data.get("isDraft"):
         state["verdict"] = "ERROR"
-        state["detail"] = (f"PR #{pr} is a draft: Codex reviews a PR when it opens "
-                           "ready or is marked ready, never a draft")
+        state["detail"] = (
+            f"PR #{pr} is a draft: Codex reviews a PR when it opens "
+            "ready or is marked ready, never a draft"
+        )
         return state
 
     base = "repos/{owner}/{repo}"
     comments = [c for c in gh_items(f"{base}/issues/{pr}/comments") if trusted(c, bot)]
     reviews = [r for r in gh_items(f"{base}/pulls/{pr}/reviews") if trusted(r, bot)]
     inline = [c for c in gh_items(f"{base}/pulls/{pr}/comments") if trusted(c, bot)]
-    reactions = [r for r in gh_items(f"{base}/issues/{pr}/reactions") if trusted(r, bot)]
+    reactions = [
+        r for r in gh_items(f"{base}/issues/{pr}/reactions") if trusted(r, bot)
+    ]
 
     summaries = [c for c in comments if SUMMARY_MARKER in (c.get("body") or "")]
-    summary = max(summaries, key=lambda c: (c.get("updated_at") or "", c.get("id") or 0),
-                  default=None)
+    summary = max(
+        summaries,
+        key=lambda c: (c.get("updated_at") or "", c.get("id") or 0),
+        default=None,
+    )
     row = parse_summary(summary.get("body") or "") if summary else None
     bot_seen = bool(summaries or reviews or inline or reactions)
     state["thumbs_up"] = any(r.get("content") == "+1" for r in reactions)
@@ -568,9 +646,14 @@ def poll(args: argparse.Namespace, memory: Memory) -> dict:
     state["rounds"] = len(rounds)
     findings = collect_findings(reviews, inline)
     for finding in findings:
-        finding["round"] = next((k for k, settled in enumerate(rounds, start=1)
-                                 if same_commit(settled["sha"], finding["commit"])),
-                                len(rounds) + 1)
+        finding["round"] = next(
+            (
+                k
+                for k, settled in enumerate(rounds, start=1)
+                if same_commit(settled["sha"], finding["commit"])
+            ),
+            len(rounds) + 1,
+        )
     state["findings"] = findings
     if row and not any(same_commit(settled["sha"], row["sha"]) for settled in rounds):
         state["later"] = row
@@ -585,8 +668,10 @@ def poll(args: argparse.Namespace, memory: Memory) -> dict:
         if summary is None:
             if not bot_seen and age is not None and age >= grace:
                 state["verdict"] = "NO_REVIEW"
-                state["detail"] = (f"no comment, review or reaction from {bot} "
-                                   f"{age}s after PR #{pr} opened (grace {grace}s)")
+                state["detail"] = (
+                    f"no comment, review or reaction from {bot} "
+                    f"{age}s after PR #{pr} opened (grace {grace}s)"
+                )
             else:
                 state["detail"] = "the review summary is not posted yet"
         elif row is None:
@@ -595,9 +680,11 @@ def poll(args: argparse.Namespace, memory: Memory) -> dict:
             state["verdict"] = "ERROR"
             state["detail"] = f"the Codex review reported {row['status']!r}"
         elif not opening_trigger(row["trigger"]):
-            state["detail"] = (f"a later review ({row['trigger']}) is "
-                               f"{row['status']!r} and this watch never saw an earlier "
-                               "review complete, so it waits for that one")
+            state["detail"] = (
+                f"a later review ({row['trigger']}) is "
+                f"{row['status']!r} and this watch never saw an earlier "
+                "review complete, so it waits for that one"
+            )
         else:
             state["detail"] = f"the Codex review is {row['status']!r}"
         return state
@@ -606,8 +693,9 @@ def poll(args: argparse.Namespace, memory: Memory) -> dict:
     state["round"] = len(rounds)
     state["summary"] = latest
     state["reviewed_is_head"] = same_commit(head, latest["sha"])
-    verdict = ("FINDINGS" if any(f["round"] == len(rounds) for f in findings)
-               else "CLEAN")
+    verdict = (
+        "FINDINGS" if any(f["round"] == len(rounds) for f in findings) else "CLEAN"
+    )
     if args.after_push:
         after_push_verdict(state, memory, args.after_push, args.start_grace, verdict)
         memory.save()
@@ -647,15 +735,20 @@ def write_findings(path: Path, pr: str, findings: list[dict]) -> None:
     path.write_text("\n".join(parts), encoding="utf-8")
 
 
-def report(verdict: str, args: argparse.Namespace, state: dict | None,
-           waited: int, detail: str) -> int:
+def report(
+    verdict: str, args: argparse.Namespace, state: dict | None, waited: int, detail: str
+) -> int:
     state = state or {}
     row = state.get("summary") or {}
     findings = state.get("findings") or []
     age = state.get("age")
     findings_line = ""
     if findings:
-        path = Path(args.findings_file) if args.findings_file else default_findings_file(args.pr)
+        path = (
+            Path(args.findings_file)
+            if args.findings_file
+            else default_findings_file(args.pr)
+        )
         try:
             write_findings(path, args.pr, findings)
             findings_line = f"findings_file: {path}"
@@ -678,13 +771,23 @@ def report(verdict: str, args: argparse.Namespace, state: dict | None,
     print(f"reviewed_sha: {row.get('sha') or 'none'}")
     print(f"head_sha: {state.get('head') or 'none'}")
     is_head = state.get("reviewed_is_head")
-    print(f"reviewed_is_head: {'none' if is_head is None else ('yes' if is_head else 'no')}")
-    completed = row.get("at") if status_class(row.get("status") or "") == "completed" else ""
+    print(
+        f"reviewed_is_head: {'none' if is_head is None else ('yes' if is_head else 'no')}"
+    )
+    completed = (
+        row.get("at") if status_class(row.get("status") or "") == "completed" else ""
+    )
     print(f"completed_at: {completed or 'none'}")
     print(f"thumbs_up: {'yes' if state.get('thumbs_up') else 'no'}")
     later = state.get("later")
-    print("later_review: " + (f"{later['status']} ({later['trigger']}) for {later['sha'] or '?'}"
-                              if later else "none"))
+    print(
+        "later_review: "
+        + (
+            f"{later['status']} ({later['trigger']}) for {later['sha'] or '?'}"
+            if later
+            else "none"
+        )
+    )
     print(f"pr_age_seconds: {age if age is not None else 'unknown'}")
     push_age = state.get("push_age")
     print(f"push_age_seconds: {push_age if push_age is not None else 'none'}")
@@ -692,8 +795,10 @@ def report(verdict: str, args: argparse.Namespace, state: dict | None,
     print(f"findings: {len(findings)}")
     print(f"round_findings: {sum(1 for f in findings if f['round'] == this_round)}")
     for finding in findings:
-        print(f"  - {finding['n']} [{finding['priority']}] {finding['where']} "
-              f"id={finding['id']} round={finding['round']} — {finding['title']}")
+        print(
+            f"  - {finding['n']} [{finding['priority']}] {finding['where']} "
+            f"id={finding['id']} round={finding['round']} — {finding['title']}"
+        )
     if findings_line:
         print(findings_line)
     if detail:
@@ -716,19 +821,27 @@ def parse_args(argv: list[str]) -> argparse.Namespace | None:
         print(f"Unknown argument: {unknown[0]}", file=sys.stderr)
         return None
     if not args.pr or not args.pr.lstrip("#").isdigit():
-        print("Usage: review_watch.py <pr-number> [--after-push SHA] [--timeout SECONDS] "
-              "[--bot LOGIN]", file=sys.stderr)
+        print(
+            "Usage: review_watch.py <pr-number> [--after-push SHA] [--timeout SECONDS] "
+            "[--bot LOGIN]",
+            file=sys.stderr,
+        )
         return None
     args.pr = args.pr.lstrip("#")
     if args.after_push and not SHA_ARG_RE.fullmatch(args.after_push):
-        print(f"--after-push needs a commit SHA (7-40 hex digits), got: {args.after_push}",
-              file=sys.stderr)
+        print(
+            f"--after-push needs a commit SHA (7-40 hex digits), got: {args.after_push}",
+            file=sys.stderr,
+        )
         return None
     for name in ("timeout", "grace", "interval", "start_grace"):
         value = getattr(args, name)
         if not str(value).isdigit():
-            print(f"--{name.replace('_', '-')} needs a whole number of seconds, "
-                  f"got: {value}", file=sys.stderr)
+            print(
+                f"--{name.replace('_', '-')} needs a whole number of seconds, "
+                f"got: {value}",
+                file=sys.stderr,
+            )
             return None
         setattr(args, name, int(value))
     if not args.bot.strip():
@@ -761,18 +874,29 @@ def main(argv: list[str] | None = None) -> int:
             # A PR that cannot be read on the first poll is a wrong number or
             # a lost token, not a slow reviewer: say so now, not at the end.
             if first and isinstance(exc, PrUnreadableError):
-                return report("ERROR", args, state, 0,
-                              f"could not read PR #{args.pr}: {last_error}")
+                return report(
+                    "ERROR",
+                    args,
+                    state,
+                    0,
+                    f"could not read PR #{args.pr}: {last_error}",
+                )
         first = False
         waited = int(time.monotonic() - start)
         if state and state["verdict"] and not last_error:
             return report(state["verdict"], args, state, waited, state["detail"])
         if time.monotonic() >= deadline:
             if last_error:
-                return report("ERROR", args, state, waited,
-                              f"the last read failed: {last_error}")
-            return report("PENDING_TIMEOUT", args, state, waited,
-                          (state or {}).get("detail") or "still waiting")
+                return report(
+                    "ERROR", args, state, waited, f"the last read failed: {last_error}"
+                )
+            return report(
+                "PENDING_TIMEOUT",
+                args,
+                state,
+                waited,
+                (state or {}).get("detail") or "still waiting",
+            )
         time.sleep(max(0.0, min(args.interval, deadline - time.monotonic())))
 
 

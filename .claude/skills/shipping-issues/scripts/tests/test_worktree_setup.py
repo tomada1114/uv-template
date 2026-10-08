@@ -8,6 +8,7 @@ worktree_setup.sh never calls `gh` (it only touches git and the local
 filesystem), so these tests don't use FakeGh — they drive real, disposable
 git repos under tempfile.TemporaryDirectory() instead.
 """
+
 from __future__ import annotations
 
 import os
@@ -45,7 +46,9 @@ def make_repo(path):
     git(path, "branch", "-M", "main")
 
 
-def write_stub(bin_dir: Path, name: str, record_path: Path, *, exit_code: int = 0) -> None:
+def write_stub(
+    bin_dir: Path, name: str, record_path: Path, *, exit_code: int = 0
+) -> None:
     """Install a fake executable on `bin_dir` that records its argv and cwd
     (one per line) to `record_path`, then exits with `exit_code`."""
     stub = bin_dir / name
@@ -97,7 +100,16 @@ class WorktreeSetupTest(unittest.TestCase):
             root = td / "worktrees"
 
             proc = run_script(
-                ["--issue", "42", "--branch", "feat/42", "--base", "main", "--root", str(root)],
+                [
+                    "--issue",
+                    "42",
+                    "--branch",
+                    "feat/42",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(root),
+                ],
                 repo,
             )
 
@@ -124,14 +136,25 @@ class WorktreeSetupTest(unittest.TestCase):
 
             before = git(repo, "status", "--porcelain").stdout
             proc = run_script(
-                ["--issue", "1", "--branch", "feat/1", "--base", "main", "--root", str(root)],
+                [
+                    "--issue",
+                    "1",
+                    "--branch",
+                    "feat/1",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(root),
+                ],
                 repo,
             )
             after = git(repo, "status", "--porcelain").stdout
 
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(before, "")
-        self.assertEqual(after, "", "worktree_setup.sh must never dirty the main checkout")
+        self.assertEqual(
+            after, "", "worktree_setup.sh must never dirty the main checkout"
+        )
 
     def test_copies_no_secret_or_permission_file(self):
         with tempfile.TemporaryDirectory() as td:
@@ -139,15 +162,31 @@ class WorktreeSetupTest(unittest.TestCase):
             repo = td / "repo"
             repo.mkdir()
             make_repo(repo)
-            secret_shaped = [".env", ".env.local", ".envrc", "app.local", ".dev.vars",
-                             "local.settings.json", ".claude/settings.local.json"]
+            secret_shaped = [
+                ".env",
+                ".env.local",
+                ".envrc",
+                "app.local",
+                ".dev.vars",
+                "local.settings.json",
+                ".claude/settings.local.json",
+            ]
             for rel in secret_shaped:
                 (repo / rel).parent.mkdir(parents=True, exist_ok=True)
                 (repo / rel).write_text("X=1\n", encoding="utf-8")
             root = td / "worktrees"
 
             proc = run_script(
-                ["--issue", "9", "--branch", "feat/9", "--base", "main", "--root", str(root)],
+                [
+                    "--issue",
+                    "9",
+                    "--branch",
+                    "feat/9",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(root),
+                ],
                 repo,
             )
             wt = root / "9"
@@ -164,7 +203,16 @@ class WorktreeSetupTest(unittest.TestCase):
             repo.mkdir()
             make_repo(repo)
             root = td / "worktrees"
-            args = ["--issue", "5", "--branch", "feat/5", "--base", "main", "--root", str(root)]
+            args = [
+                "--issue",
+                "5",
+                "--branch",
+                "feat/5",
+                "--base",
+                "main",
+                "--root",
+                str(root),
+            ]
 
             first = run_script(args, repo)
             second = run_script(args, repo)
@@ -184,7 +232,16 @@ class WorktreeSetupTest(unittest.TestCase):
             (root / "6").mkdir(parents=True)
 
             proc = run_script(
-                ["--issue", "6", "--branch", "feat/6", "--base", "main", "--root", str(root)],
+                [
+                    "--issue",
+                    "6",
+                    "--branch",
+                    "feat/6",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(root),
+                ],
                 repo,
             )
 
@@ -211,7 +268,16 @@ class WorktreeSetupTest(unittest.TestCase):
             write_stub(bin_dir, "uv", record, exit_code=0)
 
             proc = run_script(
-                ["--issue", "3", "--branch", "feat/3", "--base", "main", "--root", str(root)],
+                [
+                    "--issue",
+                    "3",
+                    "--branch",
+                    "feat/3",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(root),
+                ],
                 repo,
                 extra_path=str(bin_dir),
             )
@@ -241,7 +307,16 @@ class WorktreeSetupTest(unittest.TestCase):
             write_stub(bin_dir, "uv", record, exit_code=7)
 
             proc = run_script(
-                ["--issue", "4", "--branch", "feat/4", "--base", "main", "--root", str(root)],
+                [
+                    "--issue",
+                    "4",
+                    "--branch",
+                    "feat/4",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(root),
+                ],
                 repo,
                 extra_path=str(bin_dir),
             )
@@ -256,13 +331,24 @@ class WorktreeSetupTest(unittest.TestCase):
             repo = td / "repo"
             repo.mkdir()
             make_repo(repo)
-            (repo / ".pre-commit-config.yaml").write_text("repos: []\n", encoding="utf-8")
+            (repo / ".pre-commit-config.yaml").write_text(
+                "repos: []\n", encoding="utf-8"
+            )
             git(repo, "add", ".pre-commit-config.yaml")
             git(repo, "commit", "-qm", "add pre-commit config")
             root = td / "worktrees"
 
             proc = run_script(
-                ["--issue", "5", "--branch", "feat/5", "--base", "main", "--root", str(root)],
+                [
+                    "--issue",
+                    "5",
+                    "--branch",
+                    "feat/5",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(root),
+                ],
                 repo,
             )
             hook_written = (repo / ".git" / "hooks" / "pre-commit").exists()
@@ -271,7 +357,9 @@ class WorktreeSetupTest(unittest.TestCase):
         self.assertIn("hooks: MISSING", proc.stdout)
         self.assertIn("just install", proc.stdout)
         self.assertIn("verdict: READY_WITH_WARNINGS\n", proc.stdout)
-        self.assertFalse(hook_written, "the shared hook is never installed from a worktree")
+        self.assertFalse(
+            hook_written, "the shared hook is never installed from a worktree"
+        )
 
     def test_installed_shared_pre_commit_hook_is_reported(self):
         with tempfile.TemporaryDirectory() as td:
@@ -279,15 +367,28 @@ class WorktreeSetupTest(unittest.TestCase):
             repo = td / "repo"
             repo.mkdir()
             make_repo(repo)
-            (repo / ".pre-commit-config.yaml").write_text("repos: []\n", encoding="utf-8")
+            (repo / ".pre-commit-config.yaml").write_text(
+                "repos: []\n", encoding="utf-8"
+            )
             git(repo, "add", ".pre-commit-config.yaml")
             git(repo, "commit", "-qm", "add pre-commit config")
             hook = repo / ".git" / "hooks" / "pre-commit"
-            hook.write_text("#!/usr/bin/env bash\n# installed by pre-commit\n", encoding="utf-8")
+            hook.write_text(
+                "#!/usr/bin/env bash\n# installed by pre-commit\n", encoding="utf-8"
+            )
             root = td / "worktrees"
 
             proc = run_script(
-                ["--issue", "6", "--branch", "feat/6", "--base", "main", "--root", str(root)],
+                [
+                    "--issue",
+                    "6",
+                    "--branch",
+                    "feat/6",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(root),
+                ],
                 repo,
             )
 
@@ -312,10 +413,21 @@ class WorktreeSetupTest(unittest.TestCase):
             td = Path(td)
             repo = self._repo_expecting_merge_hook(td)
             hook = repo / ".git" / "hooks" / "pre-commit"
-            hook.write_text("#!/usr/bin/env bash\n# installed by pre-commit\n", encoding="utf-8")
+            hook.write_text(
+                "#!/usr/bin/env bash\n# installed by pre-commit\n", encoding="utf-8"
+            )
 
             proc = run_script(
-                ["--issue", "7", "--branch", "feat/7", "--base", "main", "--root", str(td / "worktrees")],
+                [
+                    "--issue",
+                    "7",
+                    "--branch",
+                    "feat/7",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(td / "worktrees"),
+                ],
                 repo,
             )
 
@@ -329,10 +441,21 @@ class WorktreeSetupTest(unittest.TestCase):
             repo = self._repo_expecting_merge_hook(td)
             for name in ("pre-commit", "pre-merge-commit"):
                 hook = repo / ".git" / "hooks" / name
-                hook.write_text("#!/usr/bin/env bash\n# installed by pre-commit\n", encoding="utf-8")
+                hook.write_text(
+                    "#!/usr/bin/env bash\n# installed by pre-commit\n", encoding="utf-8"
+                )
 
             proc = run_script(
-                ["--issue", "8", "--branch", "feat/8", "--base", "main", "--root", str(td / "worktrees")],
+                [
+                    "--issue",
+                    "8",
+                    "--branch",
+                    "feat/8",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(td / "worktrees"),
+                ],
                 repo,
             )
 
@@ -351,10 +474,18 @@ class WorktreeSetupTest(unittest.TestCase):
 
             proc = run_script(
                 [
-                    "--issue", "10", "--branch", "feat/10", "--base", "main",
-                    "--root", str(root),
-                    "--verify", "echo failing-output && exit 1",
-                    "--log", str(log),
+                    "--issue",
+                    "10",
+                    "--branch",
+                    "feat/10",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(root),
+                    "--verify",
+                    "echo failing-output && exit 1",
+                    "--log",
+                    str(log),
                 ],
                 repo,
             )
@@ -378,8 +509,15 @@ class WorktreeSetupTest(unittest.TestCase):
 
             proc = run_script(
                 [
-                    "--issue", "11", "--branch", "feat/11", "--base", "main",
-                    "--root", str(root), "--dry-run",
+                    "--issue",
+                    "11",
+                    "--branch",
+                    "feat/11",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(root),
+                    "--dry-run",
                 ],
                 repo,
             )
@@ -404,7 +542,16 @@ class WorktreeSetupTest(unittest.TestCase):
             root = td / "worktrees"
 
             proc = run_script(
-                ["--issue", "12", "--branch", "feat/12", "--base", "main", "--root", str(root)],
+                [
+                    "--issue",
+                    "12",
+                    "--branch",
+                    "feat/12",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(root),
+                ],
                 other,
             )
 
@@ -430,9 +577,14 @@ class WorktreeSetupTest(unittest.TestCase):
 
             proc = run_script(
                 [
-                    "--spec", "201:feat/201",
-                    "--spec", "202:feat/202",
-                    "--base", "main", "--root", str(root),
+                    "--spec",
+                    "201:feat/201",
+                    "--spec",
+                    "202:feat/202",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(root),
                 ],
                 repo,
             )
@@ -443,7 +595,9 @@ class WorktreeSetupTest(unittest.TestCase):
         self.assertIn("batch: 2/2 ready\n", proc.stdout)
         self.assertNotIn("blocked:", proc.stdout)
         # per-issue verdict lines appear before the final batch verdict line
-        self.assertEqual(proc.stdout.count("verdict: READY\n"), 3)  # 2 per-issue + 1 summary
+        self.assertEqual(
+            proc.stdout.count("verdict: READY\n"), 3
+        )  # 2 per-issue + 1 summary
         self.assertTrue(proc.stdout.rstrip("\n").endswith("verdict: READY"))
 
     def test_batch_reports_blocked_spec_in_summary(self):
@@ -460,9 +614,14 @@ class WorktreeSetupTest(unittest.TestCase):
 
             proc = run_script(
                 [
-                    "--spec", "301:feat/301",
-                    "--spec", "302:feat/302",
-                    "--base", "main", "--root", str(root),
+                    "--spec",
+                    "301:feat/301",
+                    "--spec",
+                    "302:feat/302",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(root),
                 ],
                 repo,
             )
@@ -482,8 +641,16 @@ class WorktreeSetupTest(unittest.TestCase):
 
             proc = run_script(
                 [
-                    "--spec", "1:feat/1", "--issue", "2", "--branch", "feat/2",
-                    "--base", "main", "--root", str(root),
+                    "--spec",
+                    "1:feat/1",
+                    "--issue",
+                    "2",
+                    "--branch",
+                    "feat/2",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(root),
                 ],
                 repo,
             )
@@ -500,8 +667,14 @@ class WorktreeSetupTest(unittest.TestCase):
 
             proc = run_script(
                 [
-                    "--spec", "1:feat/1", "--base", "main", "--root", str(root),
-                    "--log", str(td / "x.log"),
+                    "--spec",
+                    "1:feat/1",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(root),
+                    "--log",
+                    str(td / "x.log"),
                 ],
                 repo,
             )
@@ -549,10 +722,18 @@ class WorktreeSetupTest(unittest.TestCase):
 
             proc = run_script(
                 [
-                    "--spec", "401:feat/401", "--spec", "402:feat/402",
-                    "--base", "main", "--root", str(root),
-                    "--verify", "exit 0",
-                    "--log-dir", str(log_dir),
+                    "--spec",
+                    "401:feat/401",
+                    "--spec",
+                    "402:feat/402",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(root),
+                    "--verify",
+                    "exit 0",
+                    "--log-dir",
+                    str(log_dir),
                 ],
                 repo,
             )
@@ -575,10 +756,18 @@ class WorktreeSetupTest(unittest.TestCase):
 
             proc = run_script(
                 [
-                    "--spec", "501:feat/501", "--spec", "502:feat/502",
-                    "--base", "main", "--root", str(root),
-                    "--verify", "exit 1",
-                    "--log-dir", str(td / "verify"),
+                    "--spec",
+                    "501:feat/501",
+                    "--spec",
+                    "502:feat/502",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(root),
+                    "--verify",
+                    "exit 1",
+                    "--log-dir",
+                    str(td / "verify"),
                 ],
                 repo,
             )
@@ -605,11 +794,20 @@ class WorktreeSetupTest(unittest.TestCase):
 
             proc = run_script(
                 [
-                    "--issue", "601", "--branch", "feat/601",
-                    "--base", "main", "--root", str(root),
-                    "--verify", "sleep 30",
-                    "--verify-timeout", "1",
-                    "--log", str(td / "verify" / "601.log"),
+                    "--issue",
+                    "601",
+                    "--branch",
+                    "feat/601",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(root),
+                    "--verify",
+                    "sleep 30",
+                    "--verify-timeout",
+                    "1",
+                    "--log",
+                    str(td / "verify" / "601.log"),
                 ],
                 repo,
             )
@@ -630,11 +828,20 @@ class WorktreeSetupTest(unittest.TestCase):
 
             proc = run_script(
                 [
-                    "--issue", "602", "--branch", "feat/602",
-                    "--base", "main", "--root", str(td / "worktrees"),
-                    "--verify", f"( sleep 4; touch {marker} ) & wait",
-                    "--verify-timeout", "1",
-                    "--log", str(td / "verify" / "602.log"),
+                    "--issue",
+                    "602",
+                    "--branch",
+                    "feat/602",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(td / "worktrees"),
+                    "--verify",
+                    f"( sleep 4; touch {marker} ) & wait",
+                    "--verify-timeout",
+                    "1",
+                    "--log",
+                    str(td / "verify" / "602.log"),
                 ],
                 repo,
             )
@@ -642,8 +849,7 @@ class WorktreeSetupTest(unittest.TestCase):
             child_survived = marker.exists()
 
         self.assertIn("baseline: TIMEOUT(1s)\n", proc.stdout)
-        self.assertFalse(child_survived,
-                         "the forked child outlived the timeout")
+        self.assertFalse(child_survived, "the forked child outlived the timeout")
 
     def test_bad_verify_timeout_is_a_usage_error(self):
         with tempfile.TemporaryDirectory() as td:
@@ -652,8 +858,18 @@ class WorktreeSetupTest(unittest.TestCase):
             repo.mkdir()
             make_repo(repo)
             proc = run_script(
-                ["--issue", "1", "--branch", "b", "--base", "main",
-                 "--root", str(td / "wt"), "--verify-timeout", "0"],
+                [
+                    "--issue",
+                    "1",
+                    "--branch",
+                    "b",
+                    "--base",
+                    "main",
+                    "--root",
+                    str(td / "wt"),
+                    "--verify-timeout",
+                    "0",
+                ],
                 repo,
             )
         self.assertEqual(proc.returncode, 2)
