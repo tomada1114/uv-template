@@ -212,12 +212,11 @@ runtime-evaluated-decorators = [
     "D1",  # missing docstrings — scripts are not a public API
     "T20", # print is the expected output channel for CLI scripts
 ]
-# Skill scripts are ported from the sibling templates (nextjs-app-template and
-# others) and kept close to that source, so a later sync stays a small diff
-# rather than a rewrite. They are stdlib-only CLI tools run with the system
-# `python3` and tested with unittest, never part of the package's public API.
-# The ignores below name only the style differences that follow from that;
-# they waive nothing for src/, scripts/ or tests/.
+# Skill scripts belong here; authoring-skills' "Scripts bundled inside a skill"
+# section records ownership and deliberate per-change porting to other templates.
+# They are stdlib-only CLI tools run with the system `python3` and tested with
+# unittest, never part of the package's public API. Former upstream-layout waivers
+# remain pending a separate cleanup; they waive nothing for src/, scripts/ or tests/.
 ".agents/skills/**/scripts/**" = [
     "D1",      # missing docstrings — CLI helpers, not a public API
     "D2",      # docstring layout (D205/D209) — kept as authored upstream
@@ -259,8 +258,8 @@ runtime-evaluated-decorators = [
 required-imports = ["from __future__ import annotations"]
 
 [tool.ruff.format]
-# Ported skill scripts keep their upstream layout (see the per-file-ignores
-# above); reformatting them would turn every later sync into a full rewrite.
+# Former upstream-layout exclusion awaits separate cleanup; see authoring-skills'
+# "Scripts bundled inside a skill" section for the repository ownership decision.
 exclude = [".agents/skills/*/scripts/**"]
 quote-style = "double"
 indent-style = "space"
