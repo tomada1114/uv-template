@@ -601,6 +601,7 @@ def ci_recipe_findings(root: Path) -> list[str]:
     }
     text = (root / JUSTFILE).read_text(encoding="utf-8")
     findings: list[str] = []
+    local_by_job: dict[str, set[str]] = {}
     for recipe, job_name in {
         "agents-check": "Lint & Type Check",
         "lint": "Lint & Type Check",
@@ -615,10 +616,27 @@ def ci_recipe_findings(root: Path) -> list[str]:
             if line.strip() and not line.lstrip().startswith("#")
         ]
         assert commands, f"recipe {recipe} has no commands"
+        local_by_job.setdefault(job_name, set()).update(commands)
         findings.extend(
             f"{job_name}: missing {recipe} command: {command}"
             for command in commands
             if command not in commands_by_job.get(job_name, set())
+        )
+    ci_only_commands = {
+        "Lint & Type Check": {"uv run --locked pre-commit run shellcheck --all-files"},
+        "Coverage": set(),
+    }
+    for job_name, local_commands in local_by_job.items():
+        ci_commands = {
+            command
+            for command in commands_by_job.get(job_name, set())
+            if command.startswith(("uv run ", "PYTHONDONTWRITEBYTECODE=1 uv run "))
+        }
+        findings.extend(
+            f"{job_name}: extra CI command: {command}"
+            for command in sorted(
+                ci_commands - local_commands - ci_only_commands[job_name]
+            )
         )
     return findings
 
@@ -642,6 +660,25 @@ def test_ci_recipe_findings_drifted_command_is_rejected(tmp_path: Path) -> None:
     )
     assert (
         "Lint & Type Check: missing lint command: uv run --locked ruff check ."
+        in ci_recipe_findings(tmp_path)
+    )
+
+
+def test_ci_recipe_findings_removed_local_command_is_rejected(tmp_path: Path) -> None:
+    destination = tmp_path / ".github/workflows/ci.yml"
+    destination.parent.mkdir(parents=True)
+    destination.write_text(
+        (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (tmp_path / JUSTFILE).write_text(
+        (REPO_ROOT / JUSTFILE)
+        .read_text(encoding="utf-8")
+        .replace("    uv run --locked mypy src scripts tests\n", ""),
+        encoding="utf-8",
+    )
+    assert (
+        "Lint & Type Check: extra CI command: uv run --locked mypy src scripts tests"
         in ci_recipe_findings(tmp_path)
     )
 
