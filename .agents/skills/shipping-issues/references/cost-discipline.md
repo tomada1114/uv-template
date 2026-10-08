@@ -11,7 +11,6 @@ step, before changing a run count, or when asked why no local review runs.
 - [Run budget](#run-budget)
 - [Tier assignment](#tier-assignment)
   - [The foundation exception: `architect` for what the backlog builds on](#the-foundation-exception-architect-for-what-the-backlog-builds-on)
-  - [The small-change step-down: `worker`](#the-small-change-step-down-worker)
   - [The floor: too small to delegate](#the-floor-too-small-to-delegate)
 - [What parallel mode costs](#what-parallel-mode-costs)
 
@@ -110,21 +109,19 @@ pins its own effort, which a per-spawn `model` cannot carry.
 | Brief                      | Tier                                                                                                                                                                                          |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Priority research (step 2) | `executor`                                                                                                                                                                                    |
-| Implementation (step 3)    | `executor`; `architect` when [foundational](#the-foundation-exception-architect-for-what-the-backlog-builds-on); `worker` when [small and settled](#the-small-change-step-down-worker)         |
-| Review fix (step 5)        | `executor`; `worker` when every accepted finding is [pinned to its line and its fix](#the-small-change-step-down-worker)                                                                       |
+| Implementation (step 3)    | `executor`; `architect` when [foundational](#the-foundation-exception-architect-for-what-the-backlog-builds-on)         |
+| Review fix (step 5)        | `executor`                                                                       |
 | CI repair (step 6)         | `executor` for attempts 1–2; `architect` from attempt 3                                                                                                                                       |
 | Design decision (step 8b)  | `architect`                                                                                                                                                                                   |
 
 Implementation, priority research and review fixes are fully specified work with a clear
-pass/fail — the `executor` shape — with a step up and a step down below. CI repair
+pass/fail — the `executor` shape — with a step up below. CI repair
 escalates once the same failure survives two attempts in a row: persistent failure is a
 sign the spec (or the fix) needs more judgment, not more mechanical retries. Design
 decisions are `architect` because their spec is genuinely unresolved — deciding an
 approach nobody has decided is the least mechanical work this skill delegates, and a bad
 decision recorded on an issue outlives the run that made it. It is also the only brief here that writes to GitHub (one
-comment, one label) and the only one that writes no code at all. `worker` takes only
-the small end of implementation and review fixes, by the test below; priority research
-and CI repair stay on `executor`, because both start from something not yet understood.
+comment, one label) and the only one that writes no code at all.
 
 ### The foundation exception: `architect` for what the backlog builds on
 
@@ -152,8 +149,7 @@ more, a `foundation`/`schema`/`interface` signal, or a Done-means written as a s
 to establish rather than a behavior to observe. Any one of those is a reason to look;
 the blast-radius test decides.
 
-Everything else stays on `executor` — or steps down to `worker` by the next section —
-which is most of a backlog: bug fixes, removals,
+Everything else stays on `executor` — which is most of a backlog: bug fixes, removals,
 mechanical rewrites, config edits, documentation that follows a shape already settled,
 and any issue whose Done-means is a command that passes. A removal-only issue is
 `executor` even when it is `P0` and unblocks the whole chain — deleting what a decision
@@ -166,30 +162,6 @@ run got half-right is exactly where the remaining judgment sits.
 Where tiers exist, implementation stays delegated even when this session could do it
 itself — bought for context isolation: the diff and the repo exploration are never
 needed in the main context again once this session has judged the result.
-
-### The small-change step-down: `worker`
-
-`worker` is the cost tier — far cheaper per run than `executor`,
-and enough for a change that leaves nothing to find out. Hand the step 3 implementation
-to **`worker`** instead of `executor` when **all** of these hold:
-
-- the issue is not foundational by the test above — that section always wins;
-- the design is settled: the issue body (or its accepted design comment) says what to
-  change, and nothing in it is still to be decided;
-- the scope is narrow: one module and its test, or the few files the issue names — no
-  module to learn, no search across the tree to find where the change goes;
-- the Done-means is a command or an existing test that passes, which the brief can name
-  as the check to run.
-
-A step 5 review fix goes to `worker` when every accepted finding names its `path:line`
-and the fix it wants; a finding that needs reading around to decide its fix keeps the
-brief on `executor`.
-
-A `worker` run that misses `ACCEPTANCE`, or reports the change needs a decision or files
-the brief did not name, is not patched on `worker`: the next round goes to `executor` —
-a tier change, so a fresh agent — and counts against the same 2 patch rounds. The
-`worker` run proved the issue was not as small as it read; spending another cheap round
-on it costs more than it saves.
 
 ### The floor: too small to delegate
 
