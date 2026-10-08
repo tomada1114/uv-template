@@ -72,3 +72,19 @@ def test_load_yaml_merge_override_preserves_explicit_value(tmp_path: Path) -> No
         "defaults": {"timeout": 10, "enabled": True},
         "job": {"timeout": 20, "enabled": True},
     }
+
+
+@pytest.mark.parametrize("comment", ["", " # v5"])
+def test_load_yaml_scalar_alias_comment_belongs_to_occurrence(
+    tmp_path: Path, comment: str
+) -> None:
+    path = tmp_path / "workflow.yml"
+    path.write_text(
+        f"name: &pin owner/action@{'a' * 40} # v4\nuses: *pin{comment}\n",
+        encoding="utf-8",
+    )
+    document = _yaml.as_mapping(_yaml.load_yaml(path), str(path))
+
+    assert document["name"] == document["uses"]
+    assert _yaml.source_comment(document["name"]) == "# v4"
+    assert _yaml.source_comment(document["uses"]) == (comment.strip() or None)

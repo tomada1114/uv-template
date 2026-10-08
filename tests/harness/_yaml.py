@@ -14,7 +14,7 @@ import yaml
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from yaml.nodes import MappingNode, ScalarNode
+    from yaml.nodes import MappingNode, Node, ScalarNode
 
 type Mapping = dict[str, object]
 
@@ -33,6 +33,17 @@ class _Loader(yaml.SafeLoader):  # type: ignore[misc]  # PyYAML is untyped
     def __init__(self, text: str) -> None:
         super().__init__(text)
         self.source = text
+
+    def compose_node(self, parent: object, index: object) -> Node:
+        # SafeLoader normally reuses an anchor's node for every alias. Keep
+        # scalar values equal but attach metadata to this source occurrence.
+        alias = self.peek_event() if self.check_event(yaml.events.AliasEvent) else None
+        node: Node = super().compose_node(parent, index)
+        if alias is not None and isinstance(node, yaml.nodes.ScalarNode):
+            return yaml.nodes.ScalarNode(
+                node.tag, node.value, alias.start_mark, alias.end_mark, style=node.style
+            )
+        return node
 
 
 _Loader.yaml_implicit_resolvers = {

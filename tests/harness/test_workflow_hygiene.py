@@ -324,6 +324,24 @@ def test_hygiene_findings_clean_workflow_passes(make_workflow: MakeWorkflow) -> 
     assert hygiene_findings(make_workflow(CLEAN)) == []
 
 
+@pytest.mark.parametrize("local_comment", ["", " # v7.0.1"])
+def test_hygiene_findings_alias_requires_local_pin_comment(
+    make_workflow: MakeWorkflow, local_comment: str
+) -> None:
+    text = CLEAN.replace(
+        "name: W", f"name: &pin actions/checkout@{SHA} # v7.0.1"
+    ).replace(f"uses: actions/checkout@{SHA} # v7.0.1", f"uses: *pin{local_comment}")
+
+    expected = (
+        []
+        if local_comment
+        else [
+            f"{JOB} step 1: `uses: actions/checkout@{SHA}` has no `# v<version>` comment"
+        ]
+    )
+    assert hygiene_findings(make_workflow(text)) == expected
+
+
 def test_hygiene_findings_without_workflows_passes(tmp_path: Path) -> None:
     assert hygiene_findings(tmp_path) == []
 
