@@ -99,8 +99,8 @@ its blocker does not itself remove the label. The usual clearing step is the
 `shipping-issues` stale-label sweep: after verifying every named dependency is
 closed, it runs `apply_priority_labels.py --clear-dependency` within that workflow's
 label-write permission. If no such run follows, whoever lands the blocker clears
-its dependents' stale labels within authorized scope. A Codex shipping run without
-label-write authority reports the stale label instead of changing it.
+its dependents' stale labels within authorized scope. This grants no label-write
+authority to the separate Codex workflow.
 
 ## A problem found outside the task
 
