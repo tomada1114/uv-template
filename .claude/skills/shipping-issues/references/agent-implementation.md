@@ -118,7 +118,8 @@ SCOPE-NOTES: <anything in the task you did not implement, and why>
 FOLLOW-UPS: <defects you saw that are NOT this task, one per line as
              `file:line — what is wrong — what prevents it today`, or "none">
 UNRESOLVED: <judgment calls you had to make, or "none">
-PR-TITLE: <one line the parent can use verbatim>
+PR-TITLE: <one line the parent can use verbatim; choose its type from the explicit
+           types input in .github/workflows/check-pr-title.yml>
 PR-SUMMARY: <2-4 lines: what changed and why, for the PR body>
 TEST-PLAN: <what the parent should put under the PR's test plan, including the
             verification command and, for a perf issue, both numbers>
