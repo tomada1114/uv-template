@@ -147,7 +147,7 @@ Skills are authored under `.agents/skills/` (Codex CLI) and mirrored into
 | `authoring-skills` | adding, editing, or reviewing a skill under `.agents/skills/`, or a skill never fires |
 | `building-api-routes` | adding or changing an HTTP route, request or response model, or API dependency, and the TestClient tests for it |
 | `changing-gates` | editing a hook, a CI workflow, the ruleset, or a ruff, mypy, pytest, or coverage setting, or asking whether a change weakens a gate |
-| `codex-shipping-issues` | shipping one GitHub issue from a Codex-managed checkout through a regular PR, one initial Codex review with findings addressed, current-head CI, and an explicitly authorized merge |
+| `codex-shipping-issues` | shipping one GitHub issue from a Codex-managed checkout through a regular PR, up to three Codex review rounds with their findings addressed, current-head CI, and an explicitly authorized merge |
 | `create-pr` | opening or updating a pull request by hand |
 | `designing-clis` | adding or changing a `my-app` command, its arguments, or its output, and the CliRunner tests for it |
 | `designing-core-logic` | adding a use case, domain rule, port, adapter, or `MY_APP_*` setting, or wiring the composition root |
@@ -178,14 +178,20 @@ named sub-agent, a step marked for a tier may go to one of three:
 |---|---|---|
 | `executor` | low | a settled spec with a clear pass/fail: implementing it, adding tests, getting a check green, bulk edits, research that only collects |
 | `architect` | high | design judgment, review and bug finding, multi-file work, synthesis, a spec that still has holes |
-| `worker` | medium | single-shot, tool-free writing or checking from a complete brief |
+| `worker` | max | a small, settled change: narrow scope (one module and its test, or the files the brief names), done when a command or an existing test passes; or writing and checking to a complete brief |
 
 Both hosts define the same three: `.claude/agents/<tier>.md` pins a model alias
-(`opus`, or `sonnet` for `worker` — never a dated model ID) and an `effort`;
-`.codex/agents/<tier>.toml` sets only `model_reasoning_effort`, so the session's
-model is inherited. `tests/test_agent_tiers.py` holds their instructions equal.
+(`opus`, or `haiku` for `worker` — never a dated model ID) and an `effort`;
+`.codex/agents/<tier>.toml` sets `model_reasoning_effort`, and only `worker` also
+pins a `model` (`gpt-6-luna`) — the others inherit the session's.
+`worker` is the cost tier: a small model at its highest effort.
+`tests/test_agent_tiers.py` holds their instructions equal.
 
 - Neither file declares a permission — no `sandbox_mode`, no tool list.
+- A model alias resolves per provider: on Bedrock, Vertex, Foundry, or Claude
+  Platform on AWS, `haiku` can map to an older Haiku without `max` effort. Pin the
+  model the tier expects there with `ANTHROPIC_DEFAULT_HAIKU_MODEL` (and
+  `ANTHROPIC_DEFAULT_OPUS_MODEL`) in your own settings, not in this repository.
 - Codex CLI loads `.codex/` only for a trusted project (in an untrusted
   checkout a step marked for a tier runs inline), and `.codex/agents/worker.toml`
   replaces Codex's built-in `worker` inside this repository on purpose.

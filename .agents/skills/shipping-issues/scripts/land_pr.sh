@@ -39,11 +39,14 @@
 #
 # With --review-log FILE (the output review_watch.py wrote for this PR) the
 # script merges an open PR only when that log is about this PR and its
-# `verdict:` is CLEAN or FINDINGS; anything else — PENDING_TIMEOUT, NO_REVIEW,
-# ERROR, another PR's log, or no log at all — is `result: REVIEW_UNSETTLED`
-# and nothing is merged. It cannot tell whether FINDINGS were addressed: that
-# triage is the caller's step, and this guard only stops a merge that would
-# land before the PR's review exists.
+# `verdict:` is CLEAN or FINDINGS, or NO_NEW_REVIEW (no review started within
+# the grace after a push) whose `after_push:` is the commit being merged;
+# anything else — PENDING_TIMEOUT (a review still running included),
+# NO_REVIEW, ERROR, a NO_NEW_REVIEW about another push, another PR's log, or
+# no log at all — is `result: REVIEW_UNSETTLED` and nothing is merged. It
+# cannot tell whether FINDINGS were addressed: that triage is the caller's
+# step, and this guard only stops a merge that would land before the PR's
+# review exists.
 #
 # With --dry-run nothing is written: on an already-merged PR whose issue is
 # still open it reports `issue: WOULD_CLOSE` instead of closing the issue.
@@ -115,18 +118,21 @@ fi
 if [[ -n "$REVIEW_LOG" && "$state" == "OPEN" ]]; then
   review_verdict=""
   review_pr=""
+  review_after_push=""
   if [[ -r "$REVIEW_LOG" ]]; then
     review_verdict="$(sed -n 's/^verdict: //p' "$REVIEW_LOG" | tail -n 1)"
     review_pr="$(sed -n 's/^pr: //p' "$REVIEW_LOG" | tail -n 1)"
+    review_after_push="$(sed -n 's/^after_push: //p' "$REVIEW_LOG" | tail -n 1)"
   fi
   echo "review: ${review_verdict:-UNREADABLE}"
   if [[ "$review_pr" != "${PR#\#}" ]] \
-      || [[ "$review_verdict" != "CLEAN" && "$review_verdict" != "FINDINGS" ]]; then
+      || [[ "$review_verdict" != "CLEAN" && "$review_verdict" != "FINDINGS" \
+            && "$review_verdict" != "NO_NEW_REVIEW" ]]; then
     echo "result: REVIEW_UNSETTLED"
     if [[ -n "$review_pr" && "$review_pr" != "${PR#\#}" ]]; then
       echo "detail: $REVIEW_LOG is review_watch.py's log for PR #$review_pr, not #$PR — nothing was merged"
     else
-      echo "detail: the PR's review has no CLEAN or FINDINGS verdict in $REVIEW_LOG — nothing was merged"
+      echo "detail: the PR's review has no CLEAN, FINDINGS or NO_NEW_REVIEW verdict in $REVIEW_LOG — nothing was merged"
     fi
     exit 1
   fi
@@ -211,6 +217,19 @@ if [[ "$state" == "OPEN" ]]; then
     fi
   fi
   echo "head_sha: $HEAD_SHA"
+
+  # NO_NEW_REVIEW speaks only for the push it waited after: a later push
+  # needs its own start grace before it can merge.
+  if [[ "${review_verdict:-}" == "NO_NEW_REVIEW" ]]; then
+    pushed="$(printf '%s' "$review_after_push" | tr '[:upper:]' '[:lower:]')"
+    pinned="$(printf '%s' "$HEAD_SHA" | tr '[:upper:]' '[:lower:]')"
+    if [[ ! "$pushed" =~ ^[0-9a-f]{7,40}$ ]] \
+        || [[ "$pinned" != "$pushed"* && "$pushed" != "$pinned"* ]]; then
+      echo "result: REVIEW_UNSETTLED"
+      echo "detail: $REVIEW_LOG says no review started after push ${review_after_push:-none}, not the head $HEAD_SHA — re-run review_watch.py --after-push $HEAD_SHA; nothing was merged"
+      exit 1
+    fi
+  fi
 
   # --- 1.8 merge state (merge precondition) ----------------------------------
   # GitHub's own answer to "can this merge right now".
