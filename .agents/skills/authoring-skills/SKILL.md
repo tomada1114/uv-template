@@ -169,11 +169,15 @@ Check`) lints every `.sh`. bash 3.2 is checked only locally: `test_shell_syntax.
 parses each script with `/bin/bash`, which is 3.2 on a Mac and bash 5 on CI's Linux
 runners, so CI cannot check it.
 
-Ruff lints these scripts with the scoped relaxations in `pyproject.toml`'s
-`[tool.ruff.lint.per-file-ignores]` and leaves their layout alone
-(`[tool.ruff.format] exclude`), because the scripts are ported from the sibling
-templates and kept close to that source. mypy does not check them. Add a new rule to
-those ignores only with a reason comment, never by relaxing the global rule set.
+These scripts belong to this repository. There is no canonical upstream and no
+requirement to keep them close to sibling templates. A useful fix is ported to another
+template deliberately, one change at a time; routine local refactoring needs no sync.
+
+Ruff's existing scoped relaxations in `pyproject.toml`'s
+`[tool.ruff.lint.per-file-ignores]` and `[tool.ruff.format] exclude` remain until a
+separate cleanup removes the former upstream-layout waivers. mypy does not check the
+scripts yet. Add a new rule to those ignores only with a reason comment, never by
+relaxing the global rule set.
 
 ## What catches a broken skill
 
