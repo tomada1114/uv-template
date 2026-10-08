@@ -109,13 +109,13 @@ each `F<n>` line carries its `round=`, and `round_findings:` counts the round ju
 
 **After each fix push** (rounds 1 and 2), run `review_watch.py <pr> --after-push <sha>`,
 `<sha>` the commit just pushed, alongside the new CI watch. It waits a start grace
-(`--start-grace`, 180 s, counted from its first call for that `<sha>`) for a review that
+(`--start-grace`, 300 s, counted from its first call for that `<sha>`) for a review that
 is not a settled round to start — when one comes it has started within about 2.5
 minutes of the push (above).
 One that starts is waited for by the same completion rules and reported as the next
 round. `NO_NEW_REVIEW` means none started (or the one that did failed): the latest
 settled round stands, and the PR lands on current-head CI `PASS`. CI takes about 3
-minutes, so the grace normally costs nothing. With `cap_reached: yes` it returns at once.
+minutes, so the grace costs at most about 2 minutes more. With `cap_reached: yes` it returns at once.
 
 What counts as done is the trusted bot's own record: a summary comment by exactly that
 login, `Completed`, naming a commit of this PR. `CLEAN` is that plus no review and no
