@@ -2,7 +2,7 @@
 
 A renamed or removed recipe must not leave a document pointing a reader at
 nothing. Read: every top-level ``*.md`` (AGENTS.md, CLAUDE.md,
-README.md, CONTRIBUTING.md, TEMPLATE.md, SECURITY.md, ...), ``docs/**/*.md``
+README.md, CONTRIBUTING.md, SECURITY.md, ...), ``docs/**/*.md``
 but the ADRs and the roadmap, the skills, the agent definitions
 (``.claude/agents/*.md``, ``.codex/agents/*.toml``), everything under
 ``.github/`` (composite actions included), ``.pre-commit-config.yaml``, and the

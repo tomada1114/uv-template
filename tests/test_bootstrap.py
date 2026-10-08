@@ -193,6 +193,57 @@ def _text_files(root: Path) -> dict[str, str]:
 # --- REQ-001: every placeholder is replaced --------------------------------
 
 
+def deleted_template_references(texts: dict[str, str]) -> list[str]:
+    allowed_lines: dict[str, tuple[str, ...]] = {
+        ".agents/skills/starting-an-app/SKILL.md": (
+            "also covers scripts/bootstrap.py, .template-origin, and its CI smoke job.",
+            "2. **Rename.** `scripts/bootstrap.py` renames the template into the app, writes",
+        ),
+        ".claude/skills/starting-an-app/SKILL.md": (
+            "also covers scripts/bootstrap.py, .template-origin, and its CI smoke job.",
+            "2. **Rename.** `scripts/bootstrap.py` renames the template into the app, writes",
+        ),
+    }
+    # Duration keys are historical timing metadata, and harness fixtures exercise
+    # optional template documents even when those documents are absent.
+    allowed_lines[".test_durations"] = ('"tests/test_bootstrap.py::',)
+    allowed_lines["tests/harness/test_just_recipes.py"] = (
+        'pytest.param("TEMPLATE.md", "Run `just docs`.',
+    )
+    patterns = {
+        deleted: re.compile(rf"(?<![\w.-]){re.escape(Path(deleted).name)}(?![\w.-])")
+        for deleted in bootstrap.KEEPABLE_FILES
+    }
+    return [
+        f"{relative}:{number}: {deleted}"
+        for relative, text in texts.items()
+        for number, line in enumerate(text.splitlines(), 1)
+        for deleted in bootstrap.KEEPABLE_FILES
+        if patterns[deleted].search(line)
+        and not any(allowed in line for allowed in allowed_lines.get(relative, ()))
+    ]
+
+
+@pytest.mark.parametrize(
+    ("reference", "deleted"),
+    [
+        pytest.param("bootstrap.py", "scripts/bootstrap.py", id="basename"),
+        pytest.param("./scripts/bootstrap.py", "scripts/bootstrap.py", id="relative"),
+        pytest.param(
+            "../tests/test_bootstrap.py", "tests/test_bootstrap.py", id="parent"
+        ),
+    ],
+)
+def test_deleted_template_reference_variants_are_detected(reference, deleted):
+    assert deleted_template_references({"docs/guide.md": reference}) == [
+        f"docs/guide.md:1: {deleted}"
+    ]
+
+
+def test_bootstrap_leaves_no_reference_to_a_deleted_template_file(sample_app):
+    assert deleted_template_references(_text_files(sample_app)) == []
+
+
 def test_bootstrap_sample_values_leave_no_placeholder_anywhere(sample_app):
     hits = [
         f"{relative}: {match.group(0)}"
