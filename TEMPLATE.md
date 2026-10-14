@@ -109,7 +109,7 @@ its values (`core/llm.py`) are plain Python, and adapters implement it: a
   documents the owner's manual live check.
 
 The decision is the template's issue #97. A project that keeps the layer
-records its own ADR; one that does not follows the skill's removal list.
+describes it in AGENTS.md's Architecture section; one that does not follows the skill's removal list.
 
 ### Why Just over Make?
 

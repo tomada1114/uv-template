@@ -5,7 +5,7 @@ description: >
   feature: AGENTS.md's Product section and tests/test_product_section.py, the bootstrap
   pull request, the roadmap, just labels, GitHub security settings and secrets, just
   ruleset and a private repository, keeping the HTTP API, the CLI, or both, removing the
-  sample to-do domain, and the first ADRs (app shape, persistence). In the template it
+  sample to-do domain, and the first design (app shape, persistence). In the template it
   also covers the rename step, .template-origin, and the template smoke check. Use when
   starting an app, setting up the new repository, or a placeholder survived the rename.
 ---
@@ -14,9 +14,9 @@ description: >
 
 **Owns:** the order of work from "Use this template" to an app's first feature: the
 rename, the Product section and roadmap as steps, the app's shape, removing the sample,
-the first ADRs, and the new repository's GitHub setup. **Does not own:** what the
-roadmap says (`steering-the-roadmap`); how an ADR is written
-(`recording-architecture-decisions`); labels and issue bodies (`triaging-issues`);
+the first design description, and the new repository's GitHub setup. **Does not own:** what the
+roadmap says (`steering-the-roadmap`); which changes are design changes
+(`AGENTS.md`'s "Before changing the architecture"); labels and issue bodies (`triaging-issues`);
 what makes a CI job a required check (`changing-gates`); which files go with each entry
 point (`building-api-routes`, `designing-clis`).
 
@@ -76,7 +76,7 @@ example an agent skill that cuts repositories from templates) follows the same o
    provides; a secret the app adds later (a deploy key, an API key) is set by a person
    in the repository's settings and never committed — `check-staged` refuses one.
 8. **Replace the sample**, in the order of the sections below: the app's shape, the
-   first ADRs, then the to-do domain.
+   first design description, then the to-do domain.
 9. **Ruleset, last** (**human**, an admin): `just ruleset` applies
    `.github/rulesets/main.json` ([references/github-settings.md](references/github-settings.md)
    › "Main branch ruleset"). From then on every change needs a pull request with
@@ -99,19 +99,19 @@ without the API" section of `building-api-routes` and "A project without the CLI
 with each; README's "Architecture" points to those checklists. Run `uv lock` after
 removing a dependency, then `just verify`.
 
-## Record the first ADRs
+## Describe the first design
 
-Write each as Proposed (only the owner accepts), in `docs/architecture/adr/` with its
-row in `docs/architecture/README.md`, per **REQUIRED:**
-`recording-architecture-decisions`:
+Write each as present state — the current design and the reasoning behind it, in the
+present tense — in `AGENTS.md`'s "Architecture" section and README's "Architecture", per
+`AGENTS.md`'s "Before changing the architecture", and let the owner review it in the pull request:
 
 - **App shape**: which entry points the app keeps, and why the other went.
 - **Persistence**: where and in what format the app keeps state — the in-memory
   repository, the stdlib SQLite adapter, or another store — with how a schema change
   reaches existing data. Write it as soon as the app keeps state of its own.
 
-Each new runtime dependency or external service the first features need is an ADR too,
-and a new dependency waits for the owner's sign-off.
+Each new runtime dependency or external service the first features need is a design
+change too, described the same way, and a new dependency waits for the owner's sign-off.
 
 ## Remove the sample to-do domain
 
