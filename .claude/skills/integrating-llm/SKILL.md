@@ -183,8 +183,8 @@ run `uv lock`. Then drop the LLM text elsewhere:
 - `managing-dependencies`' bullet on the `ai` extra, and `designing-core-logic`'s
   note on the unprefixed `OPENROUTER_API_KEY`;
 - AGENTS.md's Architecture tree lines for the LLM modules and the key;
-- the README's LLM rows and sentences, its Architecture line included, and the
-  project's ADR for the layer, if it has one.
+- the README's LLM rows and sentences, its Architecture line included, and any
+  reasoning about the layer the project wrote into AGENTS.md's Architecture section.
 
 <!-- template-only -->
 In the template, also drop `TEMPLATE.md`'s "Why an optional LLM layer behind a port?"
@@ -192,5 +192,5 @@ and the `ai` extra from its runtime-dependencies sentence.
 <!-- /template-only -->
 
 Then delete this skill and its row in AGENTS.md's Skills table, and run
-`just agents-sync` and `just verify`. A project that keeps the layer records it as its
-own ADR (`recording-architecture-decisions`).
+`just agents-sync` and `just verify`. A project that keeps the layer describes it, with its
+reasoning, in `AGENTS.md`'s "Architecture" (a design change: `AGENTS.md`'s "Before changing the architecture").
