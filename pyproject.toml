@@ -10,10 +10,10 @@ description = "A short description of the project."
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "fastapi>=0.141.1",
-    "pydantic-settings>=2.15.0",
-    "typer>=0.27.2",
-    "uvicorn>=0.53.0",
+    "fastapi>=0.143.2",
+    "pydantic-settings>=2.16.0",
+    "typer>=0.27.3",
+    "uvicorn>=0.54.0",
 ]
 license = "MIT"
 license-files = ["LICENSE"]
@@ -43,13 +43,13 @@ Issues = "https://github.com/your-username/uv-template/issues"
 dev = [
     "httpx>=0.28",
     "httpx2>=2.13",
-    "mypy>=2.3.1",
-    "pre-commit>=4.6.2",
+    "mypy>=2.4.0",
+    "pre-commit>=4.7.0",
     "pytest>=8.0",
     "pytest-cov>=7.1.0",
     "pytest-xdist>=3.6",
     "pyyaml>=6.0",
-    "ruff>=0.16.8",
+    "ruff>=0.17.1",
 ]
 
 # --------------------------------------------------------------------------- #
