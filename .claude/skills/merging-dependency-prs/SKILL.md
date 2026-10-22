@@ -44,7 +44,7 @@ change rather than deriving the group's risk from its title. A missing or unknow
 version is a reason to inspect, never a patch classification.
 
 The `uv` entry groups minor and patch updates into one `python-minor-patch` PR a month
-and opens one PR per major, under a 14-day cooldown equal to `exclude-newer`. Each always
+and opens one PR per major, under a 7-day cooldown equal to `exclude-newer`. Each always
 moves `uv.lock`, and moves `pyproject.toml` too when it raises a range. Its grouped title hides its members just the same:
 read every `version =` change in the `uv.lock` diff. Dependabot counts a 0.x minor
 (`ruff` is one) as a minor, so it arrives inside the group — review it as a major.
@@ -161,7 +161,7 @@ These require a separate decision even if a batch was approved:
   `[tool.*]` table, a move of `exclude-newer`, or a new or extended
   `exclude-newer-package` entry. Removing a stale one, as the review checklist plans, is
   not.
-- A security update younger than the 14-day window, which `uv lock` refuses — usually
+- A security update younger than the 7-day window, which `uv lock` refuses — usually
   seen as a failed Dependabot job and an open alert rather than as a PR
   ([F3](references/failure-modes.md)): whether to add a one-package exception is the
   owner's call (`managing-dependencies`).

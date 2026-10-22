@@ -2,7 +2,7 @@
 
 ``.github/dependabot.yml``'s ``uv`` update sets ``cooldown.default-days`` and
 ``pyproject.toml``'s ``[tool.uv] exclude-newer`` is a relative window
-(``"14 days"`` or ``"P14D"``). uv's Dependabot guide recommends the two be
+(``"7 days"`` or ``"P7D"``). uv's Dependabot guide recommends the two be
 equal: a shorter cooldown proposes versions ``uv lock`` refuses, a longer one
 leaves the lock behind the window. With no ``uv`` update there is nothing to
 pair; with one, a window this check cannot read as a day count fails closed.
@@ -104,14 +104,14 @@ def make_root(tmp_path: Path) -> MakeRoot:
 
 @pytest.mark.parametrize(
     "window",
-    [pytest.param("14 days", id="days"), pytest.param("P14D", id="iso")],
+    [pytest.param("7 days", id="days"), pytest.param("P7D", id="iso")],
 )
 def test_cooldown_findings_equal_window_passes(
     make_root: MakeRoot, window: str
 ) -> None:
     root = make_root(
         {
-            DEPENDABOT: DEPENDABOT_TEXT.format(days=14),
+            DEPENDABOT: DEPENDABOT_TEXT.format(days=7),
             PYPROJECT: f'[tool.uv]\nexclude-newer = "{window}"\n',
         }
     )
@@ -128,15 +128,15 @@ def test_cooldown_findings_without_uv_update_passes(make_root: MakeRoot) -> None
 def test_cooldown_findings_different_days_fails(make_root: MakeRoot) -> None:
     root = make_root(
         {
-            DEPENDABOT: DEPENDABOT_TEXT.format(days=7),
-            PYPROJECT: '[tool.uv]\nexclude-newer = "14 days"\n',
+            DEPENDABOT: DEPENDABOT_TEXT.format(days=14),
+            PYPROJECT: '[tool.uv]\nexclude-newer = "7 days"\n',
         }
     )
 
     assert cooldown_findings(root) == [
         (
-            f"{DEPENDABOT}: the uv cooldown.default-days is '7', but {PYPROJECT}'s "
-            "exclude-newer is 14 days; change both together"
+            f"{DEPENDABOT}: the uv cooldown.default-days is '14', but {PYPROJECT}'s "
+            "exclude-newer is 7 days; change both together"
         )
     ]
 
@@ -144,7 +144,7 @@ def test_cooldown_findings_different_days_fails(make_root: MakeRoot) -> None:
 def test_cooldown_findings_absolute_window_fails_closed(make_root: MakeRoot) -> None:
     root = make_root(
         {
-            DEPENDABOT: DEPENDABOT_TEXT.format(days=14),
+            DEPENDABOT: DEPENDABOT_TEXT.format(days=7),
             PYPROJECT: '[tool.uv]\nexclude-newer = "2026-07-21T00:00:00Z"\n',
         }
     )
