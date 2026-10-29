@@ -10,8 +10,8 @@ repository and fails on a fixture built under ``tmp_path``:
   ``SKILL.md`` exists;
 - (b) ``test_skills.py``: AGENTS.md's Skills table lists exactly those skills;
 - (c) ``test_just_recipes.py``: every ``just <recipe>`` in command position
-  in the top-level Markdown, ``docs/**`` (bar the ADRs, the roadmap, and
-  ``docs/product/``), the skills, the agent definitions, ``.github/**``
+  in the top-level Markdown, ``docs/**`` (bar ``docs/product/``), the
+  skills, the agent definitions, ``.github/**``
   (composite actions' ``run:`` included), ``.pre-commit-config.yaml``, and
   the scripts exists in the justfile (its docstring lists what is not read);
 - (d) ``test_ruleset_contexts.py``: every required context in

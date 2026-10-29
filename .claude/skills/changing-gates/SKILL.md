@@ -13,15 +13,24 @@ description: >
 # Changing Gates
 
 **Owns:** a change to a file that enforces rather than implements, keeping the gate
-layers in step, and the list of what counts as weakening one. **Does not own:** whether
-a gate may be weakened at all — never, without a human (AGENTS.md's "Security and human
-approval"); a coverage floor's meaning and where a test goes (`placing-tests`); a new
-tool the config would configure (`managing-dependencies`); the ruff relaxations for
-scripts bundled in a skill (`authoring-skills`); writing a script a gate runs
-(`writing-repo-scripts`); `.github/labels.yml` (`triaging-issues`).
+layers in step, why the bar is set where it is, and the list of what counts as weakening
+one. **Does not own:** whether a gate may be weakened at all — never, without a human
+(AGENTS.md's "Security and human approval"); a coverage floor's meaning and where a test
+goes (`placing-tests`); a new tool the config would configure (`managing-dependencies`);
+the ruff relaxations for scripts bundled in a skill (`authoring-skills`); writing a
+script a gate runs (`writing-repo-scripts`); `.github/labels.yml` (`triaging-issues`).
 
 A gate defines what "done" means for every later change, so a loosened rule silently
 lowers the bar for every pull request after it, not only the one that touched it.
+
+The bar starts high on purpose. mypy runs `strict` and ruff selects a broad rule set from
+the first commit, because a type error or a lint finding is cheapest to fix when it is
+written, and code held to one standard from its first line never grows a "legacy" part
+to clean up. Explicit, strict rules also steer generated code: an agent meets a
+constraint a check states more reliably than one a reviewer only implies. The checks run
+through Just rather than Make: Just is a task runner, not a build system — no mandatory
+tabs, readable recipes with arguments, better cross-platform support — and a task runner
+is all the `justfile` needs to be.
 
 ## What weakening a gate means here
 
@@ -176,8 +185,8 @@ Read the current values in the file rather than a copy here. Traps that have cos
 - Anything only a running server shows (`running-the-app`).
 - Whether a path named in Markdown still exists. A skill's frontmatter, AGENTS.md's
   Skills table, and a `just <recipe>` in command position are `just check-harness`'s,
-  but the recipe scan leaves out the roadmap, `docs/product/`
-  (intent or history, not instructions), and `.devcontainer/` (JSON with comments).
+  but the recipe scan leaves out `docs/product/` (intent or history, not
+  instructions) and `.devcontainer/` (JSON with comments).
 - A staged deletion: `check-staged` never inspects one, by design.
 - Commits that run no hook at all ([references/pre-commit-layer.md](references/pre-commit-layer.md)
   › "When the hooks run, and when they do not").

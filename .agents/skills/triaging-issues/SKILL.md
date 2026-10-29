@@ -5,10 +5,10 @@ description: >
   `blocked: design`, `blocked: dependency`, `blocked: external`, `on hold`, and
   `tracking` mean, and what an issue body must contain (a `path:line`, an observable
   close condition, a `Depends on: #N` line). Use when filing an issue, triaging or
-  re-prioritizing the backlog, picking a `priority: P0`-`P3` label, choosing between
-  `bug`/`enhancement`/`documentation`/`chore`/`security`, marking a tracking issue,
-  running `just labels`, recording a problem found outside the task, or routing a
-  daily-use request.
+  re-prioritizing the backlog, picking a `priority: P0`-`P3` label, choosing a type
+  label such as bug or chore, marking a tracking issue, running `just labels`, recording
+  a problem found outside the task, routing a daily-use request, or asked what to work
+  on next.
 ---
 
 # Triaging Issues
@@ -16,6 +16,12 @@ description: >
 **Owns:** this repository's issue vocabulary — the label taxonomy, what a priority
 means, and what an issue body must contain. **Does not own:** implementing an issue; any
 workflow beyond the tracker.
+
+The project's direction is `AGENTS.md`'s "Product" plus the open issues — their priority
+tiers, `on hold` parking, and `tracking` parents — and nothing else: there is no roadmap
+document or roadmap issue. Asked what to work on next, rank the open issues as
+`shipping-issues` does (`cloud-claude-shipping-issues` in a cloud session) rather than
+recalling a plan.
 
 Labels carry the triage decision, so it is made once and read back rather than
 re-derived every time the backlog is looked at. An issue is filed with a type label and

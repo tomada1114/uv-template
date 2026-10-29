@@ -6,7 +6,8 @@ itself is `.pre-commit-config.yaml`'s; read it there.
 
 The guard rails run as git hooks through [pre-commit](https://pre-commit.com/), so they
 hold for every author — a human, Claude Code, Codex CLI, or any other tool. No
-agent-specific hook is committed.
+agent-specific hook is committed: a guard rail wired into one agent's hook configuration
+protects nothing when a human, or a different tool, makes the commit.
 
 ## `shellcheck`
 

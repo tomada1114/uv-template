@@ -12,7 +12,7 @@ description: >
 # Placing Tests
 
 **Owns:** where a test file and a fixture go, which command runs them, how CI runs
-them, and which coverage floor governs them. **Does not own:** how a test is written
+them, and which coverage floor governs them and why. **Does not own:** how a test is written
 (`writing-tests`); the tests bundled inside a skill's `scripts/tests/`
 (`authoring-skills`); changing the floor, the pytest options, or the coverage config
 (`changing-gates`).
@@ -70,6 +70,11 @@ warning. `filterwarnings = ["error"]` makes any warning, a `DeprecationWarning` 
 all, fail the test that raised it. `just test` adds `-n auto`, so the suite runs across processes. The map from a
 changed path to its narrowest check is AGENTS.md's "Validating a change".
 
+Tests import `my_app` the way its users do, through the project `uv sync` installs. The
+`src/` layout keeps the package out of the repository root, so running from the root
+cannot import it by accident, and `--import-mode=importlib` keeps pytest from putting
+test directories on `sys.path`.
+
 ## CI test runner
 
 CI's `Coverage` job runs the same parallel suite and coverage command as `just test`.
@@ -81,6 +86,9 @@ The recipe parity check in `tests/harness/test_just_recipes.py` rejects command 
   `branch = true` and `source = ["src"]`; `just test` enforces the floor with
   `--cov-fail-under=80`, and CI's `Coverage` job with the same command. Neither `scripts/` nor
   `tests/` is measured, so a script's tests guard behavior but move no number.
+- **Why 80.** High enough to catch most regressions, low enough not to invite tests
+  written only for the number; branch coverage makes it measure conditional logic, not
+  lines alone.
 - **A floor, not a ceiling.** It is never lowered (AGENTS.md's "Security and human
   approval"), and no line leaves the measurement to move the number — a
   `# pragma: no cover`, an `omit`, or an `exclude_lines` entry is a weakened gate, as

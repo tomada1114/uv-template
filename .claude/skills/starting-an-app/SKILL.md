@@ -3,7 +3,7 @@ name: starting-an-app
 description: >
   Covers setting up an app cut from this template, from the first commit to its first
   feature: AGENTS.md's Product section and tests/test_product_section.py, the bootstrap
-  pull request, the roadmap, just labels, GitHub security settings and secrets, just
+  pull request, just labels, GitHub security settings and secrets, just
   ruleset and a private repository, keeping the HTTP API, the CLI, or both, removing the
   sample to-do domain, and the first design (app shape, persistence). In the template it
   also covers the rename step, .template-origin, and the template smoke check. Use when
@@ -13,10 +13,10 @@ description: >
 # Starting an App
 
 **Owns:** the order of work from "Use this template" to an app's first feature: the
-rename, the Product section and roadmap as steps, the app's shape, removing the sample,
-the first design description, and the new repository's GitHub setup. **Does not own:** what the
-roadmap says (`steering-the-roadmap`); which changes are design changes
-(`AGENTS.md`'s "Before changing the architecture"); labels and issue bodies (`triaging-issues`);
+rename, the Product section as a step, the app's shape, removing the sample, the first
+design description, and the new repository's GitHub setup. **Does not own:** which
+changes are design changes (`AGENTS.md`'s "Before changing the architecture"); labels,
+issue bodies, and the project's direction after the Product section (`triaging-issues`);
 what makes a CI job a required check (`changing-gates`); which files go with each entry
 point (`building-api-routes`, `designing-clis`).
 
@@ -61,23 +61,20 @@ example an agent skill that cuts repositories from templates) follows the same o
    diff. Push the branch and open a pull request; merge it once CI is green. A pull
    request rather than a push to `main`, because it is how every change lands here
    (`AGENTS.md`'s "Enforcement layers"), CI checks the bootstrap before `main` holds it, and
-   it works the same before and after step 9's ruleset. Pushing, opening, and merging
+   it works the same before and after step 8's ruleset. Pushing, opening, and merging
    are remote writes.
-5. **Fill `docs/architecture/roadmap.md`** in its own pull request, with the Now, Next,
-   and Later outcomes that follow from the Product section. **REQUIRED:**
-   `steering-the-roadmap`.
-6. **Labels.** `just labels` creates `.github/labels.yml`'s labels on the new
+5. **Labels.** `just labels` creates `.github/labels.yml`'s labels on the new
    repository. Run it before the first issue is filed: an issue form or a planning tool
    applying a missing label loses it silently. It writes to GitHub. **BACKGROUND:**
    `triaging-issues`, for what each label means.
-7. **Security settings and secrets** (**human**, the repository's admin): turn on what
+6. **Security settings and secrets** (**human**, the repository's admin): turn on what
    [references/github-settings.md](references/github-settings.md) › "Security settings"
    lists. The template's workflows need no secret beyond the `GITHUB_TOKEN` GitHub
    provides; a secret the app adds later (a deploy key, an API key) is set by a person
    in the repository's settings and never committed — `check-staged` refuses one.
-8. **Replace the sample**, in the order of the sections below: the app's shape, the
+7. **Replace the sample**, in the order of the sections below: the app's shape, the
    first design description, then the to-do domain.
-9. **Ruleset, last** (**human**, an admin): `just ruleset` applies
+8. **Ruleset, last** (**human**, an admin): `just ruleset` applies
    `.github/rulesets/main.json` ([references/github-settings.md](references/github-settings.md)
    › "Main branch ruleset"). From then on every change needs a pull request with
    the required checks green, so the ruleset must name only jobs the app still runs.
@@ -96,19 +93,24 @@ the answer into the Product section's core interaction:
 Dropping an entry point is a list of deletions, never a core change: the "A project
 without the API" section of `building-api-routes` and "A project without the CLI" of
 `designing-clis` name every file, dependency, recipe, ruff entry, and skill that goes
-with each; README's "Architecture" points to those checklists. Run `uv lock` after
+with each. Run `uv lock` after
 removing a dependency, then `just verify`.
 
 ## Describe the first design
 
 Write each as present state — the current design and the reasoning behind it, in the
-present tense — in `AGENTS.md`'s "Architecture" section and README's "Architecture", per
-`AGENTS.md`'s "Before changing the architecture", and let the owner review it in the pull request:
+present tense — in the skill that owns the subject, with `AGENTS.md`'s "Architecture"
+only for a layer rule, per `AGENTS.md`'s "Before changing the architecture", and let the
+owner review it in the pull request. There is no architecture document to write:
 
-- **App shape**: which entry points the app keeps, and why the other went.
+- **App shape**: which entry points the app keeps, and why the other went — in the
+  kept entry point's skill (`building-api-routes`, `designing-clis`) and the layer map
+  in `AGENTS.md`'s "Architecture".
 - **Persistence**: where and in what format the app keeps state — the in-memory
   repository, the stdlib SQLite adapter, or another store — with how a schema change
-  reaches existing data. Write it as soon as the app keeps state of its own.
+  reaches existing data, in `designing-core-logic` (or a skill of its own, such as
+  `persisting-data`, once the subject outgrows it). Write it as soon as the app keeps
+  state of its own.
 
 Each new runtime dependency or external service the first features need is a design
 change too, described the same way, and a new dependency waits for the owner's sign-off.
