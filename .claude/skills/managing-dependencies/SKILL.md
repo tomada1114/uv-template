@@ -45,7 +45,9 @@ has not happened yet.
   contributors use, rather than a source build.
 - **Open advisories** against the version that will resolve.
 - **Its group, and why.** A runtime package is also a design change: the same pull
-  request rewrites the present-state description, per `AGENTS.md`'s "Before changing the architecture".
+  request rewrites the owning skill's present-state description — the runtime set's is
+  `designing-core-logic`'s `references/design-reasons.md` — per `AGENTS.md`'s "Before
+  changing the architecture".
 
 ## Groups and ranges
 

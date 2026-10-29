@@ -44,7 +44,7 @@ Each surface has one job; do not let one grow a second copy of another's content
 
 | File | Holds | Changes when |
 |---|---|---|
-| `README.md` | What the application does, the quickstart, the CLI and HTTP table, error statuses and exit codes, the configuration table, the repository layout | A command, route, status, exit code, or setting it documents changes |
+| `README.md` | What the application does, the quickstart, the CLI and HTTP table, error statuses and exit codes, the configuration table, the repository layout | A command, route, status, exit code, setting, or top-level module it documents changes |
 | `CONTRIBUTING.md` | Prerequisites, setup, the development commands, the pull request process, commit messages | Setup, the toolchain, or the pull request process changes |
 | `AGENTS.md` | What every agent task needs: the quick reference, the "Validating a change" table, the layer rules, the Product section, the Skills table, the approval rules, the enforcement layers | One of those facts changes |
 | `.agents/skills/<name>/` | One kind of change's conventions, and the design of the subject it owns with its reasons, loaded on demand | Those conventions or that design change (`authoring-skills`) |
