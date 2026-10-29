@@ -39,6 +39,8 @@ never a core change:
   table, and Configuration's `my-app todo` invocation guidance; rewrite
   Architecture for the remaining API and remove the pointer to this deleted
   skill; keep the API examples using `just dev`;
+- rewrite `designing-core-logic`'s `references/design-reasons.md` for one entry point
+  and without Typer;
 - replace the CLI reproduction command in `.github/ISSUE_TEMPLATE/bug_report.yml`
   with an HTTP request example;
 - delete `.agents/skills/designing-clis/`, remove its row from AGENTS.md's Skills

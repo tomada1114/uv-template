@@ -7,6 +7,9 @@ A Python application built with [uv](https://docs.astral.sh/uv/) and
 type checking and linting. A framework-free core carries two entry points: a
 FastAPI HTTP API and a Typer CLI (`my-app`). The sample domain is a to-do list —
 replace it with your own, and delete whichever entry point you do not need.
+How the app is built and why lives in the skills that own each subject (the Skills
+table below) and the Architecture section; there is no separate architecture or
+roadmap document (`updating-docs`).
 
 Every task here:
 
@@ -140,14 +143,16 @@ src/my_app/
 
 ## Before changing the architecture
 
-The design is recorded as it stands now, never as a log of decisions: this file's
-Architecture and Product sections, `README.md`'s "Architecture", and the skill that owns
-the subject say together how the app is built and why, and git history holds what it
-used to be. The changes below, which the skills call design changes, are hard to
-reverse, so the pull request that makes one also rewrites that description: the current
-design and the reasoning behind it (what it protects and, where it matters, the
-alternative it rules out and why), in the present tense, in place of the sentences it
-replaces, never as a dated entry beside them:
+The design is recorded in one place per subject, as it stands now, never as a log of
+decisions: the skill that owns the subject (the Skills table), with this file's
+Architecture section for the layer rules and its Product section for scope. Git history
+holds what it used to be. Keeping those current is the whole obligation: no other
+document repeats the design, so no other document needs rewriting with it. The changes
+below, which the skills call design changes, are hard to reverse, so the pull request
+that makes one also rewrites the owning skill (or that section): the current design and
+the reasoning behind it (what it protects and, where it matters, the alternative it rules
+out and why), in the present tense, in place of the sentences it replaces, never as a
+dated entry beside them:
 
 - a runtime dependency — a package under `[project] dependencies`, installed by every
   user (a dev-only tool in `[dependency-groups]` is one only when it changes a gate);
@@ -168,12 +173,6 @@ needs the sign-off "Security and human approval" asks for, and the owner reviews
 rewritten description with the change. Every external fact the description leans on —
 a version, a license, a price, a rate limit — carries its primary-source URL and the
 date it was checked.
-<!-- template-only -->
-In the template itself, before `scripts/bootstrap.py` has renamed it, the reasoning
-behind the layers every project starts with lives in `TEMPLATE.md`'s "Design
-Philosophy"; a change that replaces one of them rewrites that entry too, rather than
-leaving the old reason beside the new one.
-<!-- /template-only -->
 
 ## Skills
 
@@ -200,9 +199,8 @@ Skills are authored under `.agents/skills/` (Codex CLI) and mirrored into
 | `shipping-issues` | Claude Code only: shipping the next issue or the whole backlog: rank, implement, review the branch locally with `/code-review`, PR, CI, merge |
 | `smart-commit` | grouping working-tree changes into commits, or a pre-commit hook refuses a commit |
 | `starting-an-app` | setting up an app cut from this template: the Product section, the bootstrap pull request, labels, ruleset, security settings, dropping an entry point or the sample domain, the first design description; the template rename step |
-| `steering-the-roadmap` | asked what to work on next, or the Now / Next / Later roadmap moves |
 | `tdd` | changing behavior under `src/` or `scripts/`, or fixing a bug: the failing test comes first |
-| `triaging-issues` | filing, labelling, or prioritizing an issue, or recording a problem found outside the task |
+| `triaging-issues` | filing, labelling, or prioritizing an issue, recording a problem found outside the task, or asked what to work on next |
 | `updating-docs` | deciding whether a change owes a README, AGENTS.md, or other document update |
 | `writing-python` | writing or reviewing any Python module, class, or function: typing, imports, docstrings, idioms |
 | `writing-repo-scripts` | adding or editing a script under `scripts/`, its `just` recipe, or its tests |

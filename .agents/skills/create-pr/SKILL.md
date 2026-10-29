@@ -98,7 +98,7 @@ Each row feeds a checklist item or the Summary:
 | A new public function without type annotations or a docstring that says why | Add them. **BACKGROUND:** `writing-python`. |
 | A command, route, status, exit code, or `MY_APP_*` setting a user observes changed | The relevant README text changes on this branch. **REQUIRED:** `updating-docs` decides what is owed. |
 | A removed or changed public behavior | A breaking change: call it out in the Summary, in one line a user can act on, and mark the title with `!`. |
-| A design change (a trigger in `AGENTS.md`'s "Before changing the architecture") | The present-state description it changes — `AGENTS.md`'s Architecture or Product, README's "Architecture", or the owning skill — is rewritten on this branch. |
+| A design change (a trigger in `AGENTS.md`'s "Before changing the architecture") | The present-state description it changes — the owning skill, or `AGENTS.md`'s Architecture (a layer rule) or Product (scope) — is rewritten on this branch. |
 
 A row that does not apply holds trivially; say so in the body rather than leaving the
 reader to guess ("No new dependency").

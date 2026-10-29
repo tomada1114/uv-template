@@ -6,8 +6,8 @@
 <!-- template-only -->
 > [!NOTE]
 > This is the uv-template repository itself. To start an application from it,
-> follow the `starting-an-app` skill (`.agents/skills/starting-an-app/SKILL.md`);
-> `TEMPLATE.md` explains why the template is built the way it is.
+> follow the `starting-an-app` skill (`.agents/skills/starting-an-app/SKILL.md`).
+> Why it is built the way it is lives in the skills that own each subject.
 <!-- /template-only -->
 
 A short description of what this application does.
@@ -89,7 +89,9 @@ The API and the CLI are thin: both get their services from
 and the core. The core imports neither of them, nor any framework or driver;
 lint (`ruff` `TID251`) and a test enforce that. Either entry point can
 therefore be removed by deleting files, without touching the core. The
-`building-api-routes` and `designing-clis` skills hold the removal checklists.
+`building-api-routes` and `designing-clis` skills hold the removal checklists,
+and the skills under `.agents/skills/`, indexed by AGENTS.md's Skills table, hold
+the design and the reasons behind it.
 
 ## Development
 

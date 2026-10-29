@@ -39,6 +39,8 @@ core change:
   column, all HTTP status/`detail` prose, LLM-backed route guidance, and the API
   server Configuration note; rewrite Architecture for the remaining CLI and
   remove the pointer to this deleted skill;
+- rewrite `designing-core-logic`'s `references/design-reasons.md` for one entry point
+  and without FastAPI and uvicorn;
 - delete `.agents/skills/building-api-routes/`, remove its row from AGENTS.md's Skills
   table, and run `just agents-sync`.
 

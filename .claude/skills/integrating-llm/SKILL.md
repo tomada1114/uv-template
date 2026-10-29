@@ -6,14 +6,16 @@ description: >
   OPENROUTER_API_KEY and MY_APP_LLM_MODEL, the ai extra, retries and the request
   deadline, and the shared LLM contract suite. Use when calling a model from a service,
   wiring an LLM-backed route, testing code that uses the LLM, changing the OpenRouter
-  adapter, adding a provider, or removing the layer.
+  adapter, adding a provider, removing the layer, or asking why the layer is shaped
+  this way (OpenRouter, raw httpx, the extra, closed by default).
 ---
 
 # Integrating an LLM
 
 **Owns:** the LLM layer — its port, value types, error family, adapters, `build_llm`,
-its two settings, the `ai` extra's purpose, the retry and deadline rules, and how code
-that calls a model is tested. **Does not own:** which HTTP status an `LlmError` becomes
+its two settings, the `ai` extra's purpose, the retry and deadline rules, how code that
+calls a model is tested, and why it is shaped this way
+([references/design-reasons.md](references/design-reasons.md)). **Does not own:** which HTTP status an `LlmError` becomes
 (`designing-errors`); whether a package may be added or an extra changed
 (`managing-dependencies`); the shape of a route that calls a service
 (`building-api-routes`); ports, adapters, and settings in general
@@ -183,14 +185,10 @@ run `uv lock`. Then drop the LLM text elsewhere:
 - `managing-dependencies`' bullet on the `ai` extra, and `designing-core-logic`'s
   note on the unprefixed `OPENROUTER_API_KEY`;
 - AGENTS.md's Architecture tree lines for the LLM modules and the key;
-- the README's LLM rows and sentences, its Architecture line included, and any
-  reasoning about the layer the project wrote into AGENTS.md's Architecture section.
+- the README's LLM rows and sentences, its Architecture line included;
+- the `httpx` bullet of `designing-core-logic`'s `references/design-reasons.md`.
 
-<!-- template-only -->
-In the template, also drop `TEMPLATE.md`'s "Why an optional LLM layer behind a port?"
-and the `ai` extra from its runtime-dependencies sentence.
-<!-- /template-only -->
-
-Then delete this skill and its row in AGENTS.md's Skills table, and run
-`just agents-sync` and `just verify`. A project that keeps the layer describes it, with its
-reasoning, in `AGENTS.md`'s "Architecture" (a design change: `AGENTS.md`'s "Before changing the architecture").
+Then delete this skill, its `references/`, and its row in AGENTS.md's Skills table, and
+run `just agents-sync` and `just verify`. A project that keeps the layer keeps its
+reasoning current in [references/design-reasons.md](references/design-reasons.md) (a
+design change: `AGENTS.md`'s "Before changing the architecture").

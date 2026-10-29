@@ -6,19 +6,21 @@ description: >
   src/my_app/adapters/ and the shared repository contract suite, Settings in
   settings.py, and the composition root's build_container and Container. Use when
   adding a use case, a domain rule or model, a port, a repository or other adapter, or
-  a MY_APP_ setting, or when ruff TID251 or tests/core/test_imports.py rejects an
-  import in the core.
+  a MY_APP_ setting, when ruff TID251 or tests/core/test_imports.py rejects an import
+  in the core, or when asking why the core is framework-free or what keeps a runtime
+  dependency out.
 ---
 
 # Designing Core Logic
 
 **Owns:** the layers beneath the entry points — what belongs in `core/`, how a port and
-its adapters are shaped and tested, how configuration is read, and how
-`composition.py` wires adapters into services. **Does not own:** the layer map
-(AGENTS.md's "Architecture"); removing an entry point (`building-api-routes`,
+its adapters are shaped and tested, how configuration is read, how `composition.py`
+wires adapters into services, and why
+([references/design-reasons.md](references/design-reasons.md)). **Does not own:** the
+layer map (AGENTS.md's "Architecture"); removing an entry point (`building-api-routes`,
 `designing-clis`); the `AppError` hierarchy and its mappings (`designing-errors`);
-exposing a service over HTTP (`building-api-routes`) or as a command
-(`designing-clis`); module-level Python style (`writing-python`).
+exposing a service over HTTP (`building-api-routes`) or as a command (`designing-clis`);
+module-level Python style (`writing-python`).
 
 ## The direction dependencies point
 
@@ -82,9 +84,8 @@ def create(self, raw_title: str) -> Todo:
 ```
 
 Services are synchronous. FastAPI runs a synchronous route in its thread pool, so a
-service and its adapters may be called from several threads at once; that is why
-`InMemoryTodoRepository` takes a lock and `SqliteTodoRepository` opens a connection per
-call.
+service and its adapters may be called from several threads at once: that is why
+`InMemoryTodoRepository` takes a lock and `SqliteTodoRepository` connects per call.
 
 ## Ports describe what the core needs from outside
 
